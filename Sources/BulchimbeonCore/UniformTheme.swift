@@ -88,7 +88,7 @@ public struct UniformTheme: Sendable, Identifiable, Equatable {
     // MARK: - 테마 목록
 
     /// 메뉴에 나오는 순서. 기본이 항상 처음.
-    public static let all: [UniformTheme] = [.default, .navy, .arctic]
+    public static let all: [UniformTheme] = [.default, .navy, .arctic, .desert]
 
     /// 저장된 id → 테마. 모르는 값이면 기본.
     public static func named(_ id: String?) -> UniformTheme {
@@ -127,6 +127,24 @@ public struct UniformTheme: Sendable, Identifiable, Equatable {
             Overlay([".....A..........",
                      ".........A......",
                      ".....A.........."], x: 0, y: 11),
+        ]
+    )
+
+    /// 모래색 모자·군복, 진한 모래색 점 몇 개. 일반적인 사막 색일 뿐 실제 군대 무늬가 아니다.
+    public static let desert = UniformTheme(
+        id: "desert", nameKo: "사막", nameEn: "Desert",
+        colors: [
+            "H": 0xC9A66B, "h": 0xD9BE8F,
+            "U": 0xB8915A, "u": 0x8F6F3F,
+            "B": 0x5C4630,
+            "A": 0x8A6A3C,
+        ],
+        overlays: [
+            Overlay(["..A.....A.",
+                     ".......A.."], x: 1, y: 2),
+            Overlay([".....A....",
+                     "..A.......",
+                     ".......A.."], x: 0, y: 11),
         ]
     )
 }
