@@ -13,9 +13,13 @@ type lineCase struct {
 	SystemLanguage bool            `json:"systemLanguage"`
 	KO             json.RawMessage `json:"ko"`
 	EN             json.RawMessage `json:"en"`
+	ZH             json.RawMessage `json:"zh"`
 }
 
 func (c lineCase) want(lang Lang) json.RawMessage {
+	if lang == ZH {
+		return c.ZH
+	}
 	if lang == KO {
 		return c.KO
 	}

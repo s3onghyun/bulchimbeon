@@ -6,9 +6,9 @@ public enum DutyMode: String, CaseIterable, Identifiable, Sendable {
     public var id: String { rawValue }
     public var title: String {
         switch self {
-        case .display: L10n.t("화면 켜둠 (caffeinate -d)", "Keep display on (caffeinate -d)")
-        case .system: L10n.t("화면은 꺼져도 맥은 깨어 있음 (caffeinate -i)", "Display may sleep, Mac stays awake (caffeinate -i)")
-        case .lid: L10n.t("덮개 닫아도 깨어 있음 (관리자 권한)", "Stay awake with lid closed (admin)")
+        case .display: L10n.t("화면 켜둠 (caffeinate -d)", "Keep display on (caffeinate -d)", "保持屏幕常亮 (caffeinate -d)")
+        case .system: L10n.t("화면은 꺼져도 맥은 깨어 있음 (caffeinate -i)", "Display may sleep, Mac stays awake (caffeinate -i)", "允许屏幕休眠，Mac 保持唤醒 (caffeinate -i)")
+        case .lid: L10n.t("덮개 닫아도 깨어 있음 (관리자 권한)", "Stay awake with lid closed (admin)", "合盖后保持唤醒（需要管理员权限）")
         }
     }
 }
@@ -116,7 +116,7 @@ public struct DutyEngine: Sendable {
         let notice = Lines.reportForDuty()
         effects.append(.notify(title: notice.title, body: notice.body))
         say(Lines.Speech.reporting(), now: now)
-        effects.append(.log(L10n.t("근무 투입 — \(label), \(mode.title)", "On duty — \(label), \(mode.title)"), .onDuty))
+        effects.append(.log(L10n.t("근무 투입 — \(label), \(mode.title)", "On duty — \(label), \(mode.title)", "开始值班 — \(label)，\(mode.title)"), .onDuty))
         return effects
     }
 
@@ -124,11 +124,11 @@ public struct DutyEngine: Sendable {
         watchStartedAt = now
         order = .agentWatch
         quote = .standby
-        return [.log(L10n.t("에이전트 근무 대기 시작", "Started waiting for agents"), .other)]
+        return [.log(L10n.t("에이전트 근무 대기 시작", "Started waiting for agents", "开始等待代理"), .other)]
     }
 
     public mutating func stop(now: Date) -> [DutyEffect] {
-        standDown(notice: nil, log: L10n.t("근무 종료 (수동)", "Off duty (manual)"))
+        standDown(notice: nil, log: L10n.t("근무 종료 (수동)", "Off duty (manual)", "结束值班（手动）"))
     }
 
     public mutating func setMode(_ newMode: DutyMode, now: Date) -> [DutyEffect] {
@@ -138,7 +138,7 @@ public struct DutyEngine: Sendable {
         guard isOnDuty else { return [] }
         var effects: [DutyEffect] = leavingLid && lidEngagedByUs ? [.restoreLid] : []
         effects += engage(now: now)
-        effects.append(.log(L10n.t("근무 방식 변경 — \(newMode.title)", "Watch mode changed — \(newMode.title)"), .other))
+        effects.append(.log(L10n.t("근무 방식 변경 — \(newMode.title)", "Watch mode changed — \(newMode.title)", "值班模式已更改 — \(newMode.title)"), .other))
         return effects
     }
 
@@ -149,7 +149,7 @@ public struct DutyEngine: Sendable {
             return []
         case .expired:
             order = .off
-            return [.log(L10n.t("앱이 꺼져 있는 동안 근무 시간 종료", "Watch ended while the app was closed"), .other)]
+            return [.log(L10n.t("앱이 꺼져 있는 동안 근무 시간 종료", "Watch ended while the app was closed", "应用关闭期间，值班时间已到"), .other)]
         case .agentWatch, .timed:
             break
         }
@@ -160,21 +160,21 @@ public struct DutyEngine: Sendable {
             let notice = Lines.lidResumeFallback()
             effects += [.notify(title: notice.title, body: notice.body),
                         .log(L10n.t("덮개 근무 → 시스템 근무로 복귀 (관리자 재승인 필요)",
-                                    "Lid-closed watch → resumed as system watch (admin approval needed)"), .other)]
+                                    "Lid-closed watch → resumed as system watch (admin approval needed)", "合盖值班 → 恢复系统值班（需要管理员授权）"), .other)]
         }
         switch action {
         case .agentWatch:
             watchStartedAt = now
             order = .agentWatch
             quote = .standby
-            effects.append(.log(L10n.t("근무 복귀 — 에이전트 근무", "Back on watch — agent watch"), .other))
+            effects.append(.log(L10n.t("근무 복귀 — 에이전트 근무", "Back on watch — agent watch", "恢复值班 — 代理值班"), .other))
         case .timed(let until):
             order = .timed(until: until)
             effects += engage(now: now)
             say(Lines.Speech.resumed(), now: now)
             let left = until.map { DutyClock.format($0.timeIntervalSince(now)) }
-            effects.append(.log(L10n.t("근무 복귀 — ", "Back on watch — ")
-                                + (left.map { L10n.t("남은 시간 \($0)", "\($0) left") } ?? L10n.t("무기한", "indefinitely")), .other))
+            effects.append(.log(L10n.t("근무 복귀 — ", "Back on watch — ", "恢复值班 — ")
+                                + (left.map { L10n.t("남은 시간 \($0)", "\($0) left", "剩余 \($0)") } ?? L10n.t("무기한", "indefinitely", "无限期")), .other))
         case .none, .expired:
             break
         }
@@ -193,7 +193,7 @@ public struct DutyEngine: Sendable {
         mode = .system
         let notice = Lines.lidFallback()
         return [.notify(title: notice.title, body: notice.body),
-                .log(L10n.t("덮개 근무 승인 거부 — 시스템 근무로 대체", "Lid-closed watch denied — switched to system watch"), .other),
+                .log(L10n.t("덮개 근무 승인 거부 — 시스템 근무로 대체", "Lid-closed watch denied — switched to system watch", "合盖值班未获授权 — 已切换为系统值班"), .other),
                 .acquire(.system)]
     }
 
@@ -201,7 +201,7 @@ public struct DutyEngine: Sendable {
         guard ok else { return [] }
         lidEngagedByUs = false
         lidSleepDisabled = false
-        return [.log(L10n.t("덮개 잠자기 복구 완료", "Lid sleep restored"), .other)]
+        return [.log(L10n.t("덮개 잠자기 복구 완료", "Lid sleep restored", "已恢复合盖休眠"), .other)]
     }
 
     // MARK: - 점검 (5초마다)
@@ -212,7 +212,7 @@ public struct DutyEngine: Sendable {
 
         if isOnDuty, BatteryPolicy.shouldRetreat(o.battery, floor: floor), let battery = o.battery {
             return standDown(notice: Lines.batteryRetreat(battery.percent),
-                             log: L10n.t("배터리 \(battery.percent)% — 근무 철수", "Battery \(battery.percent)% — stood down"))
+                             log: L10n.t("배터리 \(battery.percent)% — 근무 철수", "Battery \(battery.percent)% — stood down", "电量 \(battery.percent)% — 结束值班"))
         }
 
         // 폭염 대응
@@ -228,14 +228,14 @@ public struct DutyEngine: Sendable {
         case .advisory:
             heatAdvised = true
             let notice = Lines.heatAdvisory()
-            effects += [.notify(title: notice.title, body: notice.body), .log(L10n.t("폭염 주의보 발령", "Heat advisory"), .heat)]
+            effects += [.notify(title: notice.title, body: notice.body), .log(L10n.t("폭염 주의보 발령", "Heat advisory", "高温提醒"), .heat)]
             say(Lines.Speech.heat(), now: now, seconds: 6)
         case .rest:
             resting = true
             effects += disengage()
             let notice = Lines.heatRest()
             effects += [.notify(title: notice.title, body: notice.body),
-                        .log(L10n.t("폭염 경보 — 전투휴식 실시", "Heat warning — combat rest"), .heat)]
+                        .log(L10n.t("폭염 경보 — 전투휴식 실시", "Heat warning — combat rest", "过热警报 — 暂停值班降温"), .heat)]
             say(Lines.Speech.rest(), now: now, seconds: 8)
         case .resume:
             resting = false
@@ -243,7 +243,7 @@ public struct DutyEngine: Sendable {
             if lidDowngraded { mode = .system } // 과열 직후엔 덮개 근무로 돌아가지 않는다
             let notice = Lines.heatResume(lidDowngraded: lidDowngraded)
             effects += [.notify(title: notice.title, body: notice.body),
-                        .log(L10n.t("전투휴식 종료 — 근무 복귀", "Combat rest over — back on watch"), .onDuty)]
+                        .log(L10n.t("전투휴식 종료 — 근무 복귀", "Combat rest over — back on watch", "降温休息结束 — 恢复值班"), .onDuty)]
             say(Lines.Speech.backFromRest(), now: now, seconds: 6)
             if case .timed = order { effects += engage(now: now) } // 에이전트 근무는 아래에서 다시 판단
         case .none:
@@ -255,7 +255,7 @@ public struct DutyEngine: Sendable {
         if isOnDuty && !awaitingLid && !o.assertionHeld {
             let notice = Lines.postAbandoned()
             effects += [.reacquire, .notify(title: notice.title, body: notice.body),
-                        .log(L10n.t("⚠️ 근무지 이탈 감지 — 즉시 재투입", "⚠️ Post abandoned — re-engaged"), .awol)]
+                        .log(L10n.t("⚠️ 근무지 이탈 감지 — 즉시 재투입", "⚠️ Post abandoned — re-engaged", "⚠️ 防休眠失效 — 已立即恢复"), .awol)]
             say(Lines.Speech.notAWOL(), now: now, seconds: 6)
         }
 
@@ -266,7 +266,7 @@ public struct DutyEngine: Sendable {
             if let until, now >= until {
                 saluteUntil = now.addingTimeInterval(10)
                 say(Lines.Speech.timeUp(), now: now, seconds: 8)
-                effects += standDown(notice: Lines.timeUp(), log: L10n.t("근무 시간 종료", "Watch time over"))
+                effects += standDown(notice: Lines.timeUp(), log: L10n.t("근무 시간 종료", "Watch time over", "值班时间已到"))
             }
         case .agentWatch:
             effects += agentWatchTick(o)
@@ -288,7 +288,7 @@ public struct DutyEngine: Sendable {
             if busyNow { lastAgentSummary = AgentCatalog.summary(busy) }
         }
         if busyNow { lastBusyAt = now }
-        if lastAgentSummary.isEmpty { lastAgentSummary = L10n.t("에이전트", "Agents") }
+        if lastAgentSummary.isEmpty { lastAgentSummary = L10n.t("에이전트", "Agents", "代理") }
         let quiet = AgentWatchPolicy.quietFor(now: now, lastBusyAt: lastBusyAt, watchStartedAt: watchStartedAt)
         let grace = TimeInterval(graceMinutes * 60)
         watchDetail = Self.watchDetail(busyNow: busyNow, countIdle: countIdleSessions, summary: lastAgentSummary,
@@ -300,7 +300,7 @@ public struct DutyEngine: Sendable {
             var effects = engage(now: now)
             let notice = Lines.agentArrived(lastAgentSummary)
             effects += [.notify(title: notice.title, body: notice.body),
-                        .log(L10n.t("근무 투입 — \(lastAgentSummary) 출근", "On duty — \(lastAgentSummary) clocked in"), .onDuty)]
+                        .log(L10n.t("근무 투입 — \(lastAgentSummary) 출근", "On duty — \(lastAgentSummary) clocked in", "开始值班 — \(lastAgentSummary) 已开始工作"), .onDuty)]
             say(Lines.Speech.arrived(), now: now)
             return effects
         case .handover:
@@ -310,7 +310,7 @@ public struct DutyEngine: Sendable {
             let notice = Lines.handover(lastAgentSummary)
             effects += [.notify(title: notice.title, body: notice.body),
                         .log(L10n.t("근무 교대 — \(lastAgentSummary) 작업 종료, 이상 무",
-                                    "Shift over — \(lastAgentSummary) finished, all clear"), .handover)]
+                                    "Shift over — \(lastAgentSummary) finished, all clear", "交班 — \(lastAgentSummary) 已完成工作，一切正常"), .handover)]
             say(Lines.Speech.handover(), now: now, seconds: 8)
             return effects
         case .none:
@@ -354,11 +354,11 @@ public struct DutyEngine: Sendable {
     public static func watchDetail(busyNow: Bool, countIdle: Bool, summary: String, openCount: Int,
                                    onDuty: Bool, quiet: TimeInterval, grace: TimeInterval) -> String? {
         if countIdle && busyNow {
-            return L10n.t("열린 세션 \(openCount)개 (열린 세션 인정 모드)", "\(openCount) open session(s) (counting idle sessions)")
+            return L10n.t("열린 세션 \(openCount)개 (열린 세션 인정 모드)", "\(openCount) open session(s) (counting idle sessions)", "\(openCount) 个已打开的会话（包括空闲会话）")
         }
-        if busyNow { return L10n.t("\(summary) 작업 중", "\(summary) working") }
+        if busyNow { return L10n.t("\(summary) 작업 중", "\(summary) working", "\(summary) 正在工作") }
         guard onDuty else { return nil }
         return L10n.t("조용해진 지 \(DutyClock.format(quiet)) · 교대까지 \(DutyClock.format(grace - quiet))",
-                      "Quiet for \(DutyClock.format(quiet)) · shift over in \(DutyClock.format(grace - quiet))")
+                      "Quiet for \(DutyClock.format(quiet)) · shift over in \(DutyClock.format(grace - quiet))", "已空闲 \(DutyClock.format(quiet)) · 距交班 \(DutyClock.format(grace - quiet))")
     }
 }

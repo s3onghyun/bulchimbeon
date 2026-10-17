@@ -16,11 +16,11 @@ const (
 func (m DutyMode) Title(lang Lang) string {
 	switch m {
 	case ModeDisplay:
-		return T(lang, "화면 켜둠 (caffeinate -d)", "Keep display on (caffeinate -d)")
+		return T(lang, "화면 켜둠 (caffeinate -d)", "Keep display on (caffeinate -d)", "保持屏幕常亮 (caffeinate -d)")
 	case ModeLid:
-		return T(lang, "덮개 닫아도 깨어 있음 (관리자 권한)", "Stay awake with lid closed (admin)")
+		return T(lang, "덮개 닫아도 깨어 있음 (관리자 권한)", "Stay awake with lid closed (admin)", "合盖后保持唤醒（需要管理员权限）")
 	default:
-		return T(lang, "화면은 꺼져도 맥은 깨어 있음 (caffeinate -i)", "Display may sleep, Mac stays awake (caffeinate -i)")
+		return T(lang, "화면은 꺼져도 맥은 깨어 있음 (caffeinate -i)", "Display may sleep, Mac stays awake (caffeinate -i)", "允许屏幕休眠，Mac 保持唤醒 (caffeinate -i)")
 	}
 }
 
@@ -231,7 +231,7 @@ func (e *Engine) floor() *int {
 	return nil
 }
 
-func (e *Engine) t(ko, en string) string { return T(e.Lang, ko, en) }
+func (e *Engine) t(ko, en, zh string) string { return T(e.Lang, ko, en, zh) }
 
 func notify(n Notice) Effect { return Effect{Type: EffectNotify, Notice: n} }
 
@@ -253,7 +253,7 @@ func (e *Engine) StartTimed(seconds *time.Duration, label string, now time.Time)
 	effects = append(effects, notify(ReportForDuty(e.Lang)))
 	e.say(SpeechReporting(e.Lang), now, 4*time.Second)
 	title := e.Mode.Title(e.Lang)
-	effects = append(effects, logEffect(e.t("근무 투입 — "+label+", "+title, "On duty — "+label+", "+title), LogOnDuty))
+	effects = append(effects, logEffect(e.t("근무 투입 — "+label+", "+title, "On duty — "+label+", "+title, "开始值班 — "+label+"，"+title), LogOnDuty))
 	return effects
 }
 
@@ -262,12 +262,12 @@ func (e *Engine) StartAgentWatch(now time.Time) []Effect {
 	e.watchStartedAt = now
 	e.order = DutyOrder{Kind: OrderAgentWatch}
 	e.quote = QuoteStandby
-	return []Effect{logEffect(e.t("에이전트 근무 대기 시작", "Started waiting for agents"), LogOther)}
+	return []Effect{logEffect(e.t("에이전트 근무 대기 시작", "Started waiting for agents", "开始等待代理"), LogOther)}
 }
 
 // Stop ends any watch.
 func (e *Engine) Stop(now time.Time) []Effect {
-	return e.standDown(nil, e.t("근무 종료 (수동)", "Off duty (manual)"))
+	return e.standDown(nil, e.t("근무 종료 (수동)", "Off duty (manual)", "结束值班（手动）"))
 }
 
 // SetMode changes the watch mode, re-acquiring if on duty.
@@ -286,7 +286,7 @@ func (e *Engine) SetMode(newMode DutyMode, now time.Time) []Effect {
 	}
 	effects = append(effects, e.engage(now)...)
 	title := newMode.Title(e.Lang)
-	effects = append(effects, logEffect(e.t("근무 방식 변경 — "+title, "Watch mode changed — "+title), LogOther))
+	effects = append(effects, logEffect(e.t("근무 방식 변경 — "+title, "Watch mode changed — "+title, "值班模式已更改 — "+title), LogOther))
 	return effects
 }
 
@@ -297,7 +297,7 @@ func (e *Engine) Resume(action ResumeAction, now time.Time) []Effect {
 		return nil
 	case ResumeExpired:
 		e.order = DutyOrder{}
-		return []Effect{logEffect(e.t("앱이 꺼져 있는 동안 근무 시간 종료", "Watch ended while the app was closed"), LogOther)}
+		return []Effect{logEffect(e.t("앱이 꺼져 있는 동안 근무 시간 종료", "Watch ended while the app was closed", "应用关闭期间，值班时间已到"), LogOther)}
 	}
 	var effects []Effect
 	// An unannounced admin prompt right after login looks like phishing → lid becomes system.
@@ -305,24 +305,24 @@ func (e *Engine) Resume(action ResumeAction, now time.Time) []Effect {
 		e.Mode = ModeSystem
 		effects = append(effects, notify(LidResumeFallback(e.Lang)),
 			logEffect(e.t("덮개 근무 → 시스템 근무로 복귀 (관리자 재승인 필요)",
-				"Lid-closed watch → resumed as system watch (admin approval needed)"), LogOther))
+				"Lid-closed watch → resumed as system watch (admin approval needed)", "合盖值班 → 恢复系统值班（需要管理员授权）"), LogOther))
 	}
 	switch action.Kind {
 	case ResumeAgentWatch:
 		e.watchStartedAt = now
 		e.order = DutyOrder{Kind: OrderAgentWatch}
 		e.quote = QuoteStandby
-		effects = append(effects, logEffect(e.t("근무 복귀 — 에이전트 근무", "Back on watch — agent watch"), LogOther))
+		effects = append(effects, logEffect(e.t("근무 복귀 — 에이전트 근무", "Back on watch — agent watch", "恢复值班 — 代理值班"), LogOther))
 	case ResumeTimed:
 		e.order = DutyOrder{Kind: OrderTimed, Until: action.Until}
 		effects = append(effects, e.engage(now)...)
 		e.say(SpeechResumed(e.Lang), now, 4*time.Second)
-		left := e.t("무기한", "indefinitely")
+		left := e.t("무기한", "indefinitely", "无限期")
 		if action.Until != nil {
 			clock := FormatClock(action.Until.Sub(now))
-			left = e.t("남은 시간 "+clock, clock+" left")
+			left = e.t("남은 시간 "+clock, clock+" left", "剩余 "+clock)
 		}
-		effects = append(effects, logEffect(e.t("근무 복귀 — ", "Back on watch — ")+left, LogOther))
+		effects = append(effects, logEffect(e.t("근무 복귀 — ", "Back on watch — ", "恢复值班 — ")+left, LogOther))
 	}
 	return effects
 }
@@ -337,7 +337,7 @@ func (e *Engine) LidEnableResult(ok bool, now time.Time) []Effect {
 	}
 	e.Mode = ModeSystem
 	return []Effect{notify(LidFallback(e.Lang)),
-		logEffect(e.t("덮개 근무 승인 거부 — 시스템 근무로 대체", "Lid-closed watch denied — switched to system watch"), LogOther),
+		logEffect(e.t("덮개 근무 승인 거부 — 시스템 근무로 대체", "Lid-closed watch denied — switched to system watch", "合盖值班未获授权 — 已切换为系统值班"), LogOther),
 		{Type: EffectAcquire, Mode: ModeSystem}}
 }
 
@@ -348,7 +348,7 @@ func (e *Engine) LidRestoreResult(ok bool) []Effect {
 	}
 	e.lidEngagedByUs = false
 	e.lidSleepDisabled = false
-	return []Effect{logEffect(e.t("덮개 잠자기 복구 완료", "Lid sleep restored"), LogOther)}
+	return []Effect{logEffect(e.t("덮개 잠자기 복구 완료", "Lid sleep restored", "已恢复合盖休眠"), LogOther)}
 }
 
 // MARK: tick (every 5 seconds)
@@ -361,7 +361,7 @@ func (e *Engine) Tick(o Observation) []Effect {
 	if e.onDuty && ShouldRetreat(o.Battery, e.floor()) && o.Battery != nil {
 		p := itoa(o.Battery.Percent)
 		n := BatteryRetreat(o.Battery.Percent, e.Lang)
-		return e.standDown(&n, e.t("배터리 "+p+"% — 근무 철수", "Battery "+p+"% — stood down"))
+		return e.standDown(&n, e.t("배터리 "+p+"% — 근무 철수", "Battery "+p+"% — stood down", "电量 "+p+"% — 结束值班"))
 	}
 
 	// heat
@@ -378,13 +378,13 @@ func (e *Engine) Tick(o Observation) []Effect {
 	switch DecideHeat(e.heat, e.onDuty, e.resting, e.heatAdvised, e.coolSince, now) {
 	case HeatActionAdvisory:
 		e.heatAdvised = true
-		effects = append(effects, notify(HeatAdvisoryNotice(e.Lang)), logEffect(e.t("폭염 주의보 발령", "Heat advisory"), LogHeat))
+		effects = append(effects, notify(HeatAdvisoryNotice(e.Lang)), logEffect(e.t("폭염 주의보 발령", "Heat advisory", "高温提醒"), LogHeat))
 		e.say(SpeechHeat(e.Lang), now, 6*time.Second)
 	case HeatActionRest:
 		e.resting = true
 		effects = append(effects, e.disengage()...)
 		effects = append(effects, notify(HeatRest(e.Lang)),
-			logEffect(e.t("폭염 경보 — 전투휴식 실시", "Heat warning — combat rest"), LogHeat))
+			logEffect(e.t("폭염 경보 — 전투휴식 실시", "Heat warning — combat rest", "过热警报 — 暂停值班降温"), LogHeat))
 		e.say(SpeechRest(e.Lang), now, 8*time.Second)
 	case HeatActionResume:
 		e.resting = false
@@ -393,7 +393,7 @@ func (e *Engine) Tick(o Observation) []Effect {
 			e.Mode = ModeSystem // no lid-closed watch right after overheating
 		}
 		effects = append(effects, notify(HeatResume(lidDowngraded, e.Lang)),
-			logEffect(e.t("전투휴식 종료 — 근무 복귀", "Combat rest over — back on watch"), LogOnDuty))
+			logEffect(e.t("전투휴식 종료 — 근무 복귀", "Combat rest over — back on watch", "降温休息结束 — 恢复值班"), LogOnDuty))
 		e.say(SpeechBackFromRest(e.Lang), now, 6*time.Second)
 		if e.order.Kind == OrderTimed {
 			effects = append(effects, e.engage(now)...) // agent watch decides again below
@@ -406,7 +406,7 @@ func (e *Engine) Tick(o Observation) []Effect {
 	// abandoned post (while the admin prompt is open, nothing is held yet, which is fine)
 	if e.onDuty && !e.awaitingLid && o.AssertionLost {
 		effects = append(effects, Effect{Type: EffectReacquire}, notify(PostAbandoned(e.Lang)),
-			logEffect(e.t("⚠️ 근무지 이탈 감지 — 즉시 재투입", "⚠️ Post abandoned — re-engaged"), LogAWOL))
+			logEffect(e.t("⚠️ 근무지 이탈 감지 — 즉시 재투입", "⚠️ Post abandoned — re-engaged", "⚠️ 防休眠失效 — 已立即恢复"), LogAWOL))
 		e.say(SpeechNotAWOL(e.Lang), now, 6*time.Second)
 	}
 
@@ -417,7 +417,7 @@ func (e *Engine) Tick(o Observation) []Effect {
 			e.saluteUntil = &salute
 			e.say(SpeechTimeUp(e.Lang), now, 8*time.Second)
 			n := TimeUp(e.Lang)
-			effects = append(effects, e.standDown(&n, e.t("근무 시간 종료", "Watch time over"))...)
+			effects = append(effects, e.standDown(&n, e.t("근무 시간 종료", "Watch time over", "值班时间已到"))...)
 		}
 	case OrderAgentWatch:
 		effects = append(effects, e.agentWatchTick(o)...)
@@ -446,7 +446,7 @@ func (e *Engine) agentWatchTick(o Observation) []Effect {
 		e.lastBusyAt = &t
 	}
 	if e.lastAgentSummary == "" {
-		e.lastAgentSummary = e.t("에이전트", "Agents")
+		e.lastAgentSummary = e.t("에이전트", "Agents", "代理")
 	}
 	quiet := QuietFor(now, e.lastBusyAt, e.watchStartedAt)
 	grace := time.Duration(e.GraceMinutes) * time.Minute
@@ -462,7 +462,7 @@ func (e *Engine) agentWatchTick(o Observation) []Effect {
 		effects := e.engage(now)
 		s := e.lastAgentSummary
 		effects = append(effects, notify(AgentArrived(s, e.Lang)),
-			logEffect(e.t("근무 투입 — "+s+" 출근", "On duty — "+s+" clocked in"), LogOnDuty))
+			logEffect(e.t("근무 투입 — "+s+" 출근", "On duty — "+s+" clocked in", "开始值班 — "+s+" 已开始工作"), LogOnDuty))
 		e.say(SpeechArrived(e.Lang), now, 4*time.Second)
 		return effects
 	case WatchHandover:
@@ -472,7 +472,7 @@ func (e *Engine) agentWatchTick(o Observation) []Effect {
 		e.saluteUntil = &salute
 		s := e.lastAgentSummary
 		effects = append(effects, notify(Handover(s, e.Lang)),
-			logEffect(e.t("근무 교대 — "+s+" 작업 종료, 이상 무", "Shift over — "+s+" finished, all clear"), LogHandover))
+			logEffect(e.t("근무 교대 — "+s+" 작업 종료, 이상 무", "Shift over — "+s+" finished, all clear", "交班 — "+s+" 已完成工作，一切正常"), LogHandover))
 		e.say(SpeechHandover(e.Lang), now, 8*time.Second)
 		return effects
 	}
@@ -525,14 +525,14 @@ func WatchDetail(busyNow, countIdle bool, summary string, openCount int, onDuty 
 	switch {
 	case countIdle && busyNow:
 		n := itoa(openCount)
-		s = T(lang, "열린 세션 "+n+"개 (열린 세션 인정 모드)", n+" open session(s) (counting idle sessions)")
+		s = T(lang, "열린 세션 "+n+"개 (열린 세션 인정 모드)", n+" open session(s) (counting idle sessions)", n+" 个已打开的会话（包括空闲会话）")
 	case busyNow:
-		s = T(lang, summary+" 작업 중", summary+" working")
+		s = T(lang, summary+" 작업 중", summary+" working", summary+" 正在工作")
 	case !onDuty:
 		return nil
 	default:
 		q, left := FormatClock(quiet), FormatClock(grace-quiet)
-		s = T(lang, "조용해진 지 "+q+" · 교대까지 "+left, "Quiet for "+q+" · shift over in "+left)
+		s = T(lang, "조용해진 지 "+q+" · 교대까지 "+left, "Quiet for "+q+" · shift over in "+left, "已空闲 "+q+" · 距交班 "+left)
 	}
 	return &s
 }

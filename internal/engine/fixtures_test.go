@@ -18,7 +18,7 @@ import (
 // (Tests/BulchimbeonCoreTests/EngineFixtureTests.swift runs the same files); this port must
 // pass them unchanged. Every language-dependent case runs in both Korean and English here.
 
-var langs = []Lang{KO, EN}
+var langs = []Lang{KO, EN, ZH}
 
 func load(t *testing.T, name string, v any) {
 	t.Helper()

@@ -54,7 +54,7 @@ polkit.addRule(function (action, subject) {
 // Doctor checks what Bulchimbeon needs on this machine. It only reads and tries short
 // inhibitors; it never changes the system. It reports false if the sleep lock cannot work.
 func Doctor(w io.Writer, lang engine.Lang) bool {
-	t := func(ko, en string) string { return engine.T(lang, ko, en) }
+	t := func(ko, en, zh string) string { return engine.T(lang, ko, en, zh) }
 	ok := true
 	mark := func(good bool, text string) {
 		if good {
@@ -63,20 +63,20 @@ func Doctor(w io.Writer, lang engine.Lang) bool {
 			fmt.Fprintln(w, "  ✘ "+text)
 		}
 	}
-	fmt.Fprintln(w, t("불침번 점검 (doctor)", "Bulchimbeon doctor"))
+	fmt.Fprintln(w, t("불침번 점검 (doctor)", "Bulchimbeon doctor", "Bulchimbeon 诊断"))
 
 	inhibit, trueTool := findTool("systemd-inhibit"), findTool("true")
-	mark(inhibit != "", "systemd-inhibit: "+orNone(inhibit, t("없음 — systemd 가 필요합니다", "missing (systemd is required)")))
+	mark(inhibit != "", "systemd-inhibit: "+orNone(inhibit, t("없음 — systemd 가 필요합니다", "missing (systemd is required)", "未找到（需要 systemd）")))
 	if inhibit == "" {
 		return false
 	}
 
 	holders, err := NewLogind().Holders()
 	if err != nil {
-		mark(false, t("logind 조회 실패: ", "cannot list logind inhibitors: ")+err.Error())
+		mark(false, t("logind 조회 실패: ", "cannot list logind inhibitors: ", "无法列出 logind 休眠锁：")+err.Error())
 		ok = false
 	} else {
-		mark(true, fmt.Sprintf(t("logind: 잠금 %d개 조회됨", "logind: %d inhibitors listed"), len(holders)))
+		mark(true, fmt.Sprintf(t("logind: 잠금 %d개 조회됨", "logind: %d inhibitors listed", "logind：已列出 %d 个休眠锁"), len(holders)))
 	}
 
 	try := func(what string) (bool, string) {
@@ -90,10 +90,10 @@ func Doctor(w io.Writer, lang engine.Lang) bool {
 	sleepOK, sleepErr := try("sleep")
 	idleOK, idleErr := try("idle")
 	if sleepOK {
-		mark(true, t("잠자기(sleep) 차단: 가능", "sleep block: allowed"))
+		mark(true, t("잠자기(sleep) 차단: 가능", "sleep block: allowed", "阻止休眠：已允许"))
 	} else {
 		ok = false
-		mark(false, t("잠자기(sleep) 차단: 거부됨 — ", "sleep block: refused: ")+sleepErr)
+		mark(false, t("잠자기(sleep) 차단: 거부됨 — ", "sleep block: refused: ", "阻止休眠：被拒绝：")+sleepErr)
 		if strings.Contains(sleepErr, "Access denied") {
 			name := ""
 			if u, err := user.Current(); err == nil {
@@ -107,7 +107,7 @@ func Doctor(w io.Writer, lang engine.Lang) bool {
 				"    By default polkit allows a sleep block only from a local login (at the machine's screen). Over SSH or\n"+
 					"    on a headless machine Bulchimbeon can block idle only, and the machine can still suspend.\n"+
 					"    To allow it for this user only, save the rule below as "+PolkitRulePath+" (root, 0644).\n"+
-					"    Bulchimbeon never runs this for you:"))
+					"    Bulchimbeon never runs this for you:", "    默认情况下，polkit 仅允许本地登录（在设备屏幕前）阻止休眠。通过 SSH 或在无显示器环境中，\n    Bulchimbeon 只能阻止空闲熄屏，设备仍可休眠。\n    如需仅为此用户授权，请将以下规则保存为 "+PolkitRulePath+"（root 所有，权限 0644）。\n    Bulchimbeon 不会代你执行此操作："))
 			fmt.Fprintln(w)
 			fmt.Fprintf(w, "    sudo tee %s >/dev/null <<'EOF'\n", PolkitRulePath)
 			for _, line := range strings.Split(strings.TrimSuffix(PolkitRule(name), "\n"), "\n") {
@@ -118,39 +118,39 @@ func Doctor(w io.Writer, lang engine.Lang) bool {
 		}
 	}
 	if idleOK {
-		mark(true, t("화면 꺼짐(idle) 차단: 가능", "idle block: allowed"))
+		mark(true, t("화면 꺼짐(idle) 차단: 가능", "idle block: allowed", "阻止空闲熄屏：已允许"))
 	} else {
-		mark(false, t("화면 꺼짐(idle) 차단: 거부됨 — ", "idle block: refused: ")+idleErr)
+		mark(false, t("화면 꺼짐(idle) 차단: 거부됨 — ", "idle block: refused: ", "阻止空闲熄屏：被拒绝：")+idleErr)
 	}
 
 	if b, err := NewPowerSupply().Battery(); err == nil {
 		if b == nil {
-			mark(true, t("배터리: 없음 (철수 기준 해당 없음)", "battery: none (the battery floor does not apply)"))
+			mark(true, t("배터리: 없음 (철수 기준 해당 없음)", "battery: none (the battery floor does not apply)", "电池：无（低电量阈值不适用）"))
 		} else {
-			mark(true, fmt.Sprintf(t("배터리: %d%%%s", "battery: %d%%%s"), b.Percent,
-				map[bool]string{true: t(" (배터리 사용 중)", " (on battery)"), false: t(" (전원 연결)", " (plugged in)")}[b.OnBattery]))
+			mark(true, fmt.Sprintf(t("배터리: %d%%%s", "battery: %d%%%s", "电量：%d%%%s"), b.Percent,
+				map[bool]string{true: t(" (배터리 사용 중)", " (on battery)", "（使用电池）"), false: t(" (전원 연결)", " (plugged in)", "（已接通电源）")}[b.OnBattery]))
 		}
 	}
 	if r := NewThermal().Thermal(); r.Available {
-		mark(true, fmt.Sprintf(t("온도: %s %.0f °C (위험 %.0f °C) → %s", "temperature: %s %.0f °C (critical %.0f °C) → %s"),
+		mark(true, fmt.Sprintf(t("온도: %s %.0f °C (위험 %.0f °C) → %s", "temperature: %s %.0f °C (critical %.0f °C) → %s", "温度：%s %.0f °C（临界值 %.0f °C）→ %s"),
 			r.Sensor, r.Celsius, r.CritCelsius, r.LevelName))
 	} else {
-		mark(true, t("온도: 센서 없음 (폭염 대응 꺼짐)", "temperature: no sensor (heat response off)"))
+		mark(true, t("온도: 센서 없음 (폭염 대응 꺼짐)", "temperature: no sensor (heat response off)", "温度：无传感器（过热保护未启用）"))
 	}
 	fmt.Fprintln(w, "  - "+t("덮개: 처리하지 않음 — 덮개를 닫으면 여전히 잠듭니다 (logind HandleLidSwitch)",
-		"lid: not handled. Closing the lid still suspends (logind HandleLidSwitch)"))
+		"lid: not handled. Closing the lid still suspends (logind HandleLidSwitch)", "合盖：不处理。合盖仍会休眠 (logind HandleLidSwitch)"))
 
 	if systemctl := findTool("systemctl"); systemctl != "" {
 		active := strings.TrimSpace(string(runUser(systemctl, "--user", "is-active", "bulchimbeon.service")))
 		enabled := strings.TrimSpace(string(runUser(systemctl, "--user", "is-enabled", "bulchimbeon.service")))
-		mark(active == "active", fmt.Sprintf(t("서비스: %s, %s (systemctl --user)", "service: %s, %s (systemctl --user)"),
+		mark(active == "active", fmt.Sprintf(t("서비스: %s, %s (systemctl --user)", "service: %s, %s (systemctl --user)", "服务：%s，%s (systemctl --user)"),
 			orNone(active, "unknown"), orNone(enabled, "unknown")))
 	}
 	if loginctl := findTool("loginctl"); loginctl != "" {
 		out, err := run(3*time.Second, loginctl, "show-user", strconv.Itoa(os.Getuid()), "--property=Linger", "--value")
 		if err == nil && strings.TrimSpace(string(out)) == "no" {
 			fmt.Fprintln(w, "  - "+t("Linger=no: 로그아웃하면 서비스도 멈춥니다. 계속 돌리려면 `loginctl enable-linger`",
-				"Linger=no: the service stops when you log out. Keep it running with `loginctl enable-linger`"))
+				"Linger=no: the service stops when you log out. Keep it running with `loginctl enable-linger`", "Linger=no：退出登录后服务会停止。可使用 `loginctl enable-linger` 使其持续运行"))
 		}
 	}
 	return ok

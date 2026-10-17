@@ -29,22 +29,24 @@ public struct UniformTheme: Sendable, Identifiable, Equatable {
     public let id: String
     public let nameKo: String
     public let nameEn: String
+    public let nameZh: String
     /// 팔레트 덮어쓰기. 키는 `themeableCharacters` 만.
     public let colors: [Character: UInt32]
     public let overlays: [Overlay]
 
-    public init(id: String, nameKo: String, nameEn: String, colors: [Character: UInt32] = [:], overlays: [Overlay] = []) {
+    public init(id: String, nameKo: String, nameEn: String, nameZh: String? = nil, colors: [Character: UInt32] = [:], overlays: [Overlay] = []) {
         let problems = Self.violations(colors: colors, overlays: overlays)
         precondition(problems.isEmpty, "UniformTheme \(id): \(problems.joined(separator: "; "))")
         self.id = id
         self.nameKo = nameKo
         self.nameEn = nameEn
+        self.nameZh = nameZh ?? nameEn
         self.colors = colors
         self.overlays = overlays
     }
 
     public var name: String { name(L10n.language) }
-    public func name(_ lang: L10n.Language) -> String { L10n.t(nameKo, nameEn, lang) }
+    public func name(_ lang: L10n.Language) -> String { L10n.t(nameKo, nameEn, nameZh, lang) }
 
     /// 테마 규칙 위반 목록 (비어 있으면 통과). `init` 이 이걸로 막고, 테스트도 이걸로 확인한다.
     public static func violations(colors: [Character: UInt32], overlays: [Overlay]) -> [String] {
@@ -96,11 +98,11 @@ public struct UniformTheme: Sendable, Identifiable, Equatable {
     }
 
     /// 지금까지의 전투복. 아무것도 바꾸지 않는다.
-    public static let `default` = UniformTheme(id: "default", nameKo: "기본 전투복", nameEn: "Standard")
+    public static let `default` = UniformTheme(id: "default", nameKo: "기본 전투복", nameEn: "Standard", nameZh: "标准")
 
     /// 남색 모자·근무복, 모자에 흰 띠
     public static let navy = UniformTheme(
-        id: "navy", nameKo: "네이비", nameEn: "Navy",
+        id: "navy", nameKo: "네이비", nameEn: "Navy", nameZh: "海蓝",
         colors: [
             "H": 0x3A5288, "h": 0x5C76AD,
             "U": 0x3F5C93, "u": 0x2C4470,
@@ -114,7 +116,7 @@ public struct UniformTheme: Sendable, Identifiable, Equatable {
 
     /// 흰 방탄모·설상복, 옅은 회색 얼룩
     public static let arctic = UniformTheme(
-        id: "arctic", nameKo: "설원", nameEn: "Arctic",
+        id: "arctic", nameKo: "설원", nameEn: "Arctic", nameZh: "雪地",
         colors: [
             "H": 0xE3E9EE, "h": 0xFFFFFF,
             "U": 0xD5DDE4, "u": 0xA5B2BE,
@@ -132,7 +134,7 @@ public struct UniformTheme: Sendable, Identifiable, Equatable {
 
     /// 모래색 모자·군복, 진한 모래색 점 몇 개. 일반적인 사막 색일 뿐 실제 군대 무늬가 아니다.
     public static let desert = UniformTheme(
-        id: "desert", nameKo: "사막", nameEn: "Desert",
+        id: "desert", nameKo: "사막", nameEn: "Desert", nameZh: "沙漠",
         colors: [
             "H": 0xC9A66B, "h": 0xD9BE8F,
             "U": 0xB8915A, "u": 0x8F6F3F,

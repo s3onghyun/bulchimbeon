@@ -64,7 +64,7 @@ sudo pmset disablesleep 1     # 되돌리는 걸 잊으면 배터리 0%
 | 📋 당직 근무 인수인계 | 10분 이상 자리를 비웠다 돌아오면 그사이 근무 내역 보고 ("근무 교대 1회 · 폭염 1회 … 이상입니다! 🫡") |
 | 🖥️ 다른 앱 표시 | 이 앱 말고 잠자기·화면 꺼짐을 막는 앱도 메뉴에 표시 (예: "Vivaldi (영상)") |
 | 🔁 근무 유지 | 앱 재시작·업데이트·재부팅 후에도 남은 근무 시간 그대로 복귀 (덮개 근무는 보안상 시스템 근무로 복귀 후 재승인 안내) |
-| 🌐 한국어·영어 | 기본은 시스템 언어. 메뉴 **언어 / Language** 에서 따로 고를 수 있음 (시스템은 영어인데 앱은 한국어로 등) |
+| 🌐 한국어·영어·중국어(간체) | 기본은 시스템 언어. 메뉴 **언어 / Language / 语言** 에서 따로 고를 수 있음 (시스템은 영어인데 앱은 한국어로 등) |
 | 📒 근무일지 | `~/Library/Application Support/Bulchimbeon/duty-log.txt` |
 
 ## 비슷한 앱과 비교
@@ -188,7 +188,7 @@ pmset -g assertions | grep Bulchimbeon   # 근무 중인지 확인
 
 [마일스톤](https://github.com/s3onghyun/bulchimbeon/milestones)으로 관리한다. 1.0 = 설정 키·실행 인자·근무일지 형식이 더 이상 바뀌지 않는다는 약속 ([호환성 약속](docs/compatibility.md), 변경 내역은 [CHANGELOG](CHANGELOG.md)).
 
-- [x] 치비 이등병 픽셀아트, 순찰 모드, 한국어·영어
+- [x] 치비 이등병 픽셀아트, 순찰 모드, 한국어·영어·중국어(간체)
 - [x] 에이전트 **작업 중 / 대기 구분** (열려만 있는 세션은 세지 않음)
 - [x] Homebrew cask (개인 tap)
 - [ ] Apple 공증 + Homebrew 공식 cask (Developer ID 필요)
@@ -237,7 +237,7 @@ bulchimbeon status                       # 지금 근무 중인지, 왜 그런�
 bulchimbeon doctor                       # systemd·logind·polkit 점검
 bulchimbeon config set agentGraceMinutes 10
 bulchimbeon config set customAgents goose amp
-bulchimbeon config set language ko       # ko | en | system (기본: LANG 따름)
+bulchimbeon config set language ko       # ko | en | zh | system (기본: LANG 따름)
 journalctl --user -u bulchimbeon -f      # 데몬 로그
 ```
 

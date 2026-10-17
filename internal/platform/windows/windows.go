@@ -32,7 +32,7 @@ func New() platform.Platform {
 		Thermal:   thermal{},
 		Holders:   holders{},
 		Doctor: func(w io.Writer, lang engine.Lang) bool {
-			io.WriteString(w, engine.T(lang, "Windows 는 아직 지원하지 않습니다.\n", "Windows is not supported yet.\n"))
+			io.WriteString(w, engine.T(lang, "Windows 는 아직 지원하지 않습니다.\n", "Windows is not supported yet.\n", "暂不支持 Windows。\n"))
 			return false
 		},
 	}

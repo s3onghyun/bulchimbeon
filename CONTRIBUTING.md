@@ -86,7 +86,7 @@ These match the checklist in the PR template.
 | Never store or print other processes' command lines or environment variables | They may contain other tools' API keys |
 | Never put outside strings into the admin (`pmset`) command | Prevents shell injection |
 | If you change security-relevant behavior, update the threat model in [`SECURITY.md`](SECURITY.md) | |
-| Every user-facing string is written in both Korean and English: `L10n.t("한국어", "English")` | The app UI is bilingual. If you don't write Korean, put your best English in both and say so in the PR; we'll fill in the Korean |
+| Every user-facing string is written in Korean, English and Simplified Chinese: `L10n.t("한국어", "English", "中文")` | The app UI supports three languages. If you cannot provide a translation, use English for that argument and flag it in the PR |
 | Settings keys, launch flags and the duty-log format follow the [compatibility promise](docs/compatibility.md) | Scripts that use them must not break |
 | Tone of the soldier's lines: earnest and cute. **No hazing or bullying jokes** | Everyone should be able to laugh along |
 
@@ -123,7 +123,7 @@ with your change. A character that isn't in the palette fails the tests.
 
 1. In `Sources/BulchimbeonCore/UniformTheme.swift`, add a theme like `navy` or `arctic` and append it to `all`.
    The `id` is lowercase English (for example `desert`); it is stored as a setting value, so it can't change after a
-   release. Give the name in both Korean and English.
+   release. Give the name in Korean, English and Simplified Chinese (`nameKo`, `nameEn`, `nameZh`).
 2. Only clothing and props change. `colors` may override only `themeableCharacters` (helmet `H h`, uniform `U u`,
    boots `B`, flashlight `L`, theme accents `A`), and `overlays` land only on clothing pixels. The face, skin and
    outline stay the same for everyone.
@@ -142,7 +142,7 @@ with your change. A character that isn't in the palette fails the tests.
 - To fix wording, edit the file directly and open a PR. Small PRs are best.
 - When a section is missing from the Japanese or Chinese README, translate it from `README.md`.
 - Keep the language links at the top of each README and the image paths (`docs/media/demo.gif`, `docs/sprites-preview.png`) unchanged.
-- The app UI itself is Korean and English only (other system languages fall back to English). Adding a UI language is
+- The app UI supports Korean, English and Simplified Chinese. Chinese locales use Simplified Chinese; other unsupported system languages fall back to English. Adding another UI language is
   a bigger change, so please open an issue first.
 
 ### AI-assisted contributions
@@ -247,7 +247,7 @@ PR 템플릿의 체크리스트와 같습니다.
 | 프로세스 명령줄·환경변수를 저장·출력하지 않기 | 다른 프로세스의 API 키가 들어 있을 수 있음 |
 | 관리자 권한 명령(`pmset`)에 외부 문자열을 넣지 않기 | 셸 인젝션 방지 |
 | 보안 동작을 바꾸면 [`SECURITY.md`](SECURITY.md) 위협 모델도 갱신 | |
-| 사용자 문구는 한국어·영어 모두 (`L10n.t("한국어", "English")`) | 앱 UI 가 2개 언어입니다. 한국어를 못 쓰면 양쪽에 영어를 넣고 PR 에 적어주세요. 한국어는 메인테이너가 채웁니다 |
+| 사용자 문구는 한국어·영어·중국어 간체 모두 (`L10n.t("한국어", "English", "中文")`) | 앱 UI 는 3개 언어를 지원합니다. 번역이 어려운 언어는 영어를 넣고 PR 에 적어주세요 |
 | 설정 키·실행 인자·근무일지 형식은 [호환성 약속](docs/compatibility.md)을 따르기 | 이것들을 쓰는 스크립트가 깨지면 안 됩니다 |
 | 대사 톤: 성실하고 귀엽게. **갈굼·부조리 개그는 넣지 않습니다** | 모두가 웃을 수 있게 |
 
@@ -281,7 +281,7 @@ PR 템플릿의 체크리스트와 같습니다.
 ### 군복 테마 추가하기
 
 1. `Sources/BulchimbeonCore/UniformTheme.swift` 에 `navy`·`arctic` 처럼 테마를 하나 만들고 `all` 끝에 넣습니다.
-   `id` 는 소문자 영어 (예: `desert`) — 설정 값으로 저장되므로 출시 후에는 바꿀 수 없습니다. 이름은 한국어·영어 둘 다.
+   `id` 는 소문자 영어 (예: `desert`) — 설정 값으로 저장되므로 출시 후에는 바꿀 수 없습니다. 이름은 한국어·영어·중국어 간체 모두 (`nameKo`, `nameEn`, `nameZh`).
 2. 바꿀 수 있는 건 옷과 소품뿐입니다. `colors` 는 `themeableCharacters` (방탄모 `H h`, 전투복 `U u`, 전투화 `B`,
    손전등 `L`, 테마 장식 `A`) 만 덮어쓸 수 있고, `overlays` 는 옷 픽셀 위에만 찍힙니다. 얼굴·피부·외곽선은 그대로입니다.
 3. 나라가 아니라 테마입니다. **국기, 실제 계급장·부대 마크, 특정 군대의 실제 군복은 넣지 않습니다.**
@@ -299,7 +299,7 @@ PR 템플릿의 체크리스트와 같습니다.
 - 표현을 고치려면 파일을 직접 고쳐 PR 을 보내주세요. 작은 PR 이 좋습니다.
 - 일본어·중국어 README 에 빠진 섹션이 있으면 `README.md` 에서 번역해 넣어주세요.
 - 각 README 맨 위의 언어 링크와 이미지 경로(`docs/media/demo.gif`, `docs/sprites-preview.png`)는 그대로 둬주세요.
-- 앱 UI 는 한국어·영어만 지원합니다 (다른 시스템 언어는 영어로 표시). UI 언어 추가는 큰 변경이라 이슈로 먼저 의논해주세요.
+- 앱 UI 는 한국어·영어·중국어 간체를 지원합니다 (중국어 로캘은 간체로, 그 외 미지원 시스템 언어는 영어로 표시). UI 언어 추가는 큰 변경이라 이슈로 먼저 의논해주세요.
 
 ### AI 도움을 받은 기여
 

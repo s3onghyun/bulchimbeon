@@ -23,11 +23,11 @@ machine, the battery or heat rules, the duty-log line or the private's lines mus
 
 ## Languages
 
-The Go runner checks every text in Korean and English. The Swift runner checks Korean and English
+The Go runner checks every text in Korean, English and Simplified Chinese. The Swift runner checks Korean, English and Simplified Chinese
 wherever the Swift API takes a language (`Lines`), and the **system language** (`L10n.language`)
 for texts the core renders without one: duty-engine log lines, notifications inside scenarios,
 `watchDetail`, reason labels and mode titles. Those cases carry `"systemLanguage": true` in
-`lines.json`, and scenario texts are given as `{"ko": …, "en": …}`.
+`lines.json`, and scenario texts are given as `{"ko": …, "en": …, "zh": …}`.
 
 ## Files
 
@@ -79,9 +79,9 @@ launch arguments, and the engine's default settings. See `docs/compatibility.md`
 ### `lines.json`: the private's lines
 
 `detect` cases check language detection from a preference list. Each `lines` case is
-`{fn, args?, systemLanguage?, ko, en}`, where `fn` is a line function (`agentArrived`,
+`{fn, args?, systemLanguage?, ko, en, zh}`, where `fn` is a line function (`agentArrived`,
 `speech.handover`, `reason.script`, `mode.system`, `watchDetail`, …), `args` its arguments, and
-`ko`/`en` the expected value: a string, a list of strings, a `{title, body}` notice, or `null`.
+`ko`/`en`/`zh` the expected value: a string, a list of strings, a `{title, body}` notice, or `null`.
 
 ### `engine_scenarios.json`: the duty state machine
 

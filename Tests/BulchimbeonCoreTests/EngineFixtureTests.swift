@@ -8,10 +8,10 @@ import Testing
 ///
 /// Shared golden fixtures. The Swift core defines the truth; the Go port runs the same files.
 /// Texts without a language parameter in the core (engine logs, reason labels) are checked in the
-/// system language (`L10n.language`); everything else in both Korean and English.
+/// system language (`L10n.language`); everything else in Korean, English and Simplified Chinese.
 @Suite struct EngineFixtureTests {
     private let lang = L10n.language
-    private var langKey: String { lang == .ko ? "ko" : "en" }
+    private var langKey: String { lang.rawValue }
 
     // MARK: 카탈로그 · 활동 판별
 
@@ -193,14 +193,14 @@ import Testing
     @Test func lines() throws {
         let f = try Fixture.load("lines.json")
         for c in f["detect"].array {
-            #expect((L10n.detect(c["preferred"].strings) == .ko ? "ko" : "en") == c["expect"].string, "detect: \(c)")
+            #expect(L10n.detect(c["preferred"].strings).rawValue == c["expect"].string, "detect: \(c)")
         }
         for c in f["lines"].array {
             let fn = c["fn"].string ?? ""
-            let langs: [L10n.Language] = c["systemLanguage"].bool == true ? [lang] : [.ko, .en]
+            let langs: [L10n.Language] = c["systemLanguage"].bool == true ? [lang] : L10n.Language.allCases
             for l in langs {
                 let got = try Self.line(fn, c["args"], l)
-                #expect(got == c[l == .ko ? "ko" : "en"], "lines: \(fn) \(c["args"]) [\(l)]")
+                #expect(got == c[l.rawValue], "lines: \(fn) \(c["args"]) [\(l)]")
             }
         }
     }
@@ -313,9 +313,9 @@ import Testing
         return result
     }
 
-    /// `{"ko": …, "en": …}` → 시스템 언어 값
+    /// `{"ko": …, "en": …, "zh": …}` → 시스템 언어 값
     private func pick(_ v: JSONValue) -> JSONValue {
-        if case .object(let o) = v, let ko = o["ko"], let en = o["en"], o.count == 2 { return lang == .ko ? ko : en }
+        if case .object(let o) = v, o["ko"] != nil, o["en"] != nil, let value = o[langKey], o.count == 3 { return value }
         return v
     }
 

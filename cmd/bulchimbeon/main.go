@@ -70,7 +70,7 @@ func cli(args []string, stdout, stderr io.Writer) int {
 func usage(w io.Writer, lang engine.Lang) {
 	fmt.Fprint(w, engine.T(lang, `불침번: AI 코딩 에이전트가 일하는 동안만 이 기기를 깨워 둡니다.
 
-사용법: bulchimbeon <명령> [--lang ko|en]
+사용법: bulchimbeon <명령> [--lang ko|en|zh]
 
   run        에이전트 근무 데몬 (systemd 사용자 서비스가 실행)
   status     지금 깨워 두는 중인지, 왜 그런지
@@ -81,7 +81,7 @@ func usage(w io.Writer, lang engine.Lang) {
 설정 파일: ~/.config/bulchimbeon/settings.json · 근무일지: ~/.local/state/bulchimbeon/duty-log.txt
 `, `Bulchimbeon keeps this machine awake only while AI coding agents are working.
 
-Usage: bulchimbeon <command> [--lang ko|en]
+Usage: bulchimbeon <command> [--lang ko|en|zh]
 
   run        agent watch daemon (the systemd user service runs this)
   status     whether the machine is being kept awake, and why
@@ -90,6 +90,17 @@ Usage: bulchimbeon <command> [--lang ko|en]
   version    print the version
 
 Settings: ~/.config/bulchimbeon/settings.json · duty log: ~/.local/state/bulchimbeon/duty-log.txt
+`, `Bulchimbeon 仅在 AI 编程代理工作期间保持设备唤醒。
+
+用法：bulchimbeon <命令> [--lang ko|en|zh]
+
+  run        运行代理值班守护进程（由 systemd 用户服务启动）
+  status     查看设备是否保持唤醒及原因
+  doctor     检查 systemd、logind 和 polkit（含 SSH 或无显示器环境的 polkit 规则说明）
+  config     查看或修改设置：config [list | get <键> | set <键> <值>... | unset <键>]
+  version    显示版本
+
+设置：~/.config/bulchimbeon/settings.json · 值班日志：~/.local/state/bulchimbeon/duty-log.txt
 `))
 }
 
@@ -103,7 +114,7 @@ type common struct {
 func newFlags(name string, stderr io.Writer) *common {
 	c := &common{fs: flag.NewFlagSet("bulchimbeon "+name, flag.ContinueOnError)}
 	c.fs.SetOutput(stderr)
-	c.fs.StringVar(&c.lang, "lang", "", "language: ko or en (default: the language setting, then LANG)")
+	c.fs.StringVar(&c.lang, "lang", "", "language: ko, en or zh (default: the language setting, then LANG)")
 	return c
 }
 
@@ -122,7 +133,7 @@ func (c *common) parse(args []string) ([]string, error) {
 	}
 	if c.lang != "" {
 		if _, ok := engine.ParseLang(c.lang); !ok {
-			return nil, fmt.Errorf("--lang must be ko or en")
+			return nil, fmt.Errorf("--lang must be ko, en or zh")
 		}
 	}
 	return positional, nil
@@ -233,8 +244,8 @@ func doctorCmd(args []string, stdout, stderr io.Writer) int {
 	s := loadSettings(p, stderr)
 	lang := f.langFor(s)
 	ok := plat.Doctor(stdout, lang)
-	fmt.Fprintln(stdout, "  - "+engine.T(lang, "설정: ", "settings: ")+daemon.Tilde(p.Settings, home))
-	fmt.Fprintln(stdout, "  - "+engine.T(lang, "근무일지: ", "duty log: ")+daemon.Tilde(p.Log, home))
+	fmt.Fprintln(stdout, "  - "+engine.T(lang, "설정: ", "settings: ", "设置：")+daemon.Tilde(p.Settings, home))
+	fmt.Fprintln(stdout, "  - "+engine.T(lang, "근무일지: ", "duty log: ", "值班日志：")+daemon.Tilde(p.Log, home))
 	if !ok {
 		return exitFail
 	}

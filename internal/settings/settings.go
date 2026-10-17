@@ -101,8 +101,8 @@ func apply(s *Settings, key string, value json.RawMessage) error {
 		s.CustomAgents = v // engine.CustomKinds drops invalid names, as on macOS
 	case KeyLanguage:
 		var v string
-		if json.Unmarshal(value, &v) != nil || !slices.Contains([]string{"system", "ko", "en"}, v) {
-			return errors.New("expected system, ko or en")
+		if json.Unmarshal(value, &v) != nil || !slices.Contains([]string{"system", "ko", "en", "zh"}, v) {
+			return errors.New("expected system, ko, en or zh")
 		}
 		s.Language = v
 	case engine.KeyPatrolEnabled, engine.KeyPatrolScale, engine.KeyUniformTheme:

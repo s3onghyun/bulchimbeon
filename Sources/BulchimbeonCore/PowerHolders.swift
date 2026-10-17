@@ -39,9 +39,9 @@ public enum PowerHolders {
     }
 
     static func label(for a: Assertion, _ lang: L10n.Language) -> String {
-        if a.processName == "coreaudiod" { return L10n.t("오디오 재생", "audio playback", lang) }
+        if a.processName == "coreaudiod" { return L10n.t("오디오 재생", "audio playback", "音频播放", lang) }
         let name = String(a.processName.prefix(40))
-        if a.name.localizedCaseInsensitiveContains("video") { return name + L10n.t(" (영상)", " (video)", lang) }
+        if a.name.localizedCaseInsensitiveContains("video") { return name + L10n.t(" (영상)", " (video)", "（视频）", lang) }
         return name
     }
 }
