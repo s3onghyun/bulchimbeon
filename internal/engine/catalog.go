@@ -66,13 +66,13 @@ func (r Reason) String() string {
 func (r Reason) Label(lang Lang) string {
 	switch r {
 	case ReasonExecutableName:
-		return T(lang, "실행 파일 이름", "executable name")
+		return T(lang, "실행 파일 이름", "executable name", "可执行文件名")
 	case ReasonArgv0:
-		return T(lang, "실행 명령(argv[0])", "command (argv[0])")
+		return T(lang, "실행 명령(argv[0])", "command (argv[0])", "命令 (argv[0])")
 	case ReasonInstallPath:
-		return T(lang, "설치 경로", "install path")
+		return T(lang, "설치 경로", "install path", "安装路径")
 	default:
-		return T(lang, "스크립트 경로", "script path")
+		return T(lang, "스크립트 경로", "script path", "脚本路径")
 	}
 }
 

@@ -57,6 +57,7 @@ type effectJSON struct {
 	Kind string          `json:"kind"`
 	KO   string          `json:"ko"`
 	EN   string          `json:"en"`
+	ZH   string          `json:"zh"`
 }
 
 // resolved is an effect in a comparable form, with the language already applied.
@@ -91,15 +92,15 @@ func resolveEffect(t *testing.T, e effectJSON, lang Lang) resolved {
 		n := v.(noticeJSON)
 		r.Title, r.Body = n.Title, n.Body
 	case "log":
-		r.Kind, r.Text = e.Kind, T(lang, e.KO, e.EN)
+		r.Kind, r.Text = e.Kind, T(lang, e.KO, e.EN, e.ZH)
 	}
 	return r
 }
 
-// pickLang turns {"ko": x, "en": y} into the value for lang; anything else is returned as is.
+// pickLang turns {"ko": x, "en": y, "zh": z} into the value for lang; anything else is returned as is.
 func pickLang(raw json.RawMessage, lang Lang) json.RawMessage {
 	var m map[string]json.RawMessage
-	if json.Unmarshal(raw, &m) == nil && len(m) == 2 && m["ko"] != nil && m["en"] != nil {
+	if json.Unmarshal(raw, &m) == nil && len(m) == 3 && m["ko"] != nil && m["en"] != nil {
 		return m[lang.String()]
 	}
 	return raw

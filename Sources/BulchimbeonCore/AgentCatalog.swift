@@ -39,10 +39,10 @@ public enum AgentCatalog {
 
         public var label: String {
             switch self {
-            case .executableName: L10n.t("실행 파일 이름", "executable name")
-            case .argv0: L10n.t("실행 명령(argv[0])", "command (argv[0])")
-            case .installPath: L10n.t("설치 경로", "install path")
-            case .script: L10n.t("스크립트 경로", "script path")
+            case .executableName: L10n.t("실행 파일 이름", "executable name", "可执行文件名")
+            case .argv0: L10n.t("실행 명령(argv[0])", "command (argv[0])", "命令 (argv[0])")
+            case .installPath: L10n.t("설치 경로", "install path", "安装路径")
+            case .script: L10n.t("스크립트 경로", "script path", "脚本路径")
             }
         }
     }

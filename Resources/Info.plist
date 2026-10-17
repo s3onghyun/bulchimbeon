@@ -25,6 +25,7 @@
     <array>
         <string>ko</string>
         <string>en</string>
+        <string>zh-Hans</string>
     </array>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>

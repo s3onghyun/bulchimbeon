@@ -11,8 +11,8 @@ final class DutyController: ObservableObject {
     static let shared = DutyController()
 
     static let durations: [(title: String, seconds: TimeInterval?)] = [
-        (L10n.t("30분", "30 min"), 1800), (L10n.t("1시간", "1 hour"), 3600), (L10n.t("2시간", "2 hours"), 7200),
-        (L10n.t("4시간", "4 hours"), 14400), (L10n.t("무기한", "Indefinitely"), nil),
+        (L10n.t("30분", "30 min", "30 分钟"), 1800), (L10n.t("1시간", "1 hour", "1 小时"), 3600), (L10n.t("2시간", "2 hours", "2 小时"), 7200),
+        (L10n.t("4시간", "4 hours", "4 小时"), 14400), (L10n.t("무기한", "Indefinitely", "无限期"), nil),
     ]
     static let batteryFloors = SettingsValues.batteryFloors
     static let graceOptions = SettingsValues.graceMinutes
@@ -96,7 +96,7 @@ final class DutyController: ObservableObject {
         defaults.set(lidByUs, forKey: Keys.lidEngagedByUs)
 
         if lidDisabled && lidByUs {
-            writeLog(L10n.t("⚠️ 지난 근무 비정상 종료 — 덮개 잠자기가 꺼진 채 남아 있음", "⚠️ Last watch ended abnormally — lid sleep still disabled"))
+            writeLog(L10n.t("⚠️ 지난 근무 비정상 종료 — 덮개 잠자기가 꺼진 채 남아 있음", "⚠️ Last watch ended abnormally — lid sleep still disabled", "⚠️ 上次值班异常结束 — 合盖休眠仍被禁用"))
             notifier.send(Lines.lidLeftOn())
         }
 
@@ -138,33 +138,33 @@ final class DutyController: ObservableObject {
 
     var statusLine: String {
         if resting {
-            return L10n.t("전투휴식 중 (폭염 경보) — 식으면 복귀", "Combat rest (heat warning) — resumes when cool")
+            return L10n.t("전투휴식 중 (폭염 경보) — 식으면 복귀", "Combat rest (heat warning) — resumes when cool", "降温休息中（过热警报）— 降温后恢复")
         }
         if isOnDuty, let remainingText {
-            return L10n.t("근무 중 · \(remainingText) 남음", "On duty · \(remainingText) left")
+            return L10n.t("근무 중 · \(remainingText) 남음", "On duty · \(remainingText) left", "值班中 · 剩余 \(remainingText)")
         }
         if isOnDuty, let started = engine.dutyStartedAt {
             let elapsed = DutyClock.format(now.timeIntervalSince(started))
-            return L10n.t("근무 중 · \(elapsed) 경과", "On duty · \(elapsed)")
+            return L10n.t("근무 중 · \(elapsed) 경과", "On duty · \(elapsed)", "值班中 · 已过 \(elapsed)")
         }
-        return order == .agentWatch ? L10n.t("에이전트 근무 대기 중", "Waiting for agents") : L10n.t("취침 중", "Off duty")
+        return order == .agentWatch ? L10n.t("에이전트 근무 대기 중", "Waiting for agents", "等待代理中") : L10n.t("취침 중", "Off duty", "休息中")
     }
 
     var agentLine: String {
         let summary = AgentCatalog.summary(agents)
-        guard !summary.isEmpty else { return L10n.t("감지된 에이전트 없음", "No agents detected") }
+        guard !summary.isEmpty else { return L10n.t("감지된 에이전트 없음", "No agents detected", "未检测到代理") }
         let busy = agentStatus.values.reduce(0) { $0 + $1.busy }
-        return L10n.t("감지된 에이전트: \(summary) · 작업 중 \(busy)", "Agents: \(summary) · \(busy) working")
+        return L10n.t("감지된 에이전트: \(summary) · 작업 중 \(busy)", "Agents: \(summary) · \(busy) working", "代理：\(summary) · \(busy) 个工作中")
     }
 
     var batteryLine: String? {
-        battery.map { "🔋 \($0.percent)%" + ($0.onBattery ? "" : L10n.t(" (전원 연결)", " (charging)")) }
+        battery.map { "🔋 \($0.percent)%" + ($0.onBattery ? "" : L10n.t(" (전원 연결)", " (charging)", "（已接通电源）")) }
     }
 
     var heatLine: String? {
         switch heat {
-        case .advisory: L10n.t("🌡️ 폭염 주의보", "🌡️ Heat advisory")
-        case .alert: L10n.t("🔥 폭염 경보", "🔥 Heat warning")
+        case .advisory: L10n.t("🌡️ 폭염 주의보", "🌡️ Heat advisory", "🌡️ 高温提醒")
+        case .alert: L10n.t("🔥 폭염 경보", "🔥 Heat warning", "🔥 过热警报")
         case .normal, .caution: nil
         }
     }
@@ -180,7 +180,7 @@ final class DutyController: ObservableObject {
     // MARK: - 명령
 
     func startTimed(_ duration: TimeInterval?) async {
-        let label = Self.durations.first { $0.seconds == duration }?.title ?? L10n.t("무기한", "Indefinitely")
+        let label = Self.durations.first { $0.seconds == duration }?.title ?? L10n.t("무기한", "Indefinitely", "无限期")
         await run(engine.startTimed(seconds: duration, label: label, now: Date()))
     }
 
@@ -274,7 +274,7 @@ final class DutyController: ObservableObject {
             defaults.removeObject(forKey: "AppleLanguages")
         }
         defaults.synchronize()
-        writeLog(L10n.t("언어 변경 → ", "Language → ") + preference.title)
+        writeLog(L10n.t("언어 변경 → ", "Language → ", "语言 → ") + preference.title)
         relaunch()
     }
 
@@ -292,7 +292,7 @@ final class DutyController: ObservableObject {
         do {
             if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
         } catch {
-            writeLog(L10n.t("로그인 자동 실행 설정 실패: ", "Launch at login failed: ") + error.localizedDescription)
+            writeLog(L10n.t("로그인 자동 실행 설정 실패: ", "Launch at login failed: ", "设置登录启动失败：") + error.localizedDescription)
         }
         objectWillChange.send()
     }

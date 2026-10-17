@@ -73,7 +73,7 @@ func TestSetRejectsValuesOutsideThePromise(t *testing.T) {
 		{"agentWatchCountsIdle", []string{"1"}, "true or false"},
 		{"customAgents", []string{"../../etc"}, "invalid agent name"},
 		{"customAgents", []string{"goose\n"}, "invalid agent name"},
-		{"language", []string{"ja"}, "system, ko or en"},
+		{"language", []string{"ja"}, "system, ko, en or zh"},
 		{"dutyMode", []string{"hybrid"}, "display, system or lid"},
 		{"patrolScale", []string{"2"}, "macOS app"},
 		{"uniformTheme", []string{"navy"}, "macOS app"},
@@ -123,5 +123,23 @@ func TestBrokenFileIsAnError(t *testing.T) {
 	}
 	if err := Set(path, "language", []string{"ko"}); err == nil {
 		t.Error("config set overwrote a broken file")
+	}
+}
+
+func TestChineseLanguageRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := Set(path, "language", []string{"zh"}); err != nil {
+		t.Fatal(err)
+	}
+	s, problems, err := Load(path)
+	if err != nil || len(problems) != 0 || s.Language != "zh" {
+		t.Fatalf("Load = %+v, %v, %v", s, problems, err)
+	}
+	if err := Unset(path, "language"); err != nil {
+		t.Fatal(err)
+	}
+	s, _, err = Load(path)
+	if err != nil || s.Language != "system" {
+		t.Fatalf("unset language: %+v, %v", s, err)
 	}
 }

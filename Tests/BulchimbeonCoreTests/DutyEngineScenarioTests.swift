@@ -223,6 +223,7 @@ import Testing
 enum AgentAwareText {
     static func quiet(_ quiet: TimeInterval, left: TimeInterval) -> String {
         L10n.t("조용해진 지 \(DutyClock.format(quiet)) · 교대까지 \(DutyClock.format(left))",
-               "Quiet for \(DutyClock.format(quiet)) · shift over in \(DutyClock.format(left))")
+               "Quiet for \(DutyClock.format(quiet)) · shift over in \(DutyClock.format(left))",
+               "已空闲 \(DutyClock.format(quiet)) · 距交班 \(DutyClock.format(left))")
     }
 }

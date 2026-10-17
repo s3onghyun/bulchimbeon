@@ -9,47 +9,67 @@ package engine
 
 import "strings"
 
-// Lang is the UI language. Like the macOS app, only Korean and English exist.
+// Lang is the UI language. Like the macOS app, Korean, English and Simplified Chinese are supported.
 type Lang int
 
 const (
 	EN Lang = iota
 	KO
+	ZH
 )
 
 func (l Lang) String() string {
+	if l == ZH {
+		return "zh"
+	}
 	if l == KO {
 		return "ko"
 	}
 	return "en"
 }
 
-// ParseLang accepts "ko" or "en".
+// ParseLang accepts "ko", "en" or "zh".
 func ParseLang(s string) (Lang, bool) {
 	switch s {
 	case "ko":
 		return KO, true
 	case "en":
 		return EN, true
+	case "zh":
+		return ZH, true
 	}
 	return EN, false
 }
 
-// T picks the Korean or English text (Swift `L10n.t`).
-func T(lang Lang, ko, en string) string {
+// T picks the Korean, English or Simplified Chinese text (Swift `L10n.t`).
+func T(lang Lang, ko, en, zh string) string {
+	if lang == ZH {
+		return zh
+	}
 	if lang == KO {
 		return ko
 	}
 	return en
 }
 
-// DetectLanguage mirrors Swift `L10n.detect`: Korean if the first preferred language is
-// Korean, English otherwise.
+// DetectLanguage mirrors Swift L10n.detect, using only the first preference.
+// Chinese locales use Simplified Chinese; unsupported languages use English.
 func DetectLanguage(preferred []string) Lang {
-	if len(preferred) > 0 && strings.HasPrefix(preferred[0], "ko") {
-		return KO
+	if len(preferred) == 0 {
+		return EN
 	}
-	return EN
+	tag := strings.ToLower(preferred[0])
+	if i := strings.IndexAny(tag, "-_.@"); i >= 0 {
+		tag = tag[:i]
+	}
+	switch tag {
+	case "ko":
+		return KO
+	case "zh":
+		return ZH
+	default:
+		return EN
+	}
 }
 
 // PreferredLanguages turns the POSIX locale environment into a preference list, the way

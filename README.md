@@ -67,7 +67,7 @@ Bulchimbeon stays awake **only while an agent is working** and hands the Mac bac
 | 📋 Night-watch handover | Come back after 10+ minutes away and get a report of what happened while you were gone |
 | 🔁 Survives restarts | Remaining watch time carries over app restarts, updates and reboots (for security, a lid-closed watch comes back as a system watch; turn lid mode back on from the menu to re-approve it) |
 | 🖥️ Who else is holding the Mac awake | The menu shows other apps blocking sleep, e.g. "Vivaldi (video)" |
-| 🌐 Korean / English | Follows the system language by default; pick one from **언어 / Language** in the menu |
+| 🌐 Korean / English / Simplified Chinese | Follows the system language by default; pick one from **언어 / Language / 语言** in the menu |
 | 📒 Duty log | `~/Library/Application Support/Bulchimbeon/duty-log.txt` |
 
 ## Compared with similar apps
@@ -212,7 +212,7 @@ bulchimbeon status                       # on duty or not, and why
 bulchimbeon doctor                       # check systemd, logind and polkit on this machine
 bulchimbeon config set agentGraceMinutes 10
 bulchimbeon config set customAgents goose amp
-bulchimbeon config set language ko       # ko | en | system (default: follows LANG)
+bulchimbeon config set language ko       # ko | en | zh | system (default: follows LANG)
 journalctl --user -u bulchimbeon -f      # the daemon's log
 ```
 
@@ -312,7 +312,7 @@ Tracked as [milestones](https://github.com/s3onghyun/bulchimbeon/milestones). 1.
 flags and the duty log format stop changing: see the [compatibility promise](docs/compatibility.md) (in Korean; the
 tables are self-explanatory) and the [CHANGELOG](CHANGELOG.md).
 
-- [x] Pixel-art private, patrol mode, Korean/English UI
+- [x] Pixel-art private, patrol mode, Korean/English/Simplified Chinese UI
 - [x] Detect working vs. idle agents
 - [x] Homebrew cask (personal tap)
 - [ ] Apple notarization and the official Homebrew cask

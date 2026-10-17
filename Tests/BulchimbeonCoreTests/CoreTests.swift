@@ -289,6 +289,30 @@ import Testing
         return lines
     }
 
+    @Test func chineseLanguageAndPreference() {
+        for tag in ["zh", "zh-CN", "zh-Hans", "zh-Hans-CN", "zh_TW.UTF-8"] {
+            let lang = L10n.detect([tag, "en"])
+            #expect(String(describing: lang) == "zh")
+            #expect(Lines.reportForDuty(lang).title == "夜间值班报到！🪖")
+        }
+        #expect(L10n.Preference(appDomainLanguages: ["zh-Hans"]).appleLanguages == ["zh-Hans"])
+        #expect(L10n.Preference(appDomainLanguages: ["zh-CN"]).title == "简体中文")
+    }
+
+    @Test func chineseLinesAndThemes() {
+        let lines = allLines(.zh)
+        #expect(lines.allSatisfy { line in
+            !hasHangul(line) && line.unicodeScalars.contains { (0x4E00...0x9FFF).contains($0.value) }
+        })
+        #expect(Lines.onDuty(.zh).count == Lines.onDuty(.en).count)
+        #expect(Lines.standby(.zh).count == Lines.standby(.en).count)
+        #expect(Lines.off(.zh).count == Lines.off(.en).count)
+        #expect(UniformTheme.all.map { $0.name(.zh) } == ["标准", "海蓝", "雪地", "沙漠"])
+        #expect(Lines.agentArrived("测试代理 ×2", .zh).body == "测试代理 ×2 已开工，我来守护！")
+        #expect(Lines.batteryRetreat(17, .zh).body.contains("17%"))
+        #expect(L10n.t("한국어", "English", "中文", .zh) == "中文")
+    }
+
     @Test func detectsLanguage() {
         #expect(L10n.detect(["ko-KR", "en-US"]) == .ko)
         #expect(L10n.detect(["en-US", "ko-KR"]) == .en)

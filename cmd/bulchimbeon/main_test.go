@@ -79,3 +79,33 @@ func TestTail(t *testing.T) {
 		t.Errorf("missing = %q", got)
 	}
 }
+
+func TestChineseCLI(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	for _, key := range []string{"XDG_CONFIG_HOME", "XDG_STATE_HOME", "LANGUAGE", "LC_ALL", "LC_MESSAGES"} {
+		t.Setenv(key, "")
+	}
+	t.Setenv("LANG", "zh_CN.UTF-8")
+	if code, out, errOut := runCLI(t, "help"); code != exitOK || !strings.Contains(out, "用法：bulchimbeon") {
+		t.Fatalf("Chinese help = %d %q %q", code, out, errOut)
+	}
+	if code, out, _ := runCLI(t, "status"); code != exitNotRunning || !strings.Contains(out, "Bulchimbeon 未运行") {
+		t.Fatalf("Chinese locale = %d %q", code, out)
+	}
+	t.Setenv("LANG", "en_US.UTF-8")
+	if code, _, errOut := runCLI(t, "config", "set", "language", "zh"); code != exitOK {
+		t.Fatal(errOut)
+	}
+	if code, out, _ := runCLI(t, "status"); code != exitNotRunning || !strings.Contains(out, "Bulchimbeon 未运行") {
+		t.Fatalf("Chinese setting = %d %q", code, out)
+	}
+	if code, out, _ := runCLI(t, "status", "--lang", "en"); code != exitNotRunning || !strings.Contains(out, "Bulchimbeon is not running") {
+		t.Fatalf("English override = %d %q", code, out)
+	}
+	if code, _, errOut := runCLI(t, "config", "set", "language", "en"); code != exitOK {
+		t.Fatal(errOut)
+	}
+	if code, out, _ := runCLI(t, "status", "--lang", "zh"); code != exitNotRunning || !strings.Contains(out, "Bulchimbeon 未运行") {
+		t.Fatalf("Chinese override = %d %q", code, out)
+	}
+}

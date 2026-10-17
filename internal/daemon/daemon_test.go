@@ -361,8 +361,8 @@ func TestResolveLang(t *testing.T) {
 	}
 }
 
-func TestStatusLabelsAlignInBothLanguages(t *testing.T) {
-	for _, label := range []string{"Lock:", "Handover:", "잠금", "에이전트", "다른 앱", ""} {
+func TestStatusLabelsAlignInAllLanguages(t *testing.T) {
+	for _, label := range []string{"Lock:", "Handover:", "잠금", "에이전트", "다른 앱", "休眠锁：", "其他应用：", ""} {
 		w := 0
 		for _, r := range padLabel(label) {
 			w += cellWidth(r)

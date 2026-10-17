@@ -44,9 +44,9 @@ enum SystemProbes {
         let pid = getpid()
         let command = disabled ? LidCommands.enable(pid: pid) : LidCommands.disable(pid: pid)
         let shown = "/usr/bin/pmset -a disablesleep \(disabled ? 1 : 0)"
-            + (disabled ? L10n.t(" (+ 앱 종료 시 자동 원복 감시)", " (+ auto-restore watchdog)") : "")
+            + (disabled ? L10n.t(" (+ 앱 종료 시 자동 원복 감시)", " (+ auto-restore watchdog)", "（含应用退出后自动恢复的监控进程）") : "")
         let prompt = L10n.t("불침번이 덮개 잠자기 설정을 바꾸려 합니다.\n실행 명령: ",
-                            "Bulchimbeon wants to change the lid sleep setting.\nCommand: ") + shown
+                            "Bulchimbeon wants to change the lid sleep setting.\nCommand: ", "Bulchimbeon 将更改合盖休眠设置。\n执行命令：") + shown
         let script = "do shell script \"\(command)\" with prompt \"\(prompt)\" with administrator privileges"
         return run("/usr/bin/osascript", ["-e", script]) != nil
     }
@@ -91,22 +91,22 @@ enum ProcessScanner {
         var children: [Int32: [ProcessSnapshot]] = [:]
         for p in processes { children[p.ppid, default: []].append(p) }
         var lines = [L10n.t("불침번 에이전트 감지 진단 (UID \(getuid()) 프로세스 \(processes.count)개 검사)",
-                            "Bulchimbeon agent detection (checked \(processes.count) processes of UID \(getuid()))"), ""]
+                            "Bulchimbeon agent detection (checked \(processes.count) processes of UID \(getuid()))", "Bulchimbeon 代理检测诊断（已扫描 UID \(getuid()) 的 \(processes.count) 个进程）"), ""]
         for process in processes {
             guard let (kind, reason) = AgentCatalog.match(process, kinds: kinds) else { continue }
             let busy = AgentActivity.isBusy(process, children: children, cpu: [:])
-            lines.append("  ✔ \(kind.displayName)  pid \(process.pid)  " + L10n.t("근거: ", "matched by: ") + reason.label
-                         + (busy ? L10n.t("  · 작업 중", "  · working") : ""))
-            if let cwd = process.cwd { lines.append("      " + L10n.t("작업 폴더: ", "cwd: ") + cwd) }
-            lines.append("      " + L10n.t("실행 파일: ", "executable: ") + process.executablePath)
+            lines.append("  ✔ \(kind.displayName)  pid \(process.pid)  " + L10n.t("근거: ", "matched by: ", "匹配依据：") + reason.label
+                         + (busy ? L10n.t("  · 작업 중", "  · working", "  · 工作中") : ""))
+            if let cwd = process.cwd { lines.append("      " + L10n.t("작업 폴더: ", "cwd: ", "工作目录：") + cwd) }
+            lines.append("      " + L10n.t("실행 파일: ", "executable: ", "可执行文件：") + process.executablePath)
         }
-        if lines.count == 2 { lines.append("  " + L10n.t("감지된 에이전트 없음", "No agents detected")) }
+        if lines.count == 2 { lines.append("  " + L10n.t("감지된 에이전트 없음", "No agents detected", "未检测到代理")) }
         let holders = PowerHolders.summarize(PowerHolderProbe.assertions(), ownPID: getpid())
-        lines += ["", L10n.t("화면을 막는 다른 앱: ", "Also keeping the display on: ") + (holders.display.isEmpty ? "-" : holders.display.joined(separator: ", ")),
-                  L10n.t("잠들지 못하게 하는 다른 앱: ", "Also keeping the Mac awake: ") + (holders.system.isEmpty ? "-" : holders.system.joined(separator: ", "))]
-        lines += ["", L10n.t("사용자 지정 에이전트: ", "Custom agents: ")
-                      + (custom.isEmpty ? L10n.t("없음", "none") : custom.joined(separator: ", ")),
-                  L10n.t("추가: ", "Add: ") + "defaults write io.github.s3onghyun.bulchimbeon customAgents -array <name>"]
+        lines += ["", L10n.t("화면을 막는 다른 앱: ", "Also keeping the display on: ", "同样保持屏幕常亮的应用：") + (holders.display.isEmpty ? "-" : holders.display.joined(separator: ", ")),
+                  L10n.t("잠들지 못하게 하는 다른 앱: ", "Also keeping the Mac awake: ", "同样阻止 Mac 休眠的应用：") + (holders.system.isEmpty ? "-" : holders.system.joined(separator: ", "))]
+        lines += ["", L10n.t("사용자 지정 에이전트: ", "Custom agents: ", "自定义代理：")
+                      + (custom.isEmpty ? L10n.t("없음", "none", "无") : custom.joined(separator: ", ")),
+                  L10n.t("추가: ", "Add: ", "添加：") + "defaults write io.github.s3onghyun.bulchimbeon customAgents -array <name>"]
         return lines.joined(separator: "\n")
     }
 

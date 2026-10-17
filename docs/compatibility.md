@@ -45,7 +45,7 @@ defaults write io.github.s3onghyun.bulchimbeon agentGraceMinutes -int 10
 | 적용되는 키 | `batteryFloor`, `agentGraceMinutes`, `agentWatchCountsIdle`, `customAgents`. 데몬이 5초마다 다시 읽는다 |
 | `dutyMode` | 저장은 되지만 리눅스 v0.1 은 항상 `system` 으로 근무한다 |
 | `patrolEnabled`, `patrolScale`, `uniformTheme` | macOS 전용. `config set` 이 거부한다 |
-| `language` | 리눅스 전용 (`AppleLanguages` 대신): `system`(기본, `LANGUAGE`·`LC_ALL`·`LC_MESSAGES`·`LANG` 을 따름) · `ko` · `en` |
+| `language` | 리눅스 전용 (`AppleLanguages` 대신): `system`(기본, `LANGUAGE`·`LC_ALL`·`LC_MESSAGES`·`LANG` 을 따름) · `ko` · `en` · `zh` (중국어 간체) |
 
 ```bash
 bulchimbeon config set customAgents goose amp
