@@ -55,10 +55,36 @@ final class UniformSetting: ObservableObject {
 final class SpriteAnimator: ObservableObject {
     @Published private(set) var tick = 0
     private var timer: Timer?
+    private var activationObservers: [NSObjectProtocol] = []
 
     init() {
-        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+        let center = NotificationCenter.default
+        activationObservers = [
+            center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.updateTimer() }
+            },
+            center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.updateTimer() }
+            },
+        ]
+        updateTimer()
+    }
+
+    deinit {
+        activationObservers.forEach(NotificationCenter.default.removeObserver)
+    }
+
+    private func updateTimer() {
+        guard NSApp.isActive else {
+            timer?.invalidate()
+            timer = nil
+            return
+        }
+        guard timer == nil else { return }
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick &+= 1 }
         }
+        timer.tolerance = 0.1
+        self.timer = timer
     }
 }
