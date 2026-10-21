@@ -81,9 +81,12 @@ enum SystemProbes {
 /// 보안·이식성:
 /// - `ps` 출력 파싱 대신 시스템 API 를 직접 쓴다 (출력 형식·잘림·로케일 영향 없음)
 /// - 현재 사용자(UID) 프로세스만 본다 — 다른 사용자·root 프로세스의 명령줄은 읽지 않는다
-/// - argv 는 러너(node 등)일 때만 앞 8개, 그 외엔 argv[0] 만. 환경변수 영역은 파싱하지 않고 버퍼는 즉시 0 으로 지운다
+/// - argv 는 러너(node 등)일 때만 앞 8개, 그 외엔 argv[0] 만. 같은 PID·시작 시각의 argv는 다음 점검에서만 메모리 캐시한다.
+///   환경변수 영역은 파싱하지 않고 원본 버퍼는 즉시 0 으로 지운다
 /// - 결과는 메모리에서 판별에만 쓰고 저장·기록하지 않는다
 enum ProcessScanner {
+    private static var argumentCache = ProcessArgumentCache()
+
     /// `Bulchimbeon --diagnose`: 감지 결과와 근거를 출력한다. 명령줄 인자는 출력하지 않는다.
     static func diagnose(custom: [String]) -> String {
         let kinds = AgentCatalog.builtIn + AgentCatalog.customKinds(custom)
@@ -115,33 +118,42 @@ enum ProcessScanner {
     static func scan() -> (snapshots: [ProcessSnapshot], cpuTimes: [Int32: UInt64]) {
         let uid = getuid()
         let byteCount = proc_listpids(UInt32(PROC_UID_ONLY), uid, nil, 0)
-        guard byteCount > 0 else { return ([], [:]) }
+        guard byteCount > 0 else {
+            argumentCache.retain(only: [])
+            return ([], [:])
+        }
 
         var pids = [pid_t](repeating: 0, count: Int(byteCount) / MemoryLayout<pid_t>.stride + 64)
         let filled = pids.withUnsafeMutableBytes {
             proc_listpids(UInt32(PROC_UID_ONLY), uid, $0.baseAddress, Int32($0.count))
         }
         var snapshots: [ProcessSnapshot] = [], cpuTimes: [Int32: UInt64] = [:]
+        var liveProcesses = Set<ProcessIdentity>()
         for pid in pids.prefix(Int(filled) / MemoryLayout<pid_t>.stride) where pid > 0 {
-            guard let snapshot = snapshot(pid) else { continue }
+            guard let snapshot = snapshot(pid, liveProcesses: &liveProcesses) else { continue }
             snapshots.append(snapshot)
             if let time = cpuTime(pid) { cpuTimes[pid] = time }
         }
+        argumentCache.retain(only: liveProcesses)
         return (snapshots, cpuTimes)
     }
 
-    private static func snapshot(_ pid: pid_t) -> ProcessSnapshot? {
+    private static func snapshot(_ pid: pid_t, liveProcesses: inout Set<ProcessIdentity>) -> ProcessSnapshot? {
         var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN) * 4) // PROC_PIDPATHINFO_MAXSIZE
         guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
         let path = String(cString: buffer)
+        guard let process = processInfo(pid) else { return nil }
+        let identity = ProcessIdentity(pid: Int32(pid), startedAtSeconds: process.startedAtSeconds,
+                                       startedAtMicroseconds: process.startedAtMicroseconds)
+        liveProcesses.insert(identity)
 
-        var args = arguments(pid, limit: AgentCatalog.needsFullArguments(executablePath: path) ? 8 : 1)
+        var args = arguments(pid, identity: identity, limit: AgentCatalog.needsFullArguments(executablePath: path) ? 8 : 1)
         // 에이전트 후보면 도우미 세션(--tools=) 판별을 위해 인자를 더 읽는다. 메모리에서만 쓰고 버린다.
         if AgentCatalog.isCandidate(executablePath: path, argv0: args.first) {
-            args = arguments(pid, limit: 64)
+            args = arguments(pid, identity: identity, limit: 64)
         }
         let isAgentCandidate = AgentCatalog.isCandidate(executablePath: path, argv0: args.first)
-        return ProcessSnapshot(pid: pid, ppid: parentPID(pid), executablePath: path, arguments: args,
+        return ProcessSnapshot(pid: pid, ppid: process.ppid, executablePath: path, arguments: args,
                                cwd: isAgentCandidate ? workingDirectory(pid) : nil)
     }
 
@@ -154,11 +166,11 @@ enum ProcessScanner {
         }
     }
 
-    private static func parentPID(_ pid: pid_t) -> Int32 {
+    private static func processInfo(_ pid: pid_t) -> (ppid: Int32, startedAtSeconds: UInt64, startedAtMicroseconds: UInt64)? {
         var info = proc_bsdinfo()
         let size = Int32(MemoryLayout<proc_bsdinfo>.size)
-        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return 0 }
-        return Int32(info.pbi_ppid)
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+        return (Int32(info.pbi_ppid), info.pbi_start_tvsec, info.pbi_start_tvusec)
     }
 
     /// 누적 CPU 시간 (user + system), 나노초
@@ -175,7 +187,11 @@ enum ProcessScanner {
         return (UInt64(info.numer), UInt64(max(info.denom, 1)))
     }()
 
-    private static func arguments(_ pid: pid_t, limit: Int) -> [String] {
+    private static func arguments(_ pid: pid_t, identity: ProcessIdentity, limit: Int) -> [String] {
+        argumentCache.arguments(for: identity, limit: limit) { readArguments(pid, limit: limit) }
+    }
+
+    private static func readArguments(_ pid: pid_t, limit: Int) -> [String] {
         var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
         var size = 0
         guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 0 else { return [] }

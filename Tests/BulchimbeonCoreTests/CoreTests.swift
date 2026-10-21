@@ -120,6 +120,51 @@ import Testing
     }
 }
 
+@Suite struct ProcessArgumentCacheTests {
+    @Test func reusesArgumentsForTheSameProcessLifetime() {
+        let identity = ProcessIdentity(pid: 42, startedAtSeconds: 100, startedAtMicroseconds: 1)
+        var cache = ProcessArgumentCache()
+        var reads = 0
+
+        let first = cache.arguments(for: identity, limit: 1) { reads += 1; return ["agent"] }
+        let second = cache.arguments(for: identity, limit: 1) { reads += 1; return ["changed"] }
+
+        #expect(first == ["agent"])
+        #expect(second == ["agent"])
+        #expect(reads == 1)
+    }
+
+    @Test func rereadsWhenAPIDIsReusedOrTheLimitChanges() {
+        let earlier = ProcessIdentity(pid: 42, startedAtSeconds: 100, startedAtMicroseconds: 1)
+        let replacement = ProcessIdentity(pid: 42, startedAtSeconds: 200, startedAtMicroseconds: 1)
+        var cache = ProcessArgumentCache()
+        var reads = 0
+
+        _ = cache.arguments(for: earlier, limit: 1) { reads += 1; return ["old"] }
+        let wider = cache.arguments(for: earlier, limit: 64) { reads += 1; return ["old", "--tools="] }
+        let reusedPID = cache.arguments(for: replacement, limit: 1) { reads += 1; return ["new"] }
+
+        #expect(wider == ["old", "--tools="])
+        #expect(reusedPID == ["new"])
+        #expect(reads == 3)
+    }
+
+    @Test func forgetsExitedProcessesAndRetriesAnUnreadableProcess() {
+        let identity = ProcessIdentity(pid: 42, startedAtSeconds: 100, startedAtMicroseconds: 1)
+        var cache = ProcessArgumentCache()
+        var reads = 0
+
+        _ = cache.arguments(for: identity, limit: 1) { reads += 1; return [] }
+        let retry = cache.arguments(for: identity, limit: 1) { reads += 1; return ["agent"] }
+        cache.retain(only: [])
+        let afterExit = cache.arguments(for: identity, limit: 1) { reads += 1; return ["replacement"] }
+
+        #expect(retry == ["agent"])
+        #expect(afterExit == ["replacement"])
+        #expect(reads == 3)
+    }
+}
+
 @Suite struct PolicyTests {
     @Test func batteryRetreat() {
         #expect(BatteryPolicy.shouldRetreat(.init(percent: 20, onBattery: true), floor: 20))
