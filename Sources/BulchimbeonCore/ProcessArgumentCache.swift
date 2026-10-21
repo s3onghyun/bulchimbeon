@@ -18,10 +18,10 @@ public struct ProcessIdentity: Hashable, Sendable {
 
 /// argv가 판별 결과를 바꾸지 않는 프로세스를 기억해, 다음 점검부터 argv를 다시 읽지 않게 한다.
 ///
-/// argv 자체는 저장하지 않는다. 남는 것은 PID·시작 시각뿐이며, 사라진 프로세스는 다음 스캔에서 지운다.
+/// argv 자체는 저장하지 않는다. 남는 것은 PID·시작 시각과 실행 파일 경로뿐이며 (exec 로 경로가 바뀌면 다시 읽는다), 사라진 프로세스는 다음 스캔에서 지운다.
 public struct ProcessArgumentCache {
     private var kinds: [AgentKind] = []
-    private var argumentFree: Set<ProcessIdentity> = []
+    private var argumentFree: [ProcessIdentity: String] = [:]
 
     public init() {}
 
@@ -32,21 +32,21 @@ public struct ProcessArgumentCache {
                                    read: () -> [String]) -> [String] {
         if kinds != self.kinds {
             self.kinds = kinds
-            argumentFree = []
+            argumentFree = [:]
         }
-        if argumentFree.contains(identity) { return [] }
+        if argumentFree[identity] == executablePath { return [] }
         let arguments = read()
         guard !arguments.isEmpty else { return arguments }
         let withArguments = AgentCatalog.match(ProcessSnapshot(executablePath: executablePath, arguments: arguments), kinds: kinds)
         let withoutArguments = AgentCatalog.match(ProcessSnapshot(executablePath: executablePath, arguments: []), kinds: kinds)
         if withArguments?.kind == withoutArguments?.kind, withArguments?.reason == withoutArguments?.reason {
-            argumentFree.insert(identity)
+            argumentFree[identity] = executablePath
         }
         return arguments
     }
 
     /// 현재 스캔에 없는 프로세스를 즉시 잊는다.
     public mutating func retain(only liveProcesses: Set<ProcessIdentity>) {
-        argumentFree.formIntersection(liveProcesses)
+        argumentFree = argumentFree.filter { liveProcesses.contains($0.key) }
     }
 }

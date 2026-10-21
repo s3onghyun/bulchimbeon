@@ -153,6 +153,15 @@ import Testing
         }
     }
 
+    @Test func rereadsAfterExecChangesTheExecutable() {
+        var cache = ProcessArgumentCache()
+        _ = cache.arguments(for: identity, executablePath: "/bin/zsh", kinds: kinds) { ["-zsh"] }
+        let afterExec = cache.arguments(for: identity, executablePath: "/opt/homebrew/bin/node", kinds: kinds) {
+            ["node", "/opt/homebrew/bin/codex"]
+        }
+        #expect(AgentCatalog.match(ProcessSnapshot(executablePath: "/opt/homebrew/bin/node", arguments: afterExec))?.kind.id == "codex")
+    }
+
     @Test func forgetsOnExitKindChangeOrUnreadableArguments() {
         var cache = ProcessArgumentCache()
         var reads = 0
