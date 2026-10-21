@@ -21,6 +21,7 @@ public struct ProcessSnapshot: Sendable {
     /// 작업 폴더 (에이전트 후보만 수집 — 진단 출력용)
     public let cwd: String?
     /// argv. 에이전트 후보·스크립트 러너만 앞부분 전체, 그 외엔 argv[0] 만 담긴다.
+    /// argv 가 판별을 바꾸지 않는다고 이미 확인된 프로세스는 비어 있다 (`ProcessArgumentCache`).
     public let arguments: [String]
 
     public init(pid: Int32 = 0, ppid: Int32 = 0, executablePath: String, arguments: [String], cwd: String? = nil) {

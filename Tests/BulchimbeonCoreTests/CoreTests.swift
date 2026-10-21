@@ -121,47 +121,50 @@ import Testing
 }
 
 @Suite struct ProcessArgumentCacheTests {
-    @Test func reusesArgumentsForTheSameProcessLifetime() {
-        let identity = ProcessIdentity(pid: 42, startedAtSeconds: 100, startedAtMicroseconds: 1)
+    let identity = ProcessIdentity(pid: 42, startedAtSeconds: 100, startedAtMicroseconds: 1)
+    let kinds = AgentCatalog.builtIn
+
+    @Test func skipsRereadingWhenArgumentsDoNotChangeTheMatch() {
         var cache = ProcessArgumentCache()
         var reads = 0
-
-        let first = cache.arguments(for: identity, limit: 1) { reads += 1; return ["agent"] }
-        let second = cache.arguments(for: identity, limit: 1) { reads += 1; return ["changed"] }
-
-        #expect(first == ["agent"])
-        #expect(second == ["agent"])
+        let first = cache.arguments(for: identity, executablePath: "/usr/bin/vim", kinds: kinds) { reads += 1; return ["vim"] }
+        let second = cache.arguments(for: identity, executablePath: "/usr/bin/vim", kinds: kinds) { reads += 1; return ["vim"] }
+        #expect(first == ["vim"])
+        #expect(second.isEmpty)
         #expect(reads == 1)
+        let match = AgentCatalog.match(ProcessSnapshot(executablePath: "/bin/claude", arguments: []), kinds: kinds)
+        let cachedAgent = cache.arguments(for: identity, executablePath: "/bin/claude", kinds: kinds) { ["claude"] }
+        #expect(AgentCatalog.match(ProcessSnapshot(executablePath: "/bin/claude", arguments: cachedAgent))?.kind == match?.kind)
     }
 
-    @Test func rereadsWhenAPIDIsReusedOrTheLimitChanges() {
-        let earlier = ProcessIdentity(pid: 42, startedAtSeconds: 100, startedAtMicroseconds: 1)
-        let replacement = ProcessIdentity(pid: 42, startedAtSeconds: 200, startedAtMicroseconds: 1)
-        var cache = ProcessArgumentCache()
-        var reads = 0
-
-        _ = cache.arguments(for: earlier, limit: 1) { reads += 1; return ["old"] }
-        let wider = cache.arguments(for: earlier, limit: 64) { reads += 1; return ["old", "--tools="] }
-        let reusedPID = cache.arguments(for: replacement, limit: 1) { reads += 1; return ["new"] }
-
-        #expect(wider == ["old", "--tools="])
-        #expect(reusedPID == ["new"])
-        #expect(reads == 3)
+    @Test func keepsRereadingWhenArgumentsDecideTheMatch() {
+        let cases: [(String, [String])] = [
+            ("/bin/claude", ["claude", "-p", "--tools="]),
+            ("/opt/homebrew/bin/node", ["node", "/opt/homebrew/bin/codex"]),
+            ("/Users/u/.local/bin/2.1.296", ["claude"]),
+        ]
+        for (path, argv) in cases {
+            var cache = ProcessArgumentCache()
+            var reads = 0
+            _ = cache.arguments(for: identity, executablePath: path, kinds: kinds) { reads += 1; return argv }
+            let again = cache.arguments(for: identity, executablePath: path, kinds: kinds) { reads += 1; return argv }
+            #expect(again == argv)
+            #expect(reads == 2)
+        }
     }
 
-    @Test func forgetsExitedProcessesAndRetriesAnUnreadableProcess() {
-        let identity = ProcessIdentity(pid: 42, startedAtSeconds: 100, startedAtMicroseconds: 1)
+    @Test func forgetsOnExitKindChangeOrUnreadableArguments() {
         var cache = ProcessArgumentCache()
         var reads = 0
-
-        _ = cache.arguments(for: identity, limit: 1) { reads += 1; return [] }
-        let retry = cache.arguments(for: identity, limit: 1) { reads += 1; return ["agent"] }
+        _ = cache.arguments(for: identity, executablePath: "/usr/bin/vim", kinds: kinds) { reads += 1; return [] }
+        _ = cache.arguments(for: identity, executablePath: "/usr/bin/vim", kinds: kinds) { reads += 1; return ["vim"] }
+        let custom = kinds + AgentCatalog.customKinds(["vim"])
+        _ = cache.arguments(for: identity, executablePath: "/usr/bin/vim", kinds: custom) { reads += 1; return ["vim"] }
+        _ = cache.arguments(for: identity, executablePath: "/usr/bin/vim", kinds: custom) { reads += 1; return ["vim"] }
         cache.retain(only: [])
-        let afterExit = cache.arguments(for: identity, limit: 1) { reads += 1; return ["replacement"] }
-
-        #expect(retry == ["agent"])
-        #expect(afterExit == ["replacement"])
-        #expect(reads == 3)
+        let afterExit = cache.arguments(for: identity, executablePath: "/usr/bin/vim", kinds: custom) { reads += 1; return ["vim"] }
+        #expect(afterExit == ["vim"])
+        #expect(reads == 4)
     }
 }
 

@@ -50,32 +50,39 @@ final class UniformSetting: ObservableObject {
     private init() { themeID = SpriteImages.theme.id }
 }
 
-/// 0.5초 간격 프레임 카운터
+/// 0.5초 간격 프레임 카운터. 화면이 꺼졌거나 세션이 잠긴 동안은 멈춘다.
 @MainActor
 final class SpriteAnimator: ObservableObject {
     @Published private(set) var tick = 0
     private var timer: Timer?
-    private var activationObservers: [NSObjectProtocol] = []
+    private var screensAsleep = false, sessionInactive = false
+    private var observers: [NSObjectProtocol] = []
 
     init() {
-        let center = NotificationCenter.default
-        activationObservers = [
-            center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor in self?.updateTimer() }
-            },
-            center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor in self?.updateTimer() }
-            },
+        let center = NSWorkspace.shared.notificationCenter
+        let states: [(Notification.Name, ReferenceWritableKeyPath<SpriteAnimator, Bool>, Bool)] = [
+            (NSWorkspace.screensDidSleepNotification, \.screensAsleep, true),
+            (NSWorkspace.screensDidWakeNotification, \.screensAsleep, false),
+            (NSWorkspace.sessionDidResignActiveNotification, \.sessionInactive, true),
+            (NSWorkspace.sessionDidBecomeActiveNotification, \.sessionInactive, false),
         ]
+        observers = states.map { name, state, value in
+            center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in
+                    self?[keyPath: state] = value
+                    self?.updateTimer()
+                }
+            }
+        }
         updateTimer()
     }
 
     deinit {
-        activationObservers.forEach(NotificationCenter.default.removeObserver)
+        observers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
     }
 
     private func updateTimer() {
-        guard NSApp.isActive else {
+        guard !screensAsleep, !sessionInactive else {
             timer?.invalidate()
             timer = nil
             return

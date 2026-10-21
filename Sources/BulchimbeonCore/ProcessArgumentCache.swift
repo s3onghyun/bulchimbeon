@@ -2,7 +2,7 @@ import Foundation
 
 /// PID 재사용을 구별하는 프로세스 식별자.
 ///
-/// `proc_bsdinfo`의 시작 시각까지 함께 써서, 종료된 프로세스의 argv가 같은 PID를
+/// `proc_bsdinfo`의 시작 시각까지 함께 써서, 종료된 프로세스의 판별 결과가 같은 PID를
 /// 나중에 받은 다른 프로세스에 쓰이지 않게 한다.
 public struct ProcessIdentity: Hashable, Sendable {
     public let pid: Int32
@@ -16,32 +16,37 @@ public struct ProcessIdentity: Hashable, Sendable {
     }
 }
 
-/// 살아 있는 같은-UID 프로세스의 argv를 점검 사이에만 보관하는 작은 메모리 캐시.
+/// argv가 판별 결과를 바꾸지 않는 프로세스를 기억해, 다음 점검부터 argv를 다시 읽지 않게 한다.
 ///
-/// 값은 디스크·로그·알림으로 절대 나가지 않으며, 다음 스캔에서 사라진 PID의 값은 즉시 버린다.
+/// argv 자체는 저장하지 않는다. 남는 것은 PID·시작 시각뿐이며, 사라진 프로세스는 다음 스캔에서 지운다.
 public struct ProcessArgumentCache {
-    private struct Key: Hashable {
-        let identity: ProcessIdentity
-        let limit: Int
-    }
-
-    private var values: [Key: [String]] = [:]
+    private var kinds: [AgentKind] = []
+    private var argumentFree: Set<ProcessIdentity> = []
 
     public init() {}
 
-    /// `limit`은 수집 최소화 규칙의 일부이므로 캐시 키에도 포함한다.
-    /// 읽기가 실패해 빈 배열이면 저장하지 않아 다음 점검에서 재시도한다.
-    public mutating func arguments(for identity: ProcessIdentity, limit: Int,
+    /// argv가 판별에 영향이 없다고 이미 확인된 프로세스면 `read` 없이 빈 배열을 돌려준다.
+    /// 그렇지 않으면 읽고, 빈 argv로 판별해도 결과가 같을 때만 그 사실을 기억한다.
+    /// 읽기가 실패해 빈 배열이면 기억하지 않아 다음 점검에서 재시도한다.
+    public mutating func arguments(for identity: ProcessIdentity, executablePath: String, kinds: [AgentKind],
                                    read: () -> [String]) -> [String] {
-        let key = Key(identity: identity, limit: limit)
-        if let cached = values[key] { return cached }
+        if kinds != self.kinds {
+            self.kinds = kinds
+            argumentFree = []
+        }
+        if argumentFree.contains(identity) { return [] }
         let arguments = read()
-        if !arguments.isEmpty { values[key] = arguments }
+        guard !arguments.isEmpty else { return arguments }
+        let withArguments = AgentCatalog.match(ProcessSnapshot(executablePath: executablePath, arguments: arguments), kinds: kinds)
+        let withoutArguments = AgentCatalog.match(ProcessSnapshot(executablePath: executablePath, arguments: []), kinds: kinds)
+        if withArguments?.kind == withoutArguments?.kind, withArguments?.reason == withoutArguments?.reason {
+            argumentFree.insert(identity)
+        }
         return arguments
     }
 
-    /// 현재 스캔에 없는 프로세스의 argv를 즉시 잊는다.
+    /// 현재 스캔에 없는 프로세스를 즉시 잊는다.
     public mutating func retain(only liveProcesses: Set<ProcessIdentity>) {
-        values = values.filter { liveProcesses.contains($0.key.identity) }
+        argumentFree.formIntersection(liveProcesses)
     }
 }
