@@ -132,7 +132,7 @@ public enum AgentCatalog {
         var seen = Set<String>()
         var kinds: [AgentKind] = []
         for name in names where kinds.count < 16
-            && name.range(of: #"^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$"#, options: .regularExpression) != nil
+            && name.range(of: #"^[A-Za-z0-9][A-Za-z0-9._-]{0,31}\z"#, options: .regularExpression) != nil
             && seen.insert(name).inserted {
             kinds.append(AgentKind(id: "custom:\(name)", displayName: name, binaryNames: [name],
                                    pathMarkers: [], packageMarkers: []))

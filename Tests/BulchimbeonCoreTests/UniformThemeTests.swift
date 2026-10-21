@@ -37,7 +37,11 @@ import Testing
             #expect(frame.height == original.height)
             #expect(frame.rows.allSatisfy { $0.count == original.width })
             for ch in frame.rows.joined() where ch != "." {
+                #if canImport(CoreGraphics)
                 #expect(theme.cgColor(ch) != nil, "\(theme.id): 색이 없는 문자 '\(ch)'")
+                #else
+                #expect(theme.hex(ch) != nil, "\(theme.id): 색이 없는 문자 '\(ch)'")
+                #endif
             }
         }
     }
