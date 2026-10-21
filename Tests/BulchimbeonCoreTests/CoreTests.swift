@@ -120,6 +120,63 @@ import Testing
     }
 }
 
+@Suite struct ProcessArgumentCacheTests {
+    let identity = ProcessIdentity(pid: 42, startedAtSeconds: 100, startedAtMicroseconds: 1)
+    let kinds = AgentCatalog.builtIn
+
+    @Test func skipsRereadingWhenArgumentsDoNotChangeTheMatch() {
+        var cache = ProcessArgumentCache()
+        var reads = 0
+        let first = cache.arguments(for: identity, executablePath: "/usr/bin/vim", kinds: kinds) { reads += 1; return ["vim"] }
+        let second = cache.arguments(for: identity, executablePath: "/usr/bin/vim", kinds: kinds) { reads += 1; return ["vim"] }
+        #expect(first == ["vim"])
+        #expect(second.isEmpty)
+        #expect(reads == 1)
+        let match = AgentCatalog.match(ProcessSnapshot(executablePath: "/bin/claude", arguments: []), kinds: kinds)
+        let cachedAgent = cache.arguments(for: identity, executablePath: "/bin/claude", kinds: kinds) { ["claude"] }
+        #expect(AgentCatalog.match(ProcessSnapshot(executablePath: "/bin/claude", arguments: cachedAgent))?.kind == match?.kind)
+    }
+
+    @Test func keepsRereadingWhenArgumentsDecideTheMatch() {
+        let cases: [(String, [String])] = [
+            ("/bin/claude", ["claude", "-p", "--tools="]),
+            ("/opt/homebrew/bin/node", ["node", "/opt/homebrew/bin/codex"]),
+            ("/Users/u/.local/bin/2.1.296", ["claude"]),
+        ]
+        for (path, argv) in cases {
+            var cache = ProcessArgumentCache()
+            var reads = 0
+            _ = cache.arguments(for: identity, executablePath: path, kinds: kinds) { reads += 1; return argv }
+            let again = cache.arguments(for: identity, executablePath: path, kinds: kinds) { reads += 1; return argv }
+            #expect(again == argv)
+            #expect(reads == 2)
+        }
+    }
+
+    @Test func rereadsAfterExecChangesTheExecutable() {
+        var cache = ProcessArgumentCache()
+        _ = cache.arguments(for: identity, executablePath: "/bin/zsh", kinds: kinds) { ["-zsh"] }
+        let afterExec = cache.arguments(for: identity, executablePath: "/opt/homebrew/bin/node", kinds: kinds) {
+            ["node", "/opt/homebrew/bin/codex"]
+        }
+        #expect(AgentCatalog.match(ProcessSnapshot(executablePath: "/opt/homebrew/bin/node", arguments: afterExec))?.kind.id == "codex")
+    }
+
+    @Test func forgetsOnExitKindChangeOrUnreadableArguments() {
+        var cache = ProcessArgumentCache()
+        var reads = 0
+        _ = cache.arguments(for: identity, executablePath: "/usr/bin/vim", kinds: kinds) { reads += 1; return [] }
+        _ = cache.arguments(for: identity, executablePath: "/usr/bin/vim", kinds: kinds) { reads += 1; return ["vim"] }
+        let custom = kinds + AgentCatalog.customKinds(["vim"])
+        _ = cache.arguments(for: identity, executablePath: "/usr/bin/vim", kinds: custom) { reads += 1; return ["vim"] }
+        _ = cache.arguments(for: identity, executablePath: "/usr/bin/vim", kinds: custom) { reads += 1; return ["vim"] }
+        cache.retain(only: [])
+        let afterExit = cache.arguments(for: identity, executablePath: "/usr/bin/vim", kinds: custom) { reads += 1; return ["vim"] }
+        #expect(afterExit == ["vim"])
+        #expect(reads == 4)
+    }
+}
+
 @Suite struct PolicyTests {
     @Test func batteryRetreat() {
         #expect(BatteryPolicy.shouldRetreat(.init(percent: 20, onBattery: true), floor: 20))

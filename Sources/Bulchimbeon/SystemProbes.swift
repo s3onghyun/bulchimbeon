@@ -25,8 +25,8 @@ enum SystemProbes {
     }
 
     /// 에이전트 판별용 프로세스 스냅숏 + 프로세스별 누적 CPU 시간(ns)
-    static func processes() -> (snapshots: [ProcessSnapshot], cpuTimes: [Int32: UInt64]) {
-        ProcessScanner.scan()
+    static func processes(kinds: [AgentKind]) -> (snapshots: [ProcessSnapshot], cpuTimes: [Int32: UInt64]) {
+        ProcessScanner.scan(kinds: kinds)
     }
 
     /// `pmset -g` 의 SleepDisabled (덮개 모드 전역 플래그)
@@ -82,12 +82,15 @@ enum SystemProbes {
 /// - `ps` 출력 파싱 대신 시스템 API 를 직접 쓴다 (출력 형식·잘림·로케일 영향 없음)
 /// - 현재 사용자(UID) 프로세스만 본다 — 다른 사용자·root 프로세스의 명령줄은 읽지 않는다
 /// - argv 는 러너(node 등)일 때만 앞 8개, 그 외엔 argv[0] 만. 환경변수 영역은 파싱하지 않고 버퍼는 즉시 0 으로 지운다
+/// - argv 가 판별을 바꾸지 않는 프로세스는 PID·시작 시각만 기억해 다시 읽지 않는다 (argv 는 캐시하지 않음)
 /// - 결과는 메모리에서 판별에만 쓰고 저장·기록하지 않는다
 enum ProcessScanner {
+    private static var argumentCache = ProcessArgumentCache()
+
     /// `Bulchimbeon --diagnose`: 감지 결과와 근거를 출력한다. 명령줄 인자는 출력하지 않는다.
     static func diagnose(custom: [String]) -> String {
         let kinds = AgentCatalog.builtIn + AgentCatalog.customKinds(custom)
-        let processes = snapshots()
+        let processes = scan(kinds: kinds).snapshots
         var children: [Int32: [ProcessSnapshot]] = [:]
         for p in processes { children[p.ppid, default: []].append(p) }
         var lines = [L10n.t("불침번 에이전트 감지 진단 (UID \(getuid()) 프로세스 \(processes.count)개 검사)",
@@ -110,38 +113,45 @@ enum ProcessScanner {
         return lines.joined(separator: "\n")
     }
 
-    static func snapshots() -> [ProcessSnapshot] { scan().snapshots }
-
-    static func scan() -> (snapshots: [ProcessSnapshot], cpuTimes: [Int32: UInt64]) {
+    static func scan(kinds: [AgentKind]) -> (snapshots: [ProcessSnapshot], cpuTimes: [Int32: UInt64]) {
         let uid = getuid()
         let byteCount = proc_listpids(UInt32(PROC_UID_ONLY), uid, nil, 0)
-        guard byteCount > 0 else { return ([], [:]) }
+        guard byteCount > 0 else {
+            argumentCache.retain(only: [])
+            return ([], [:])
+        }
 
         var pids = [pid_t](repeating: 0, count: Int(byteCount) / MemoryLayout<pid_t>.stride + 64)
         let filled = pids.withUnsafeMutableBytes {
             proc_listpids(UInt32(PROC_UID_ONLY), uid, $0.baseAddress, Int32($0.count))
         }
         var snapshots: [ProcessSnapshot] = [], cpuTimes: [Int32: UInt64] = [:]
+        var liveProcesses = Set<ProcessIdentity>()
         for pid in pids.prefix(Int(filled) / MemoryLayout<pid_t>.stride) where pid > 0 {
-            guard let snapshot = snapshot(pid) else { continue }
+            guard let snapshot = snapshot(pid, kinds: kinds, liveProcesses: &liveProcesses) else { continue }
             snapshots.append(snapshot)
             if let time = cpuTime(pid) { cpuTimes[pid] = time }
         }
+        argumentCache.retain(only: liveProcesses)
         return (snapshots, cpuTimes)
     }
 
-    private static func snapshot(_ pid: pid_t) -> ProcessSnapshot? {
+    private static func snapshot(_ pid: pid_t, kinds: [AgentKind], liveProcesses: inout Set<ProcessIdentity>) -> ProcessSnapshot? {
         var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN) * 4) // PROC_PIDPATHINFO_MAXSIZE
         guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
         let path = String(cString: buffer)
+        guard let process = processInfo(pid) else { return nil }
+        let identity = ProcessIdentity(pid: Int32(pid), startedAtSeconds: process.startedAtSeconds,
+                                       startedAtMicroseconds: process.startedAtMicroseconds)
+        liveProcesses.insert(identity)
 
-        var args = arguments(pid, limit: AgentCatalog.needsFullArguments(executablePath: path) ? 8 : 1)
-        // 에이전트 후보면 도우미 세션(--tools=) 판별을 위해 인자를 더 읽는다. 메모리에서만 쓰고 버린다.
-        if AgentCatalog.isCandidate(executablePath: path, argv0: args.first) {
-            args = arguments(pid, limit: 64)
+        let args = argumentCache.arguments(for: identity, executablePath: path, kinds: kinds) {
+            let args = arguments(pid, limit: AgentCatalog.needsFullArguments(executablePath: path) ? 8 : 1)
+            // 에이전트 후보면 도우미 세션(--tools=) 판별을 위해 인자를 더 읽는다. 메모리에서만 쓰고 버린다.
+            return AgentCatalog.isCandidate(executablePath: path, argv0: args.first) ? arguments(pid, limit: 64) : args
         }
         let isAgentCandidate = AgentCatalog.isCandidate(executablePath: path, argv0: args.first)
-        return ProcessSnapshot(pid: pid, ppid: parentPID(pid), executablePath: path, arguments: args,
+        return ProcessSnapshot(pid: pid, ppid: process.ppid, executablePath: path, arguments: args,
                                cwd: isAgentCandidate ? workingDirectory(pid) : nil)
     }
 
@@ -154,11 +164,11 @@ enum ProcessScanner {
         }
     }
 
-    private static func parentPID(_ pid: pid_t) -> Int32 {
+    private static func processInfo(_ pid: pid_t) -> (ppid: Int32, startedAtSeconds: UInt64, startedAtMicroseconds: UInt64)? {
         var info = proc_bsdinfo()
         let size = Int32(MemoryLayout<proc_bsdinfo>.size)
-        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return 0 }
-        return Int32(info.pbi_ppid)
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+        return (Int32(info.pbi_ppid), info.pbi_start_tvsec, info.pbi_start_tvusec)
     }
 
     /// 누적 CPU 시간 (user + system), 나노초

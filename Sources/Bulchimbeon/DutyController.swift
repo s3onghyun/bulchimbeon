@@ -364,15 +364,16 @@ final class DutyController: ObservableObject {
         // 근무가 없으면 프로세스 스캔은 30초에 한 번 (메뉴 표시용), 근무 중엔 5초마다
         let scanAgents = order != .off || Date().timeIntervalSince(lastScan) >= 30
         let customAgents = defaults.stringArray(forKey: Keys.customAgents) ?? []
+        let kinds = AgentCatalog.builtIn + AgentCatalog.customKinds(customAgents)
         let (scanned, battery, assertions) = await Task.detached {
-            (scanAgents ? SystemProbes.processes() : nil, SystemProbes.battery(), PowerHolderProbe.assertions())
+            (scanAgents ? SystemProbes.processes(kinds: kinds) : nil, SystemProbes.battery(), PowerHolderProbe.assertions())
         }.value
         otherHolders = PowerHolders.summarize(assertions, ownPID: getpid())
         now = Date()
         if let scanned {
             let cpu = cpuHistory.add(scanned.cpuTimes, at: now)
             agentStatus = AgentActivity.evaluate(scanned.snapshots, cpu: cpu,
-                                                 kinds: AgentCatalog.builtIn + AgentCatalog.customKinds(customAgents))
+                                                 kinds: kinds)
             agents = agentStatus.mapValues(\.present).filter { $0.value > 0 }
             lastScan = now
         }

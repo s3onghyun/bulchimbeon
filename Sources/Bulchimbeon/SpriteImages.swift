@@ -60,5 +60,6 @@ final class SpriteAnimator: ObservableObject {
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick &+= 1 }
         }
+        timer?.tolerance = 0.1
     }
 }
