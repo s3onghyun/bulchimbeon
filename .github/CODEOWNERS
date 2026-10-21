@@ -7,3 +7,6 @@
 /Package.swift @s3onghyun
 /Makefile @s3onghyun
 /SECURITY.md @s3onghyun
+/go.mod @s3onghyun
+/go.sum @s3onghyun
+/packaging/ @s3onghyun
