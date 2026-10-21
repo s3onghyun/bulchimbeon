@@ -1,7 +1,7 @@
 name: "🌐 Translation fix / 번역 수정"
 description: "Awkward or wrong wording in a README or the app UI / README·앱 문구의 어색하거나 틀린 번역"
 title: "[Translation] "
-labels: ["documentation"]
+labels: ["translation"]
 body:
   - type: markdown
     attributes:
