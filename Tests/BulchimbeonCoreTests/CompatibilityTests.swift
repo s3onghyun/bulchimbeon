@@ -29,8 +29,10 @@ import Testing
     }
 
     @Test func dutyLogLocationAndLineFormatAreFrozen() throws {
+        #if os(macOS) // 근무일지 위치는 macOS 앱의 약속이다
         let path = try #require(DutyLog.defaultFileURL).path
         #expect(path.hasSuffix("/Library/Application Support/Bulchimbeon/duty-log.txt"))
+        #endif
 
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: dir) }

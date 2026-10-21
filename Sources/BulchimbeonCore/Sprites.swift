@@ -1,4 +1,6 @@
+#if canImport(CoreGraphics)
 import CoreGraphics
+#endif
 
 /// 팔레트 문자 → 색. '.' 은 투명.
 public enum Palette {
@@ -21,6 +23,7 @@ public enum Palette {
         "d": 0x3C4C36, // 땅 하이라이트
     ]
 
+    #if canImport(CoreGraphics)
     public static func cgColor(_ ch: Character) -> CGColor? {
         hex[ch].map(cgColor(hex:))
     }
@@ -31,6 +34,7 @@ public enum Palette {
                 blue: CGFloat(v & 0xFF) / 255,
                 alpha: 1)
     }
+    #endif
 }
 
 public struct PixelSprite: Sendable, Equatable {
@@ -58,6 +62,7 @@ public struct PixelSprite: Sendable, Equatable {
         PixelSprite(rows.map { String($0.reversed()) })
     }
 
+    #if canImport(CoreGraphics)
     /// CoreGraphics(y-up) 컨텍스트에 그린다. origin 은 스프라이트의 좌하단. 색은 `theme` 팔레트.
     public func draw(in ctx: CGContext, origin: CGPoint = .zero, pixel: CGFloat, theme: UniformTheme = .default) {
         for (y, row) in rows.enumerated() {
@@ -70,6 +75,7 @@ public struct PixelSprite: Sendable, Equatable {
             }
         }
     }
+    #endif
 }
 
 /// 2등신 치비 이등병. 16×16, 메뉴바에서 1pt = 1픽셀.

@@ -1,4 +1,6 @@
+#if canImport(CoreGraphics)
 import CoreGraphics
+#endif
 
 /// 군복 테마 — 같은 이등병, 다른 옷 (#17). 나라가 아니라 테마다.
 ///
@@ -69,7 +71,9 @@ public struct UniformTheme: Sendable, Identifiable, Equatable {
     /// 팔레트 문자 → 색 (테마 덮어쓰기 우선)
     public func hex(_ ch: Character) -> UInt32? { colors[ch] ?? Palette.hex[ch] }
 
+    #if canImport(CoreGraphics)
     public func cgColor(_ ch: Character) -> CGColor? { hex(ch).map(Palette.cgColor(hex:)) }
+    #endif
 
     /// 기본 스프라이트에 이 테마의 덧그림을 입힌다. 옷 픽셀 위에만 찍힌다.
     public func dress(_ sprite: PixelSprite) -> PixelSprite {

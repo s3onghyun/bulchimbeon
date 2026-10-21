@@ -97,6 +97,7 @@ public enum HeatLevel: Int, Comparable, Sendable {
     case advisory    // 폭염 주의보 — 경고만
     case alert       // 폭염 경보 — 전투휴식 (근무 중단)
 
+    #if canImport(Darwin)
     public init(_ state: ProcessInfo.ThermalState) {
         switch state {
         case .nominal: self = .normal
@@ -106,6 +107,7 @@ public enum HeatLevel: Int, Comparable, Sendable {
         @unknown default: self = .alert // 모르는 단계는 안전한 쪽으로
         }
     }
+    #endif
 
     /// 디버그용 문자열 (`defaults write ... simulateHeat advisory`)
     public init?(name: String) {

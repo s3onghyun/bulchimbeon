@@ -301,7 +301,11 @@ import Testing
             for row in frame.rows {
                 #expect(row.count == 16, "행 길이 불일치: \(row)")
                 for ch in row where ch != "." {
+                    #if canImport(CoreGraphics)
                     #expect(Palette.cgColor(ch) != nil, "팔레트에 없는 문자 '\(ch)'")
+                    #else
+                    #expect(Palette.hex[ch] != nil, "팔레트에 없는 문자 '\(ch)'")
+                    #endif
                 }
             }
         }
@@ -410,10 +414,12 @@ import Testing
     private let now = Date(timeIntervalSince1970: 1_000_000)
 
     @Test func mapsThermalState() {
+        #if canImport(Darwin)
         #expect(HeatLevel(ProcessInfo.ThermalState.nominal) == .normal)
         #expect(HeatLevel(ProcessInfo.ThermalState.fair) == .caution)
         #expect(HeatLevel(ProcessInfo.ThermalState.serious) == .advisory)
         #expect(HeatLevel(ProcessInfo.ThermalState.critical) == .alert)
+        #endif
         #expect(HeatLevel(name: "alert") == .alert)
         #expect(HeatLevel(name: "; rm -rf /") == nil)
     }
@@ -455,6 +461,7 @@ import Testing
         #expect(LidCommands.enable(pid: 4321).contains(regex), "감시병 명령줄은 매칭돼야 한다")
     }
 
+    #if os(macOS) // 감시병은 macOS 의 pmset 덮개 닫힘용이다
     /// root 없이 실제로 돌려본다: 가짜 pmset + 가짜 앱 프로세스(sleep). 앱이 죽으면 감시병이 원복해야 한다.
     @Test func watchdogRestoresWhenAppDies() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -505,6 +512,7 @@ import Testing
         }
         #expect(restored, "앱이 죽은 뒤 감시병이 disablesleep 0 을 실행해야 한다")
     }
+    #endif
 }
 
 @Suite struct HandoverReportTests {
