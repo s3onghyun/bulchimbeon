@@ -50,48 +50,16 @@ final class UniformSetting: ObservableObject {
     private init() { themeID = SpriteImages.theme.id }
 }
 
-/// 0.5초 간격 프레임 카운터. 화면이 꺼졌거나 세션이 잠긴 동안은 멈춘다.
+/// 0.5초 간격 프레임 카운터
 @MainActor
 final class SpriteAnimator: ObservableObject {
     @Published private(set) var tick = 0
     private var timer: Timer?
-    private var screensAsleep = false, sessionInactive = false
-    private var observers: [NSObjectProtocol] = []
 
     init() {
-        let center = NSWorkspace.shared.notificationCenter
-        let states: [(Notification.Name, ReferenceWritableKeyPath<SpriteAnimator, Bool>, Bool)] = [
-            (NSWorkspace.screensDidSleepNotification, \.screensAsleep, true),
-            (NSWorkspace.screensDidWakeNotification, \.screensAsleep, false),
-            (NSWorkspace.sessionDidResignActiveNotification, \.sessionInactive, true),
-            (NSWorkspace.sessionDidBecomeActiveNotification, \.sessionInactive, false),
-        ]
-        observers = states.map { name, state, value in
-            center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor in
-                    self?[keyPath: state] = value
-                    self?.updateTimer()
-                }
-            }
-        }
-        updateTimer()
-    }
-
-    deinit {
-        observers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
-    }
-
-    private func updateTimer() {
-        guard !screensAsleep, !sessionInactive else {
-            timer?.invalidate()
-            timer = nil
-            return
-        }
-        guard timer == nil else { return }
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick &+= 1 }
         }
-        timer.tolerance = 0.1
-        self.timer = timer
+        timer?.tolerance = 0.1
     }
 }
