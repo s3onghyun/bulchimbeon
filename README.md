@@ -11,6 +11,7 @@
 A pixel-art private takes that shift for your Mac.
 
 > 🌐 [한국어](README.ko.md) · [日本語](README.ja.md) · [简体中文](README.zh-CN.md)
+> 💡 [Ideas / 문의 / 建议](https://github.com/s3onghyun/bulchimbeon/discussions)
 
 ![Bulchimbeon demo](docs/media/demo.gif)
 
