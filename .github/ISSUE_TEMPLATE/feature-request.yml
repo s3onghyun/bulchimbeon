@@ -1,50 +1,45 @@
-name: "💡 Feature request / 기능 제안"
-description: "Ideas for features, the soldier's lines, sprites or skins / 기능·대사·스프라이트·스킨 아이디어"
+name: "💡 Feature request / 功能建议 / 기능 제안"
+description: "Ideas for features, the soldier's lines, sprites or skins / 功能、台词、像素形象或皮肤的建议 / 기능·대사·스프라이트·스킨 아이디어"
 title: "[Idea] "
 labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for the idea! 🫡 Please check [open issues](https://github.com/s3onghyun/bulchimbeon/issues) first so we don't duplicate it.
-        아이디어 감사합니다! 비슷한 이슈가 이미 있는지 먼저 확인해주세요.
-
-        Bulchimbeon makes no network calls and has no third-party dependencies; ideas need to fit within that.
-        불침번은 네트워크 통신과 서드파티 의존성이 없습니다. 이 원칙 안에서 가능한 아이디어여야 합니다.
+        Thanks! 🫡 Please check [open issues](https://github.com/s3onghyun/bulchimbeon/issues) first. Ideas must work with no network calls and no third-party dependencies.
+        谢谢！请先看看[现有 issue](https://github.com/s3onghyun/bulchimbeon/issues)里有没有类似的。建议需要在不联网、不引入第三方依赖的前提下实现。
+        감사합니다! 비슷한 이슈가 있는지 먼저 확인해주세요. 네트워크 통신·서드파티 의존성 없이 가능한 아이디어여야 합니다.
   - type: dropdown
     id: kind
     attributes:
-      label: "What kind of idea? / 어떤 종류인가요?"
+      label: "What kind of idea? / 哪类建议？ / 어떤 종류인가요?"
       options:
-        - "Feature / 기능"
-        - "Soldier's line / 대사"
-        - "Sprite or skin / 스프라이트·스킨"
-        - "Other / 기타"
+        - "Feature / 功能 / 기능"
+        - "Soldier's line / 台词 / 대사"
+        - "Sprite or skin / 像素形象或皮肤 / 스프라이트·스킨"
+        - "Other / 其他 / 기타"
     validations:
       required: true
   - type: textarea
     id: problem
     attributes:
-      label: "What problem does it solve? / 어떤 불편을 해결하나요?"
-      placeholder: "e.g. I want to know how long the last watch lasted / 예) 지난 근무가 얼마나 이어졌는지 알고 싶다"
+      label: "What problem does it solve? / 想解决什么问题？ / 어떤 불편을 해결하나요?"
+      placeholder: "e.g. I want to know how long the last watch lasted / 例如：想知道上一次值守持续了多久 / 예) 지난 근무가 얼마나 이어졌는지 알고 싶다"
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
-      label: "Your proposal / 제안"
+      label: "Your proposal / 你的方案 / 제안"
       description: |
-        For a line, write it in English and/or Korean. Tone: earnest and cute, no hazing jokes.
-        대사라면 영어·한국어 중 편한 쪽으로 적어주세요. 톤은 성실하고 귀엽게, 갈굼 개그는 없이.
+        Alternatives you considered are welcome here too. For a line: earnest and cute, no hazing jokes.
+        也可以写下考虑过的其他做法。台词请认真又可爱，不要欺负新兵式的玩笑。
+        생각해 본 다른 방법도 함께 적어주세요. 대사는 성실하고 귀엽게, 갈굼 개그는 없이.
     validations:
       required: true
-  - type: textarea
-    id: alternatives
-    attributes:
-      label: "Alternatives or workarounds you've tried / 생각해 본 다른 방법"
   - type: checkboxes
     id: pr
     attributes:
-      label: "Contribution / 기여"
+      label: "Contribution / 贡献 / 기여"
       options:
-        - label: "I'd like to send a PR for this / 직접 PR 을 보내고 싶습니다"
+        - label: "I'd like to send a PR for this / 我愿意提交 PR / 직접 PR 을 보내고 싶습니다"

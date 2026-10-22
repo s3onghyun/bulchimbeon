@@ -11,6 +11,7 @@
 
 > 📝 この日本語版は AI による翻訳です。より自然な表現への修正 PR を歓迎します。
 > [English](README.md) · [한국어](README.ko.md) · [简体中文](README.zh-CN.md)
+> 💡 [Ideas / 문의 / 建议](https://github.com/s3onghyun/bulchimbeon/discussions)
 
 ![Bulchimbeon デモ](docs/media/demo.gif)
 

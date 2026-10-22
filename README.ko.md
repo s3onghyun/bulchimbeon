@@ -7,6 +7,7 @@
 > 리눅스에서는 명령줄 데몬이 같은 일을 합니다: [Linux](#linux) 참고.
 
 > 🌐 [English](README.md) · [日本語](README.ja.md) · [简体中文](README.zh-CN.md)
+> 💡 [Ideas / 문의 / 建议](https://github.com/s3onghyun/bulchimbeon/discussions)
 
 ![불침번 데모](docs/media/demo.gif)
 
