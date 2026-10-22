@@ -90,6 +90,16 @@ public enum DutyResume {
     }
 }
 
+/// "근무 서기" 메뉴에서 어느 시간 항목에 체크할지 정한다.
+public enum TimedMenu {
+    /// seconds: 항목의 시간(nil = 무기한). picked: 이번 실행에서 마지막으로 고른 시간.
+    /// 재시작으로 이어진 시간제 근무는 고른 항목을 알 수 없어 체크하지 않는다.
+    public static func isChecked(_ seconds: TimeInterval?, order: DutyOrder, picked: TimeInterval?) -> Bool {
+        guard case .timed(let until) = order else { return false }
+        return until == nil ? seconds == nil : seconds != nil && seconds == picked
+    }
+}
+
 /// 맥 발열 단계. 군대 온도지수 단계에 빗댄다.
 public enum HeatLevel: Int, Comparable, Sendable {
     case normal = 0  // 정상
