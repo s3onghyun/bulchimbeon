@@ -39,6 +39,8 @@ final class DutyController: ObservableObject {
     @Published private(set) var quote = Lines.pick(Lines.off())
 
     var order: DutyOrder { engine.order }
+    /// 마지막으로 고른 근무 시간 (메뉴 체크 표시용)
+    private(set) var pickedDuration: TimeInterval?
     var isOnDuty: Bool { engine.isOnDuty }
     var mode: DutyMode { engine.mode }
     var resting: Bool { engine.resting }
@@ -180,6 +182,7 @@ final class DutyController: ObservableObject {
     // MARK: - 명령
 
     func startTimed(_ duration: TimeInterval?) async {
+        pickedDuration = duration
         let label = Self.durations.first { $0.seconds == duration }?.title ?? L10n.t("무기한", "Indefinitely", "无限期")
         await run(engine.startTimed(seconds: duration, label: label, now: Date()))
     }

@@ -89,7 +89,11 @@ struct DutyMenu: View {
 
         Menu(L10n.t("🪖 근무 서기", "🪖 Stand watch", "🪖 开始值班")) {
             ForEach(DutyController.durations, id: \.title) { option in
-                Button(option.title) { Task { await duty.startTimed(option.seconds) } }
+                // 체크된 항목을 다시 누르면 그 시간으로 새로 시작한다 (예전 버튼과 같음)
+                Toggle(option.title, isOn: Binding(
+                    get: { TimedMenu.isChecked(option.seconds, order: duty.order, picked: duty.pickedDuration) },
+                    set: { _ in Task { await duty.startTimed(option.seconds) } }
+                ))
             }
         }
         Toggle(L10n.t("🤖 에이전트 근무 (자동 교대)", "🤖 Agent watch (auto shift)", "🤖 代理值班（自动交班）"), isOn: Binding(

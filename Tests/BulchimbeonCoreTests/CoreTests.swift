@@ -218,6 +218,19 @@ import Testing
         #expect(DutyResume.decide(stored: "rm -rf /", until: nil, now: now) == .none)
     }
 
+    @Test func timedMenuCheck() {
+        let until = Date(timeIntervalSince1970: 1_000_000)
+        #expect(TimedMenu.isChecked(nil, order: .timed(until: nil), picked: nil), "무기한")
+        #expect(!TimedMenu.isChecked(3600, order: .timed(until: nil), picked: 3600), "무기한 중엔 다른 항목 해제")
+        #expect(TimedMenu.isChecked(3600, order: .timed(until: until), picked: 3600))
+        #expect(!TimedMenu.isChecked(1800, order: .timed(until: until), picked: 3600))
+        #expect(!TimedMenu.isChecked(nil, order: .timed(until: until), picked: 3600))
+        #expect(!TimedMenu.isChecked(3600, order: .timed(until: until), picked: nil), "재시작으로 이어진 근무")
+        #expect(!TimedMenu.isChecked(nil, order: .off, picked: nil), "근무 종료")
+        #expect(!TimedMenu.isChecked(nil, order: .agentWatch, picked: nil), "에이전트 근무로 전환")
+        #expect(!TimedMenu.isChecked(3600, order: .agentWatch, picked: 3600))
+    }
+
     @Test func pmsetParsing() {
         #expect(!PmsetParser.sleepDisabled(" SleepDisabled\t\t0\n sleep 1"))
         #expect(PmsetParser.sleepDisabled("System-wide power settings:\n SleepDisabled\t\t1\n"))
