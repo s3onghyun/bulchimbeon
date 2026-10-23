@@ -776,6 +776,38 @@ func TestRetriesARefusedRegistration(t *testing.T) {
 	}
 }
 
+// A Config without a lock listing still registers, asks again on later frames and exits cleanly.
+func TestRunWithoutHolders(t *testing.T) {
+	bus := newFakeBus(true)
+	var log syncBuffer
+	var mu sync.Mutex
+	now := time.Unix(1_792_140_000, 0)
+	clock := func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		now = now.Add(10 * time.Second)
+		return now
+	}
+	frames := make(chan time.Time)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error)
+	go func() {
+		done <- Run(ctx, Config{Dial: func() (Bus, error) { return bus, nil }, Log: &log, Frames: frames, Now: clock, Paths: runPaths(t)})
+	}()
+	select {
+	case <-bus.registers:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no registration")
+	}
+	for i := 0; i < 4; i++ {
+		frames <- time.Time{}
+	}
+	cancel()
+	if err := <-done; err != nil || strings.Contains(log.String(), "panic") {
+		t.Fatalf("Run = %v, log %q", err, log.String())
+	}
+}
+
 // Quit ends the tray only: Run returns, the daemon's files are untouched.
 func TestQuitFromTheMenu(t *testing.T) {
 	bus := newFakeBus(true)

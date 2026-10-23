@@ -145,6 +145,9 @@ func Run(ctx context.Context, cfg Config) error {
 	if cfg.WatcherWait == 0 {
 		cfg.WatcherWait = 30 * time.Second
 	}
+	if cfg.Holders == nil {
+		cfg.Holders = func() ([]platform.Holder, error) { return nil, errors.New("no lock listing") }
+	}
 	if cfg.Frames == nil {
 		ticker := time.NewTicker(sprites.FrameInterval())
 		defer ticker.Stop()
