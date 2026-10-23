@@ -1,0 +1,72 @@
+name: Packaging
+
+# Linux packaging changes only: builds the .rpm files as the release does and installs the x86_64 one in
+# a Fedora container. A separate workflow so that path filter does not touch the CI checks.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packaging/**'
+      - '.copr/**'
+      - 'scripts/package-linux.sh'
+      - 'scripts/package-rpm.sh'
+      - 'scripts/package-srpm.sh'
+      - '.github/workflows/packaging.yml'
+      - '.github/workflows/release.yml'
+  pull_request:
+    paths:
+      - 'packaging/**'
+      - '.copr/**'
+      - 'scripts/package-linux.sh'
+      - 'scripts/package-rpm.sh'
+      - 'scripts/package-srpm.sh'
+      - '.github/workflows/packaging.yml'
+      - '.github/workflows/release.yml'
+
+# 최소 권한: 코드 읽기만
+permissions:
+  contents: read
+
+jobs:
+  rpm:
+    name: rpm (fedora)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      # Fedora 44, pinned by digest like the Actions (multi-arch index from Docker Hub's official image)
+      FEDORA_IMAGE: docker.io/library/fedora:44@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Install rpmbuild
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends rpm
+      - name: Build
+        run: |
+          for arch in amd64 arm64; do
+            ./scripts/package-linux.sh 0.0.0~ci "$arch"
+            ./scripts/package-rpm.sh 0.0.0~ci "$arch"
+          done
+          for rpm in dist/linux/*.rpm; do rpm -qip "$rpm" && rpm -qlp "$rpm"; done
+      - name: Install in Fedora
+        run: |
+          docker run --rm -v "$PWD/dist/linux:/rpms:ro" -w /rpms "$FEDORA_IMAGE" sh -euxc '
+            dnf -y -q install ./bulchimbeon-0.0.0~ci-1.x86_64.rpm
+            bulchimbeon version
+            rpm -V bulchimbeon
+            grep -x "ExecStart=/usr/bin/bulchimbeon run" /usr/lib/systemd/user/bulchimbeon.service
+            grep -x "Exec=/usr/bin/bulchimbeon tray" /etc/xdg/autostart/bulchimbeon-tray.desktop
+            test "$(systemctl --global is-enabled bulchimbeon.service || true)" = disabled
+            test -z "$(find /etc/systemd/user -name "bulchimbeon*")"
+            rpm -e bulchimbeon
+            if rpm -q bulchimbeon; then exit 1; fi
+            test ! -e /usr/bin/bulchimbeon
+            test ! -e /usr/lib/systemd/user/bulchimbeon.service
+            test ! -e /etc/xdg/autostart/bulchimbeon-tray.desktop
+          '
