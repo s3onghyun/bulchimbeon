@@ -125,7 +125,7 @@ struct DutyMenu: View {
                 ForEach(PatrolController.scales, id: \.self) { Text("\($0)×").tag($0) }
             }
         }
-        Picker(L10n.t("🎽 군복", "🎽 Uniform", "🎽 制服"), selection: $uniform.themeID) {
+        Picker(L10n.t("🎖️ 군복", "🎖️ Uniform", "🎖️ 制服"), selection: $uniform.themeID) {
             ForEach(UniformTheme.all) { theme in
                 Label { Text(theme.name) } icon: { Image(nsImage: SpriteImages.preview(theme)) }
                     .tag(theme.id)
