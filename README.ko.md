@@ -266,7 +266,7 @@ KDE·XFCE·GNOME AppIndicator 확장이 쓰는 트레이 규격 StatusNotifierIt
 | XFCE 4.16 이상 | 패널의 **상태 트레이(Status Tray)** 항목 (`systray`, 기본 패널에 있음) |
 | XFCE 4.14 이하 | 패널 항목 `xfce4-statusnotifier-plugin` |
 | GNOME | AppIndicator 확장 (`gnome-shell-extension-appindicator`, 우분투는 기본으로 켜져 있음) |
-| KDE Plasma | 없음 |
+| KDE Plasma | 없음. 근무 중이 아니면(대기·취침) 항목이 Passive 라 Plasma 는 숨은 아이콘에 두고, 근무에 들어가면 패널에 보입니다 |
 
 ```bash
 bulchimbeon tray &                          # 지금 이 데스크톱 세션에 띄우기

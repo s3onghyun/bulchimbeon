@@ -20,6 +20,9 @@ type view struct {
 	theme    string
 	headline string   // the first line of `bulchimbeon status`: tooltip and menu
 	status   []string // the lines below it, in full
+	// active is true while the private is on duty or in combat rest. Otherwise the item is
+	// Passive, which KDE keeps in the tray's overflow instead of the panel.
+	active bool
 }
 
 // snapshot is what a view is made from.
@@ -47,11 +50,20 @@ func buildView(in snapshot) view {
 	v := view{lang: in.lang, pose: engine.PoseSleeping, theme: sprites.Named(in.settings.UniformTheme).ID, headline: r.Headline}
 	if r.Running {
 		v.pose = engine.Pose(in.state.Pose) // an unknown pose draws the sleeping private
+		v.active = in.state.OnDuty || in.state.Resting
 	}
 	for _, l := range r.Lines {
 		v.status = append(v.status, statusLabel(l))
 	}
 	return v
+}
+
+// itemStatus is the StatusNotifierItem Status.
+func (v view) itemStatus() string {
+	if v.active {
+		return "Active"
+	}
+	return "Passive"
 }
 
 // tooltip is the whole status, one line each, escaped for hosts that read it as markup.

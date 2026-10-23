@@ -248,6 +248,43 @@ func labels(items []menu) []string {
 
 // tests ---------------------------------------------------------------------
 
+// KDE keeps Passive items in the tray's overflow: the private shows in the panel only on duty
+// (or sweating through a combat rest), and NewStatus tells the host when that changes.
+func TestItemStatusIsActiveOnlyOnDuty(t *testing.T) {
+	r := newRig(t)
+	status := func() string {
+		reply := r.call(itemPath, propsIface, "Get", "ss", itemIface, "Status")
+		return reply.Body[0].(dbus.Variant).Value.(string)
+	}
+	newStatus := func() int { return r.bus.count(&r.bus.emits, "NewStatus") }
+	for _, c := range []struct {
+		order, pose     string
+		onDuty, resting bool
+		want            string
+		signals         int
+	}{
+		{"agentWatch", "standby", false, false, "Passive", 0},
+		{"agentWatch", "duty", true, false, "Active", 1},
+		{"agentWatch", "duty", true, false, "Active", 1}, // no change, no signal
+		{"agentWatch", "heat", false, true, "Active", 1},
+		{"agentWatch", "salute", false, false, "Passive", 2},
+		{"off", "sleeping", false, false, "Passive", 2},
+		{"agentWatch", "duty", true, false, "Active", 3},
+	} {
+		r.state(c.order, c.pose, c.onDuty, c.resting)
+		r.tray.refresh()
+		if got := status(); got != c.want || newStatus() != c.signals {
+			t.Errorf("%s: Status %s, NewStatus ×%d; want %s, ×%d", c.pose, got, newStatus(), c.want, c.signals)
+		}
+	}
+	// a daemon that is gone is not on duty, whatever its last state file says
+	r.tray.cfg.Alive = func(int) bool { return false }
+	r.tray.refresh()
+	if status() != "Passive" || newStatus() != 4 {
+		t.Errorf("gone: Status %s, NewStatus ×%d", status(), newStatus())
+	}
+}
+
 func TestPoseAndStatusFollowTheStateFile(t *testing.T) {
 	r := newRig(t)
 	for _, c := range []struct {
@@ -511,7 +548,7 @@ func TestItemPropertiesAndCalls(t *testing.T) {
 		kv := kv.([]any)
 		props[kv[0].(string)] = kv[1].(dbus.Variant).Value
 	}
-	if props["Id"] != "bulchimbeon" || props["Status"] != "Active" || props["Menu"] != menuPath || props["ItemIsMenu"] != true ||
+	if props["Id"] != "bulchimbeon" || props["Status"] != "Passive" || props["Menu"] != menuPath || props["ItemIsMenu"] != true ||
 		props["IconThemePath"] != r.tray.iconRoot || !strings.HasPrefix(props["IconName"].(string), "bulchimbeon-default-") {
 		t.Errorf("properties = %v", props)
 	}

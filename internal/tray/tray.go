@@ -341,6 +341,9 @@ func (t *tray) refresh() bool {
 	if old.lang != v.lang {
 		t.emit(itemPath, itemIface, "NewTitle", "")
 	}
+	if old.active != v.active {
+		t.emit(itemPath, itemIface, "NewStatus", "s", v.itemStatus())
+	}
 	if sameMenu(old, v) {
 		return false
 	}
@@ -400,7 +403,7 @@ func (t *tray) itemProperties() map[string]dbus.Variant {
 		"Category":            str("ApplicationStatus"),
 		"Id":                  str("bulchimbeon"),
 		"Title":               str(engine.T(v.lang, "불침번", "Bulchimbeon", "Bulchimbeon")),
-		"Status":              str("Active"),
+		"Status":              str(v.itemStatus()),
 		"WindowId":            dbus.MakeVariant("i", int32(0)),
 		"IconName":            str(t.iconName),
 		"IconThemePath":       str(t.iconRoot),

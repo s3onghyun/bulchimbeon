@@ -253,7 +253,7 @@ It is a StatusNotifierItem, the tray protocol KDE, XFCE and the GNOME AppIndicat
 | XFCE 4.16 or later | the **Status Tray** panel item (`systray`), which the default panel has |
 | XFCE 4.14 or older | the `xfce4-statusnotifier-plugin` panel item |
 | GNOME | the AppIndicator extension (`gnome-shell-extension-appindicator`, on by default in Ubuntu) |
-| KDE Plasma | nothing |
+| KDE Plasma | nothing. Off duty or standing by, the item is Passive, so Plasma keeps it in the tray's hidden icons until the private goes on duty |
 
 ```bash
 bulchimbeon tray &                          # show it now, in this desktop session
