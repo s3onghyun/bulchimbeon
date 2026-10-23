@@ -5,7 +5,7 @@
 > then salutes *"Shift over!"* and lets it sleep.
 >
 > **No hooks, no daemon, no installed root helper. One app. macOS 13 and later.**
-> On Linux, a small command-line daemon does the same job: see [Linux](#linux).
+> On Linux, a small daemon with a command line and a tray icon does the same job: see [Linux](#linux).
 
 *Bulchimbeon* (불침번) is the night-watch duty in the Korean army: someone stays up all night so everyone else can sleep.
 A pixel-art private takes that shift for your Mac.
@@ -167,7 +167,7 @@ fake clock. Design notes, including signals we tried and rejected: [docs/design.
 
 ## Linux
 
-Bulchimbeon also runs on Linux as a small daemon with a command line (v0.1; no tray icon yet).
+Bulchimbeon also runs on Linux as a small daemon with a command line and a [tray icon](#tray-icon).
 It uses the same engine as the macOS app: a Go port that must pass the same golden test cases
 ([`testdata/engine`](testdata/engine)) as the Swift core, in CI on every pull request.
 Tested on Ubuntu 24.04 (systemd 255). It needs systemd and logind.
@@ -231,6 +231,37 @@ Power:     battery: none · heat: normal (coretemp 49 °C, critical 105 °C) · 
 same detection rules, a 5-second check, engage when an agent's process tree uses at least 2% CPU
 (60-second average; Linux has no `caffeinate` signal), hand over after the grace time.
 
+### Tray icon
+
+`bulchimbeon tray` puts the private in your desktop panel, in the same poses as on the Mac menu bar and animated the
+same way: asleep when the daemon is off, looking around while it waits for an agent, flashlight on while on duty,
+sweating through a combat rest. Hover for the status line. The menu shows the `bulchimbeon status` lines (duty, lock,
+why, agents, handover), a **🧥 Uniform** picker that sets `uniformTheme`, and **Quit tray**, which closes the icon only:
+the daemon keeps watch without it.
+
+The `.deb` starts it with every desktop session through an XDG autostart entry,
+`/etc/xdg/autostart/bulchimbeon-tray.desktop`; `install-linux.sh` puts the same entry in `~/.config/autostart/`.
+With Homebrew, add `bulchimbeon tray` to your desktop's startup applications. Where there is nothing to show it in
+(SSH, a headless machine, a desktop without a tray), or for a user who has never started the daemon, it logs one line
+and exits.
+
+It is a StatusNotifierItem, the tray protocol KDE, XFCE and the GNOME AppIndicator extension speak:
+
+| Desktop | What it needs |
+|---|---|
+| XFCE 4.16 or later | the **Status Tray** panel item (`systray`), which the default panel has |
+| XFCE 4.14 or older | the `xfce4-statusnotifier-plugin` panel item |
+| GNOME | the AppIndicator extension (`gnome-shell-extension-appindicator`, on by default in Ubuntu) |
+| KDE Plasma | nothing |
+
+```bash
+bulchimbeon tray &                          # show it now, in this desktop session
+bulchimbeon tray --lang ko                  # menu in Korean (ko | en | zh), whatever the language setting says
+bulchimbeon config set uniformTheme navy    # default | navy | arctic | desert: same as the Uniform menu
+```
+
+To stop it starting at login, turn it off in your desktop's session and startup settings, or remove the autostart file.
+
 ### How it works on Linux
 
 | | Linux |
@@ -263,7 +294,7 @@ same detection rules, a 5-second check, engage when an agent's process tree uses
 
   It grants only `org.freedesktop.login1.inhibit-block-sleep` to that user; delete the file to undo.
   Bulchimbeon never runs this for you. On a laptop with a normal desktop login you don't need it.
-- Only the "Display may sleep" watch mode exists on Linux (`dutyMode` is ignored), and there is no tray icon:
+- Only the "Display may sleep" watch mode exists on Linux (`dutyMode` is ignored), there is no patrol mode, and
   notifications go to the journal.
 - Windows is planned: the platform layer is in [`internal/platform`](internal/platform).
 

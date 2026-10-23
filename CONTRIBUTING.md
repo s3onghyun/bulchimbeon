@@ -67,6 +67,7 @@ CI runs these in the `go (linux)` job.
 | `testdata/engine/` | Golden fixtures that the Swift tests and the Go tests both run ([format](testdata/engine/README.md)) | Required |
 | `internal/engine/` | The Go port of the Core engine for the Linux daemon | **Required**: must pass `testdata/engine` |
 | `internal/platform/`, `internal/daemon/`, `cmd/bulchimbeon/` | Linux backend (`/proc`, logind, sysfs), the daemon loop and the `bulchimbeon` command; a Windows stub | Unit tests with recorded fixtures |
+| `internal/sprites/`, `internal/tray/`, `internal/dbus/` | The Linux tray icon: sprites drawn from `testdata/engine/sprites.json`, the StatusNotifierItem and its menu, a small standard-library D-Bus client | Pixel-for-pixel against the fixture; a fake bus; a real `dbus-daemon` when installed |
 | `docs/` | Design notes (`design.md`), the [compatibility promise](docs/compatibility.md), media | |
 
 Put decisions in Core with tests, and keep the app target a thin shell that calls the system.
@@ -118,6 +119,9 @@ Can't wait for a release? Users can add an agent locally with
 The source of truth is the ASCII grids in `Sources/BulchimbeonCore/Sprites.swift`: one character per pixel, 16×16.
 After editing, run `make icons` and commit the regenerated `Resources/AppIcon.icns` and `docs/sprites-preview.png`
 with your change. A character that isn't in the palette fails the tests.
+The Linux tray draws the same sprites from a fixture the Swift tests write: regenerate it with
+`BULCHIMBEON_WRITE_SPRITES=1 swift test --filter SpriteFixtureTests`, copy it with
+`cp testdata/engine/sprites.json internal/sprites/`, and commit both ([format](testdata/engine/README.md#spritesjson-the-privates-sprites)).
 
 ### Adding a uniform theme
 
@@ -130,6 +134,7 @@ with your change. A character that isn't in the palette fails the tests.
 3. Themes, not countries: **no national flags, real rank insignia or unit patches, and no real army's actual uniform.**
 4. Run `make test`. `UniformThemeTests` checks the theme rules, every pose and frame size, and that the default theme is
    unchanged. On macOS, run `make icons` and commit the new theme row in `docs/sprites-preview.png`.
+   Regenerate the sprite fixture for the Linux tray as described under [Sprites](#sprites), then run `go test ./...`.
 
 ### Translations
 
@@ -228,6 +233,7 @@ CI 는 이것을 `go (linux)` 잡에서 돌립니다.
 | `testdata/engine/` | Swift 테스트와 Go 테스트가 함께 돌리는 골든 픽스처 ([형식](testdata/engine/README.md)) | 필수 |
 | `internal/engine/` | 리눅스 데몬용 Go 엔진 (Core 엔진을 옮긴 것) | **필수**: `testdata/engine` 통과 |
 | `internal/platform/`, `internal/daemon/`, `cmd/bulchimbeon/` | 리눅스 백엔드(`/proc`·logind·sysfs), 데몬 루프, `bulchimbeon` 명령, Windows 자리 | 기록된 픽스처로 단위 테스트 |
+| `internal/sprites/`, `internal/tray/`, `internal/dbus/` | 리눅스 트레이 아이콘: `testdata/engine/sprites.json` 으로 그리는 스프라이트, StatusNotifierItem 과 메뉴, 표준 라이브러리로 만든 작은 D-Bus 클라이언트 | 픽스처와 픽셀 단위 비교, 가짜 버스, 설치돼 있으면 실제 `dbus-daemon` |
 | `docs/` | 설계서(`design.md`), [호환성 약속](docs/compatibility.md), 미디어 | |
 
 판단 로직은 Core 에 두고 테스트를 붙여주세요. 앱 타깃은 시스템을 호출하는 얇은 껍데기로 유지합니다.
@@ -277,6 +283,8 @@ PR 템플릿의 체크리스트와 같습니다.
 `Sources/BulchimbeonCore/Sprites.swift` 의 ASCII 그리드가 원본입니다. 문자 하나 = 픽셀 하나, 16×16.
 수정 후 `make icons` 를 돌리고 다시 생성된 `Resources/AppIcon.icns`·`docs/sprites-preview.png` 를 함께 커밋해주세요.
 팔레트에 없는 문자는 테스트에서 걸립니다.
+리눅스 트레이는 Swift 테스트가 써 주는 픽스처로 같은 스프라이트를 그립니다. `BULCHIMBEON_WRITE_SPRITES=1 swift test --filter SpriteFixtureTests`
+로 다시 만들고 `cp testdata/engine/sprites.json internal/sprites/` 로 복사한 뒤 둘 다 커밋해주세요 ([형식](testdata/engine/README.md#spritesjson-the-privates-sprites)).
 
 ### 군복 테마 추가하기
 
@@ -287,6 +295,7 @@ PR 템플릿의 체크리스트와 같습니다.
 3. 나라가 아니라 테마입니다. **국기, 실제 계급장·부대 마크, 특정 군대의 실제 군복은 넣지 않습니다.**
 4. `make test` 를 돌립니다. 테마 규칙, 모든 포즈·프레임의 크기, 기본 테마가 그대로인지를 `UniformThemeTests` 가 확인합니다.
    macOS 에서 `make icons` 를 돌려 `docs/sprites-preview.png` 에 새 테마 줄이 생긴 것을 같이 커밋해주세요.
+   [스프라이트](#스프라이트)에 적힌 대로 리눅스 트레이용 스프라이트 픽스처도 다시 만들고 `go test ./...` 를 돌립니다.
 
 ### 번역
 

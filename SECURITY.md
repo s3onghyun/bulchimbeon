@@ -36,7 +36,9 @@
 | 잠자기 잠금 (logind inhibitor) | 데몬이 죽은 뒤 잠금이 남아 영원히 잠들지 못함 | 잠금을 쥔 `systemd-inhibit` 자식의 stdin 을 데몬만 가진 파이프에 묶음: 데몬이 `kill -9` 로 죽어도 0.3초 안에 해제 (실측). 서비스는 `KillMode=control-group`. 매 점검마다 logind 목록에서 실존 확인, 사라지면 재획득·기록 |
 | polkit 규칙 (SSH·헤드리스용, 선택) | 권한 상승, 넓은 권한 부여 | 불침번은 root 로 아무것도 실행하지 않는다. 규칙은 `doctor`·README 에 **출력만** 하며, 한 사용자에게 `org.freedesktop.login1.inhibit-block-sleep` 하나만 허용. 사용자 이름은 `^[a-z_][a-z0-9_-]{0,31}$` 일 때만 끼워 넣고, 아니면 자리표시자 |
 | 설정·상태 파일 | 심볼릭 링크로 다른 파일 덮어쓰기, 반쯤 쓴 파일 | 파일 0600·디렉토리 0700, 임시 파일에 쓴 뒤 `rename`. 근무일지는 macOS 와 같이 `O_NOFOLLOW`·줄바꿈 제거·1MB 회전. 허용 값 밖의 설정은 기본값으로 |
-| 배포 (tar.gz, .deb) | 변조된 파일, 공급망 | CI 에서만 빌드 (`go build -trimpath`, `dpkg-deb`, 서드파티 패키징 도구 없음, 재현 가능한 빌드), `SHA256SUMS` + 빌드 출처 증명, Action 은 GitHub 소유·커밋 SHA 고정. 설치 스크립트는 네트워크·root 없이 `~/.local/bin`·`~/.config/systemd/user` 에만 씀 |
+| 트레이 아이콘 (`bulchimbeon tray`, 세션 D-Bus) | 세션 버스로 들어온 호출로 정보 유출·설정 변조, 조작된 메시지로 크래시, 의존성 공급망 | 데몬과 따로 도는 프로세스이고 데몬(`run`)은 세션 버스를 쓰지 않음 (테스트로 확인). 같은 사용자의 세션 버스에만 붙음 (unix 소켓, EXTERNAL 인증, TCP 주소 거부). 보여주는 것은 `bulchimbeon status` 와 같은 줄뿐이라 프로세스 인자·환경변수 없음. 메뉴로 바꿀 수 있는 것은 `uniformTheme` 하나이고, 알려진 테마 id 만 설정 저장소를 거쳐 기록. 받은 메시지는 크기 상한(32 MiB)·서명·패딩을 검사하고 unix fd 전달은 거부. D-Bus 클라이언트는 표준 라이브러리로 직접 구현 (서드파티 의존성 0개 유지) |
+| 트레이 아이콘 파일 | 다른 사용자가 바꿔치기, 반쯤 쓴 파일 | `$XDG_RUNTIME_DIR/bulchimbeon/tray-icons` (사용자 전용 런타임 디렉토리 안, 디렉토리 0700·파일 0600, 임시 파일에 쓴 뒤 `rename`). 런타임 디렉토리가 없으면 만들지 않고 픽스맵만 씀 |
+| 배포 (tar.gz, .deb) | 변조된 파일, 공급망 | CI 에서만 빌드 (`go build -trimpath`, `dpkg-deb`, 서드파티 패키징 도구 없음, 재현 가능한 빌드), `SHA256SUMS` + 빌드 출처 증명, Action 은 GitHub 소유·커밋 SHA 고정. 설치 스크립트는 네트워크·root 없이 `~/.local/bin`·`~/.config/systemd/user`·`~/.config/autostart` 에만 씀. 자동 시작 항목의 `Exec` 에는 평범한 경로만 넣고, 따옴표가 필요한 경로면 항목을 만들지 않음 |
 
 알려진 한계: 덮개를 닫으면 잠든다 (logind 설정은 바꾸지 않음). 같은 사용자가 `claude` 라는 이름의 바쁜 프로세스를 띄우면 근무를 유지시킬 수 있다 (macOS 와 같음).
 

@@ -4,7 +4,7 @@
 > 내가 자는 동안 AI 에이전트 곁에서 맥을 깨워두고, 일이 끝나면 "근무 교대합니다!" 하고 재워주는 메뉴바 이등병.
 >
 > **hook도, 데몬도, 설치되는 root 도우미도 없이 앱 하나로. macOS 13부터.**
-> 리눅스에서는 명령줄 데몬이 같은 일을 합니다: [Linux](#linux) 참고.
+> 리눅스에서는 명령줄과 트레이 아이콘이 있는 작은 데몬이 같은 일을 합니다: [Linux](#linux) 참고.
 
 > 🌐 [English](README.md) · [日本語](README.ja.md) · [简体中文](README.zh-CN.md)
 > 💡 [Ideas / 문의 / 建议](https://github.com/s3onghyun/bulchimbeon/discussions)
@@ -198,7 +198,7 @@ pmset -g assertions | grep Bulchimbeon   # 근무 중인지 확인
 
 ## Linux
 
-리눅스에서는 명령줄로 다루는 작은 데몬으로 돕니다 (v0.1, 트레이 아이콘은 아직 없음).
+리눅스에서는 명령줄과 [트레이 아이콘](#트레이-아이콘)이 있는 작은 데몬으로 돕니다.
 엔진은 맥 앱과 같습니다. Go 로 옮긴 엔진이 Swift Core 와 같은 골든 테스트([`testdata/engine`](testdata/engine))를
 PR 마다 CI 에서 통과해야 합니다. Ubuntu 24.04 (systemd 255)에서 확인했고, systemd·logind 가 필요합니다.
 
@@ -246,6 +246,35 @@ journalctl --user -u bulchimbeon -f      # 데몬 로그
 5초 점검, 에이전트 프로세스 트리가 CPU 2% 이상(60초 평균, 리눅스에는 `caffeinate` 신호가 없음)이면 투입,
 유예 시간 뒤 교대.
 
+### 트레이 아이콘
+
+`bulchimbeon tray` 는 데스크톱 패널에 이등병을 세웁니다. 맥 메뉴바와 같은 자세로 같은 속도로 움직입니다: 데몬이 꺼져
+있으면 취침, 에이전트를 기다리면 두리번, 근무 중이면 손전등, 전투휴식이면 땀 뻘뻘. 마우스를 올리면 상태 한 줄이 보입니다.
+메뉴에는 `bulchimbeon status` 의 줄(근무, 잠금, 이유, 에이전트, 교대), `uniformTheme` 을 바꾸는 **🧥 군복** 선택,
+그리고 **트레이 아이콘 닫기**가 있습니다. 닫아도 아이콘만 사라지고 데몬은 계속 근무합니다.
+
+`.deb` 는 XDG 자동 시작 항목 `/etc/xdg/autostart/bulchimbeon-tray.desktop` 으로 데스크톱에 로그인할 때마다 띄웁니다.
+`install-linux.sh` 는 같은 항목을 `~/.config/autostart/` 에 둡니다. Homebrew 로 깔았다면 데스크톱의 시작 프로그램에
+`bulchimbeon tray` 를 추가하세요. 보여줄 곳이 없거나 (SSH, 헤드리스 기기, 트레이가 없는 데스크톱) 데몬을 한 번도 켜지 않은 사용자라면
+한 줄만 남기고 끝납니다.
+
+KDE·XFCE·GNOME AppIndicator 확장이 쓰는 트레이 규격 StatusNotifierItem 입니다:
+
+| 데스크톱 | 필요한 것 |
+|---|---|
+| XFCE 4.16 이상 | 패널의 **상태 트레이(Status Tray)** 항목 (`systray`, 기본 패널에 있음) |
+| XFCE 4.14 이하 | 패널 항목 `xfce4-statusnotifier-plugin` |
+| GNOME | AppIndicator 확장 (`gnome-shell-extension-appindicator`, 우분투는 기본으로 켜져 있음) |
+| KDE Plasma | 없음 |
+
+```bash
+bulchimbeon tray &                          # 지금 이 데스크톱 세션에 띄우기
+bulchimbeon tray --lang ko                  # 언어 설정과 관계없이 한국어 메뉴 (ko | en | zh)
+bulchimbeon config set uniformTheme navy    # default | navy | arctic | desert: 군복 메뉴와 같음
+```
+
+로그인할 때 띄우지 않으려면 데스크톱의 세션·시작 프로그램 설정에서 끄거나 자동 시작 파일을 지우세요.
+
 ### 리눅스에서의 동작
 
 | | 리눅스 |
@@ -267,7 +296,7 @@ journalctl --user -u bulchimbeon -f      # 데몬 로그
   `/etc/polkit-1/rules.d/50-bulchimbeon.rules` (root 소유, `0644`)로 저장하세요. `bulchimbeon doctor` 가 이름을 채워 출력합니다.
   `org.freedesktop.login1.inhibit-block-sleep` 하나만 허용하며, 파일을 지우면 원래대로 돌아갑니다. 불침번이 대신 실행하지 않습니다.
   데스크톱으로 로그인하는 노트북에서는 필요 없습니다.
-- 리눅스에는 "화면은 꺼져도 깨어 있음" 근무 형태만 있고(`dutyMode` 무시), 트레이 아이콘이 없어 알림은 저널로 갑니다.
+- 리눅스에는 "화면은 꺼져도 깨어 있음" 근무 형태만 있고(`dutyMode` 무시), 순찰 모드는 없으며, 알림은 저널로 갑니다.
 - Windows 는 계획 중입니다: 플랫폼 계층은 [`internal/platform`](internal/platform).
 
 ## 보안

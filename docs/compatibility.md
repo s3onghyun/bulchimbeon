@@ -22,7 +22,7 @@
 | `customAgents` | 문자열 배열 | 실행 파일 이름 | 없음 | (메뉴 없음) |
 | `patrolEnabled` | 불리언 | `true` · `false` | `true` | 🚶 순찰 모드 |
 | `patrolScale` | 정수 | `2` · `3` | `2` | 이등병 크기 |
-| `uniformTheme` | 문자열 | `default` · `navy` · `arctic` (테마 id) | `default` | 🧥 군복 |
+| `uniformTheme` | 문자열 | `default` · `navy` · `arctic` · `desert` (테마 id) | `default` | 🧥 군복 |
 
 ```bash
 defaults write io.github.s3onghyun.bulchimbeon customAgents -array goose amp
@@ -43,8 +43,9 @@ defaults write io.github.s3onghyun.bulchimbeon agentGraceMinutes -int 10
 | 위치 | `$XDG_CONFIG_HOME/bulchimbeon/settings.json` (기본 `~/.config/bulchimbeon/settings.json`) |
 | 바꾸기 | `bulchimbeon config set <키> <값>...` · `config get <키>` · `config unset <키>` · `config list` |
 | 적용되는 키 | `batteryFloor`, `agentGraceMinutes`, `agentWatchCountsIdle`, `customAgents`. 데몬이 5초마다 다시 읽는다 |
+| `uniformTheme` | 트레이 아이콘(`bulchimbeon tray`)의 군복. 트레이의 🧥 군복 메뉴도 이 키를 쓰고, 트레이가 1초마다 다시 읽는다 |
 | `dutyMode` | 저장은 되지만 리눅스 v0.1 은 항상 `system` 으로 근무한다 |
-| `patrolEnabled`, `patrolScale`, `uniformTheme` | macOS 전용. `config set` 이 거부한다 |
+| `patrolEnabled`, `patrolScale` | macOS 전용. `config set` 이 거부한다 |
 | `language` | 리눅스 전용 (`AppleLanguages` 대신): `system`(기본, `LANGUAGE`·`LC_ALL`·`LC_MESSAGES`·`LANG` 을 따름) · `ko` · `en` · `zh` (중국어 간체) |
 
 ```bash
@@ -83,8 +84,10 @@ bulchimbeon config set agentGraceMinutes 10
 | `bulchimbeon status` | 지금 깨워 두는 중인지와 이유. 데몬이 돌지 않으면 종료 코드 `3` |
 | `bulchimbeon doctor` | systemd·logind·polkit 점검 |
 | `bulchimbeon config` | 위 리눅스 설정 |
+| `bulchimbeon tray` | 데스크톱 패널의 트레이 아이콘 (StatusNotifierItem). 트레이 호스트나 세션 버스가 없거나 데몬을 한 번도 돌리지 않은 사용자면 한 줄 남기고 종료 코드 `0`. 데몬과 따로 돌며, 없어도 근무는 그대로 |
 
-`status`·`doctor` 의 **출력 내용은 사람이 읽는 용도이며 형식은 약속하지 않는다.**
+`status`·`doctor` 의 **출력 내용은 사람이 읽는 용도이며 형식은 약속하지 않는다.** 트레이의 메뉴 구성·문구·아이콘도 약속하지 않는다.
+자동 시작 항목의 위치(`/etc/xdg/autostart/bulchimbeon-tray.desktop`, `~/.config/autostart/bulchimbeon-tray.desktop`)는 지킨다.
 환경 변수 `BULCHIMBEON_DEBUG=1` 의 출력도 디버깅용이라 형식을 약속하지 않는다.
 
 ## 3. 근무일지
