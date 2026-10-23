@@ -364,6 +364,8 @@ func show(s settings.Settings, key string) string {
 		return s.UniformTheme
 	case settings.KeyLanguage:
 		return s.Language
+	case settings.KeyXfceKeepAwake:
+		return fmt.Sprint(s.XfceKeepAwake)
 	}
 	return ""
 }
