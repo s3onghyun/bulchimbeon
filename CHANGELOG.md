@@ -5,6 +5,8 @@
 
 ## 다음 버전
 
+## 0.8.0 — 2026-10-23
+
 - 리눅스 트레이 아이콘: `bulchimbeon tray` 가 데스크톱 패널(XFCE 상태 트레이, KDE, GNOME AppIndicator 확장)에 이등병을 맥 메뉴바와 같은 자세·속도로 띄운다. 메뉴에는 `bulchimbeon status` 의 모든 줄(같은 순서), **🧥 군복** 선택, 트레이 닫기(데몬은 계속 근무)가 있다. `.deb` 는 `/etc/xdg/autostart`, `install-linux.sh` 는 `~/.config/autostart` 에 자동 시작 항목을 둔다. 세션 버스나 트레이 호스트가 없거나 데몬을 한 번도 켜지 않은 사용자면 한 줄만 남기고 끝나므로 SSH·헤드리스 기기에서도 그대로다
 - 리눅스 설정: `uniformTheme` 을 리눅스에서도 쓴다 (`bulchimbeon config set uniformTheme navy`, 트레이의 군복 메뉴). 전에는 macOS 전용이라 `config set` 이 거부했다
 - 스프라이트 공유 픽스처 `testdata/engine/sprites.json`: Swift Core 가 모든 군복·포즈의 프레임과 색을 내보내고, 리눅스 트레이가 같은 파일로 그린다
