@@ -292,7 +292,7 @@ bulchimbeon config set uniformTheme navy    # default | navy | arctic | desert: 
 |---|---|---|
 | GNOME (Ubuntu, Fedora), Cinnamon, MATE, Budgie | `org.gnome.SessionManager.Inhibit`, 절전 플래그만 | 화면이 어두워지고 잠김, 메뉴로 내가 하는 절전. GNOME 46 (Ubuntu 24.04)은 절전 억제가 있으면 자기 logind block 잠금도 잡아서, 터미널의 `systemctl suspend` 는 `-i` 를 요구합니다 |
 | KDE Plasma | `org.freedesktop.PowerManagement.Inhibit` (PowerDevil 은 자동 절전에만 적용) | 화면 어두워짐·꺼짐·잠금, 수동 절전 |
-| XFCE | 기본은 데스크톱이 없을 때처럼 logind `sleep` inhibitor. systemd 256 이하에서는 xfce4-power-manager 의 자동 절전을 **막지 못합니다**. `bulchimbeon config set xfceKeepAwake true` 로 `org.freedesktop.PowerManagement.Inhibit` 를 씀 | 화면 꺼짐·잠금, 수동 절전. `xfceKeepAwake` 를 켜면 자동 절전도 막지만, XFCE 전원 관리자는 어떤 억제든 프레젠테이션 모드처럼 다뤄서 근무 중에는 화면이 켜진 채 잠기지 않습니다 |
+| XFCE | 기본은 데스크톱이 없을 때처럼 logind `sleep` inhibitor. systemd 버전과 상관없이 xfce4-power-manager 의 자동 절전을 **막지 못합니다** (`block`·`block-weak` 모두 내 사용자의 절전 요청은 통과시킴). `bulchimbeon config set xfceKeepAwake true` 로 `org.freedesktop.PowerManagement.Inhibit` 를 씀 | 화면 꺼짐·잠금, 수동 절전. `xfceKeepAwake` 를 켜면 자동 절전도 막지만, XFCE 전원 관리자는 어떤 억제든 프레젠테이션 모드처럼 다뤄서 근무 중에는 화면이 켜진 채 잠기지 않습니다 |
 | 데스크톱 없음: 헤드리스, SSH 만, sway, Hyprland 등 컴포지터 | logind `sleep` inhibitor. systemd 257 이상은 `block-weak`, 256 이하는 `block`. 파이프에 묶인 `systemd-inhibit` 자식이 쥠 | 내가 하는 절전. logind 의 `IdleAction` 과 다른 사용자의 절전 요청은 막습니다. systemd 256 이하에서는 터미널의 `systemctl suspend` 가 `-i` 를 요구합니다 |
 
 logind 만 쓰지 않는 이유: systemd 256 이하(Ubuntu 24.04, Debian 12)의 logind 는 잠금을 쥔 사용자 본인의 요청에는
@@ -320,7 +320,7 @@ systemd 257 이상에서는 logind `block` 잠금이 이를 막지만, 내가 �
   (`swayidle`, `hypridle` 이 실행하는 `systemctl suspend`)은 막지 못합니다. logind 가 본인의 절전은 통과시키기 때문입니다.
   그렇다고 idle 잠금을 잡으면 이 컴포지터들에서는 화면 잠금까지 멈추므로 잡지 않습니다.
 - **XFCE 에서는 기본적으로 자동 절전을 막지 않습니다.** xfce4-power-manager 는 어떤 절전 억제든 프레젠테이션 모드처럼
-  다뤄 화면을 켜 두고 잠그지 않으므로, 불침번은 화면 잠금을 건드리지 않고 logind 잠금만 쥡니다. systemd 256 이하에서는
+  다뤄 화면을 켜 두고 잠그지 않으므로, 불침번은 화면 잠금을 건드리지 않고 logind 잠금만 쥡니다. systemd 버전과 상관없이
   xfce4-power-manager 의 자동 절전이 이 잠금을 통과합니다. `bulchimbeon status` 와 `doctor` 가 그렇게 알립니다.
   근무 중 화면이 켜진 채 잠기지 않는 것을 감수하고 막으려면 `bulchimbeon config set xfceKeepAwake true`.
 - **데스크톱 억제는 내 세션만 지킵니다.** 같은 기기의 다른 사용자 세션(빠른 사용자 전환)은 여전히 기기를 재울 수

@@ -279,7 +279,7 @@ To stop it starting at login, turn it off in your desktop's session and startup 
 |---|---|---|
 | GNOME (Ubuntu, Fedora), Cinnamon, MATE, Budgie | `org.gnome.SessionManager.Inhibit` with the suspend flag only | the screen dims and locks; your own suspend from the menu. GNOME 46 (Ubuntu 24.04) backs any suspend inhibitor with a logind block lock of its own, so `systemctl suspend` in a terminal asks for `-i` |
 | KDE Plasma | `org.freedesktop.PowerManagement.Inhibit`, which PowerDevil applies to automatic suspend only | the screen dims, turns off and locks; manual suspend |
-| XFCE | by default a logind `sleep` inhibitor, as without a desktop, which does **not** stop xfce4-power-manager's automatic suspend on systemd 256 and older. `bulchimbeon config set xfceKeepAwake true` switches to `org.freedesktop.PowerManagement.Inhibit` | the screen blanks and locks; manual suspend. With `xfceKeepAwake`, automatic suspend is blocked too, but XFCE's power manager treats any inhibitor like presentation mode, so the screen then stays on and unlocked while on duty |
+| XFCE | by default a logind `sleep` inhibitor, as without a desktop, which does **not** stop xfce4-power-manager's automatic suspend on any systemd version (`block` and `block-weak` both let your own user's suspend through). `bulchimbeon config set xfceKeepAwake true` switches to `org.freedesktop.PowerManagement.Inhibit` | the screen blanks and locks; manual suspend. With `xfceKeepAwake`, automatic suspend is blocked too, but XFCE's power manager treats any inhibitor like presentation mode, so the screen then stays on and unlocked while on duty |
 | No desktop: headless, SSH only, sway, Hyprland, other compositors | a logind `sleep` inhibitor, `block-weak` on systemd 257 and later, `block` on 256 and older, held by a `systemd-inhibit` child tied to a pipe | your own suspend. It stops logind's `IdleAction` and other users' suspend requests. On systemd 256 and older, `systemctl suspend` in a terminal asks for `-i` |
 
 Why not logind everywhere: on systemd 256 and older (Ubuntu 24.04, Debian 12) logind ignores a block inhibitor
@@ -322,7 +322,7 @@ back to logind. The desktop drops its inhibitor when the daemon's bus connection
   screen from locking.
 - **On XFCE, automatic suspend is not blocked by default.** xfce4-power-manager treats any suspend inhibitor like
   presentation mode and keeps the screen on and unlocked, so Bulchimbeon leaves the screen lock alone and holds only
-  the logind lock, which xfce4-power-manager's own suspend gets past on systemd 256 and older. `bulchimbeon status`
+  the logind lock, which xfce4-power-manager's own suspend gets past on any systemd version. `bulchimbeon status`
   and `doctor` say so. To block it anyway, accepting that the screen stays on and unlocked while on duty:
   `bulchimbeon config set xfceKeepAwake true`.
 - **The desktop inhibitor covers your own session.** Another user's session on the same machine (fast user switching)
