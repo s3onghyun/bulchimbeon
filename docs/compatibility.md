@@ -47,6 +47,7 @@ defaults write io.github.s3onghyun.bulchimbeon agentGraceMinutes -int 10
 | `dutyMode` | 저장은 되지만 리눅스 v0.1 은 항상 `system` 으로 근무한다 |
 | `patrolEnabled`, `patrolScale` | macOS 전용. `config set` 이 거부한다 |
 | `language` | 리눅스 전용 (`AppleLanguages` 대신): `system`(기본, `LANGUAGE`·`LC_ALL`·`LC_MESSAGES`·`LANG` 을 따름) · `ko` · `en` · `zh` (중국어 간체) |
+| `xfceKeepAwake` | 리눅스 전용, `true`·`false`(기본). `true` 면 XFCE 에서 근무 중 `org.freedesktop.PowerManagement` 절전 억제를 잡아 자동 절전을 막는다. 대신 xfce4-power-manager 가 화면을 켜 두고 잠그지 않는다. 데몬이 5초마다 다시 읽는다 |
 
 ```bash
 bulchimbeon config set customAgents goose amp

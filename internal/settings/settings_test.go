@@ -29,6 +29,7 @@ func TestSetUnsetRoundTrip(t *testing.T) {
 		{"customAgents", []string{"goose", "amp"}},
 		{"uniformTheme", []string{"desert"}},
 		{"language", []string{"ko"}},
+		{"xfceKeepAwake", []string{"true"}},
 		{"dutyMode", []string{"system"}},
 	} {
 		if err := Set(path, c.key, c.values); err != nil {
@@ -37,7 +38,7 @@ func TestSetUnsetRoundTrip(t *testing.T) {
 	}
 	s, problems, err := Load(path)
 	want := Settings{DutyMode: "system", BatteryFloor: 0, AgentGraceMinutes: 10, AgentWatchCountsIdle: true,
-		CustomAgents: []string{"goose", "amp"}, UniformTheme: "desert", Language: "ko"}
+		CustomAgents: []string{"goose", "amp"}, UniformTheme: "desert", Language: "ko", XfceKeepAwake: true}
 	if err != nil || len(problems) != 0 || !reflect.DeepEqual(s, want) {
 		t.Fatalf("Load = %+v, %v, %v", s, problems, err)
 	}
@@ -75,6 +76,7 @@ func TestSetRejectsValuesOutsideThePromise(t *testing.T) {
 		{"customAgents", []string{"../../etc"}, "invalid agent name"},
 		{"customAgents", []string{"goose\n"}, "invalid agent name"},
 		{"language", []string{"ja"}, "system, ko, en or zh"},
+		{"xfceKeepAwake", []string{"on"}, "true or false"},
 		{"dutyMode", []string{"hybrid"}, "display, system or lid"},
 		{"patrolScale", []string{"2"}, "macOS app"},
 		{"uniformTheme", []string{"camo"}, "default, navy, arctic or desert"},

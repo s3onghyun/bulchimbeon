@@ -243,6 +243,7 @@ func TestLockUsesFreedesktopOnKDEAndXFCE(t *testing.T) {
 		session := newFakeSession(owners)
 		session.kde = desktop == "kde"
 		l, _ := newTestLock(t, session)
+		l.SetXfceKeepAwake(true)
 		l.Acquire()
 		st := l.Status()
 		if st.Method != platform.MethodFreedesktop || st.Desktop != desktop || !st.Complete() || logindHeld(l) {
@@ -290,6 +291,53 @@ func TestLockFallsBackToLogind(t *testing.T) {
 	l.Acquire()
 	if st := l.Status(); st.Fallback != platform.FallbackRefused || !strings.Contains(st.Detail, "not running") || !logindHeld(l) {
 		t.Fatalf("both refused: %+v", st)
+	}
+}
+
+// On XFCE the session's inhibitor also keeps the screen on and unlocked, so it is taken only
+// with xfceKeepAwake; without it logind holds the lock and the status says why. Changing the
+// setting on duty moves the lock at the next Refresh.
+func TestLockXfceKeepAwake(t *testing.T) {
+	session := newFakeSession(map[string]string{fdoName: ":1.30", "org.xfce.PowerManager": ":1.30"})
+	l, _ := newTestLock(t, session)
+	l.Acquire()
+	if st := l.Status(); st.Method != platform.MethodLogind || st.Fallback != platform.FallbackXfce || !st.Complete() || !logindHeld(l) {
+		t.Fatalf("off: status = %+v", st)
+	}
+	if held := session.held(); len(held) != 0 {
+		t.Fatalf("off: inhibitors = %+v", held)
+	}
+	if !strings.Contains(platform.FallbackText(l.Status(), engine.EN), "config set xfceKeepAwake true") {
+		t.Errorf("off: no opt-in hint in %q", platform.FallbackText(l.Status(), engine.EN))
+	}
+
+	l.SetXfceKeepAwake(true)
+	if lost := l.Refresh(); lost {
+		t.Error("opting in was reported as a lost lock")
+	}
+	if st := l.Status(); st.Method != platform.MethodFreedesktop || st.Desktop != "xfce" || st.Fallback != "" || logindHeld(l) {
+		t.Fatalf("on: status = %+v", st)
+	}
+	if held := session.held(); len(held) != 1 || held[0].service != fdoName {
+		t.Fatalf("on: inhibitors = %+v", held)
+	}
+
+	l.SetXfceKeepAwake(false)
+	if lost := l.Refresh(); lost {
+		t.Error("opting out was reported as a lost lock")
+	}
+	if st := l.Status(); st.Method != platform.MethodLogind || st.Fallback != platform.FallbackXfce || !logindHeld(l) {
+		t.Fatalf("off again: status = %+v", st)
+	}
+	if held := session.held(); len(held) != 0 {
+		t.Fatalf("off again: the XFCE inhibitor was kept: %+v", held)
+	}
+
+	l.Release()
+	l.SetXfceKeepAwake(true)
+	l.Acquire()
+	if st := l.Status(); st.Method != platform.MethodFreedesktop || st.Desktop != "xfce" || logindHeld(l) {
+		t.Fatalf("on from the start: status = %+v", st)
 	}
 }
 
@@ -459,11 +507,14 @@ func TestLockIsAClientOnly(t *testing.T) {
 // doctor's check takes and drops the inhibitor the daemon would take.
 func TestTryDesktop(t *testing.T) {
 	session := newFakeSession(map[string]string{fdoName: ":1.30", "org.xfce.PowerManager": ":1.30"})
-	st := tryDesktop(session.dial)
+	st := tryDesktop(session.dial, true)
 	if st.Method != platform.MethodFreedesktop || st.Desktop != "xfce" || len(session.held()) != 0 || !session.conns[0].isClosed() {
 		t.Fatalf("status = %+v, held = %+v", st, session.held())
 	}
-	if st := tryDesktop(newFakeSession(map[string]string{}).dial); st.OnDesktop() || st.Fallback != platform.FallbackNoDesktop {
+	if st := tryDesktop(session.dial, false); st.OnDesktop() || st.Fallback != platform.FallbackXfce || len(session.held()) != 0 || !session.conns[1].isClosed() {
+		t.Errorf("XFCE without xfceKeepAwake: %+v", st)
+	}
+	if st := tryDesktop(newFakeSession(map[string]string{}).dial, false); st.OnDesktop() || st.Fallback != platform.FallbackNoDesktop {
 		t.Errorf("no desktop: %+v", st)
 	}
 }
@@ -474,7 +525,7 @@ func TestLockAgainstThisSession(t *testing.T) {
 	if os.Getenv("BULCHIMBEON_TEST_DESKTOP") != "1" {
 		t.Skip("set BULCHIMBEON_TEST_DESKTOP=1 to take this desktop session's inhibitor")
 	}
-	st := tryDesktop(DialSessionBus)
+	st := tryDesktop(DialSessionBus, true)
 	t.Logf("status: %+v", st)
 	if !st.OnDesktop() {
 		t.Fatalf("no desktop inhibitor: %s", platform.FallbackText(st, engine.EN))

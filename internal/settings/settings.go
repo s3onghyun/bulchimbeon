@@ -24,6 +24,10 @@ import (
 // "system" (or unset) follows LANGUAGE/LC_*/LANG.
 const KeyLanguage = "language"
 
+// KeyXfceKeepAwake lets the daemon hold XFCE's suspend inhibitor on duty. Off by default,
+// because xfce4-power-manager then also keeps the screen on and unlocked.
+const KeyXfceKeepAwake = "xfceKeepAwake"
+
 // Settings are the effective values. Invalid stored values fall back to the defaults,
 // as on macOS.
 type Settings struct {
@@ -34,6 +38,7 @@ type Settings struct {
 	CustomAgents         []string `json:"customAgents"`
 	UniformTheme         string   `json:"uniformTheme"`
 	Language             string   `json:"language"`
+	XfceKeepAwake        bool     `json:"xfceKeepAwake"`
 }
 
 // Defaults are the documented defaults.
@@ -45,7 +50,7 @@ func Defaults() Settings {
 
 // Keys that `config set` accepts, in display order.
 var Keys = []string{engine.KeyDutyMode, engine.KeyBatteryFloor, engine.KeyAgentGraceMinutes,
-	engine.KeyAgentWatchCountsIdle, engine.KeyCustomAgents, engine.KeyUniformTheme, KeyLanguage}
+	engine.KeyAgentWatchCountsIdle, engine.KeyCustomAgents, engine.KeyUniformTheme, KeyLanguage, KeyXfceKeepAwake}
 
 // macOSOnly are public keys with no meaning outside the macOS app.
 var macOSOnly = []string{engine.KeyPatrolEnabled, engine.KeyPatrolScale}
@@ -115,6 +120,12 @@ func apply(s *Settings, key string, value json.RawMessage) error {
 			return errors.New("expected system, ko, en or zh")
 		}
 		s.Language = v
+	case KeyXfceKeepAwake:
+		var v bool
+		if json.Unmarshal(value, &v) != nil {
+			return errors.New("expected true or false")
+		}
+		s.XfceKeepAwake = v
 	case engine.KeyPatrolEnabled, engine.KeyPatrolScale:
 		// macOS only; kept in the file, ignored here
 	default:
@@ -166,7 +177,7 @@ func Parse(key string, values []string) (json.RawMessage, error) {
 			return nil, fmt.Errorf("%s must be a number", key)
 		}
 		raw, _ = json.Marshal(n)
-	case engine.KeyAgentWatchCountsIdle:
+	case engine.KeyAgentWatchCountsIdle, KeyXfceKeepAwake:
 		b, err := strconv.ParseBool(v)
 		if err != nil || (v != "true" && v != "false") {
 			return nil, fmt.Errorf("%s must be true or false", key)

@@ -5,9 +5,10 @@
 
 ## 다음 버전
 
-- 리눅스 잠금 수정: 데스크톱 세션이 있으면 그 데스크톱의 절전 억제로 자동 절전을 막는다. GNOME·Cinnamon·MATE·Budgie 는 `org.gnome.SessionManager.Inhibit`(절전 플래그 4 만), KDE·XFCE 는 `org.freedesktop.PowerManagement.Inhibit`. 지금까지 잡던 logind 잠금은 systemd 256 이하(Ubuntu 24.04, Debian 12)에서 잠금을 쥔 사용자 본인의 요청에는 무시되고, gsd-power·xfce4-power-manager·csd-power 는 사용자로 절전을 요청하므로, GNOME·XFCE·Cinnamon 에서는 근무 중에도 자동 절전이 일어났다 (Ubuntu 24.04 GNOME 에서 실측)
+- 리눅스 잠금 수정: 데스크톱 세션이 있으면 그 데스크톱의 절전 억제로 자동 절전을 막는다. GNOME·Cinnamon·MATE·Budgie 는 `org.gnome.SessionManager.Inhibit`(절전 플래그 4 만), KDE 는 `org.freedesktop.PowerManagement.Inhibit`. 지금까지 잡던 logind 잠금은 systemd 256 이하(Ubuntu 24.04, Debian 12)에서 잠금을 쥔 사용자 본인의 요청에는 무시되고, gsd-power·xfce4-power-manager·csd-power 는 사용자로 절전을 요청하므로, GNOME·XFCE·Cinnamon 에서는 근무 중에도 자동 절전이 일어났다 (Ubuntu 24.04 GNOME 에서 실측)
 - 리눅스 잠금: 데스크톱이 없으면(헤드리스·SSH·sway·Hyprland) logind `sleep` 잠금을 systemd 257 이상에서는 `block-weak` 로 잡아, 내가 하는 절전(메뉴, `systemctl suspend`)은 그대로 된다. 256 이하는 지금처럼 `block`
-- 리눅스 잠금: `idle` 잠금을 더는 잡지 않는다. KDE·swayidle·hypridle 에서도 화면이 설정대로 어두워지고 잠긴다 (화면은 꺼져도 깨어 있음). 대신 sway·Hyprland 에서 idle 데몬이 사용자로 실행하는 자동 절전은 막지 못하고, XFCE 전원 관리자는 절전 억제가 있는 동안 화면 꺼짐·잠금도 미룬다
+- 리눅스 잠금: `idle` 잠금을 더는 잡지 않는다. KDE·swayidle·hypridle 에서도 화면이 설정대로 어두워지고 잠긴다 (화면은 꺼져도 깨어 있음). 대신 sway·Hyprland 에서 idle 데몬이 사용자로 실행하는 자동 절전은 막지 못한다
+- 리눅스 잠금: XFCE 에서는 화면 잠금을 지키려고 기본적으로 데스크톱 절전 억제를 잡지 않는다 (xfce4-power-manager 는 어떤 억제든 프레젠테이션 모드처럼 다뤄 화면을 켜 두고 잠그지 않는다). 그래서 systemd 256 이하에서는 자동 절전을 막지 못하고, `status`·`doctor` 가 그렇게 알린다. 새 리눅스 설정 `xfceKeepAwake`(기본 `false`)를 `bulchimbeon config set xfceKeepAwake true` 로 켜면 `org.freedesktop.PowerManagement.Inhibit` 로 자동 절전을 막는 대신, 근무 중에는 화면이 켜진 채 잠기지 않는다
 - 리눅스 잠금: 근무 중에 데스크톱에 로그인·로그아웃하면 다음 점검(5초) 안에 잠금이 데스크톱과 logind 사이를 옮겨 가고, 근무지 이탈로 기록하지 않는다. 데몬이 죽으면 세션 버스 연결과 함께 데스크톱 억제도 풀린다. 데몬은 세션 버스에 클라이언트로만 붙는다 (이름·객체 없음)
 - `bulchimbeon status`·`doctor`: 어떤 방법(데스크톱 인터페이스, 또는 logind 와 모드)으로 잠금을 쥐었는지, 왜 logind 인지 보여준다. `doctor` 는 세션 버스의 데스크톱 절전 억제도 시험하고, 지금 쓸 잠금을 잡을 수 있으면 성공으로 끝난다
 - 리눅스 트레이: 근무 중(전투휴식 포함)이 아니면 StatusNotifierItem 상태를 `Passive` 로 내려, KDE 는 대기·취침 중인 이등병을 트레이 넘침 영역에 둔다. 근무에 들어가면 `Active` 로 패널에 다시 보인다

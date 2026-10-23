@@ -294,7 +294,7 @@ func doctorCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	s := loadSettings(p, stderr)
 	lang := f.langFor(s)
-	ok := plat.Doctor(stdout, lang)
+	ok := plat.Doctor(stdout, lang, s.XfceKeepAwake)
 	fmt.Fprintln(stdout, "  - "+engine.T(lang, "설정: ", "settings: ", "设置：")+daemon.Tilde(p.Settings, home))
 	fmt.Fprintln(stdout, "  - "+engine.T(lang, "근무일지: ", "duty log: ", "值班日志：")+daemon.Tilde(p.Log, home))
 	if !ok {

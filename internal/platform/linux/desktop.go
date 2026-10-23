@@ -142,7 +142,9 @@ type desktopHold struct {
 // Lock is the Linux sleep lock (platform.Inhibitor). On duty it holds the desktop session's
 // suspend inhibitor when the session bus serves one, and a logind "sleep" lock otherwise:
 // headless, SSH-only, or a desktop without either interface (sway, Hyprland). It holds no idle
-// lock, so the screen dims and locks as the user set it ("Display may sleep").
+// lock, so the screen dims and locks as the user set it ("Display may sleep"). On XFCE it takes
+// the session's inhibitor only with xfceKeepAwake, because xfce4-power-manager then also keeps the
+// screen on and unlocked; without it logind holds the lock.
 //
 // The daemon is a systemd user service, so the session bus is the user bus that the user's
 // desktop sessions share; a desktop that starts or ends while the daemon is on duty is noticed
@@ -155,6 +157,7 @@ type Lock struct {
 
 	mu       sync.Mutex
 	wanted   bool
+	xfce     bool // xfceKeepAwake
 	bus      Bus
 	dialedAt time.Time
 	held     *desktopHold
@@ -183,8 +186,8 @@ func DialSessionBus() (Bus, error) {
 
 // tryDesktop takes a desktop inhibitor and drops it again, as the daemon would take it now
 // (doctor's check). The status names the method, or says why there is none.
-func tryDesktop(dial func() (Bus, error)) platform.LockStatus {
-	l := &Lock{Dial: dial, Now: time.Now, wanted: true}
+func tryDesktop(dial func() (Bus, error), xfceKeepAwake bool) platform.LockStatus {
+	l := &Lock{Dial: dial, Now: time.Now, wanted: true, xfce: xfceKeepAwake}
 	if !l.takeDesktop(true) {
 		if l.bus != nil {
 			l.bus.Close()
@@ -196,6 +199,14 @@ func tryDesktop(dial func() (Bus, error)) platform.LockStatus {
 	l.bus.Close()
 	return platform.LockStatus{Wanted: true, Method: h.api.method, Desktop: h.desktop,
 		Blocks: []platform.Block{{What: "sleep", Held: true, Confirmed: h.confirmed}}}
+}
+
+// SetXfceKeepAwake sets whether the lock may take XFCE's inhibitor. On duty the next Refresh
+// moves the lock to match.
+func (l *Lock) SetXfceKeepAwake(on bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.xfce = on
 }
 
 // Acquire implements platform.Inhibitor.
@@ -237,9 +248,22 @@ func (l *Lock) takeDesktop(dial bool) bool {
 		go drain(bus)
 	}
 	var refused []string
+	skippedXfce := false
 	for _, api := range desktopAPIs {
 		owner, err := nameOwner(l.bus, api.name)
 		if err != nil || owner == "" {
+			continue
+		}
+		desktop := ""
+		if api.method == platform.MethodFreedesktop {
+			for name, d := range freedesktopOwners {
+				if o, err := nameOwner(l.bus, name); err == nil && o == owner {
+					desktop = d
+				}
+			}
+		}
+		if desktop == "xfce" && !l.xfce {
+			skippedXfce = true
 			continue
 		}
 		cookie, err := api.inhibit(l.bus)
@@ -247,19 +271,14 @@ func (l *Lock) takeDesktop(dial bool) bool {
 			refused = append(refused, api.name+": "+err.Error())
 			continue
 		}
-		h := &desktopHold{api: api, owner: owner, cookie: cookie}
+		h := &desktopHold{api: api, owner: owner, cookie: cookie, desktop: desktop}
 		h.confirmed, _ = api.blocked(l.bus)
-		if api.method == platform.MethodFreedesktop {
-			for name, desktop := range freedesktopOwners {
-				if o, err := nameOwner(l.bus, name); err == nil && o == owner {
-					h.desktop = desktop
-				}
-			}
-		}
 		l.held, l.fallback, l.detail = h, "", ""
 		return true
 	}
-	if len(refused) > 0 {
+	if skippedXfce {
+		l.fallback, l.detail = platform.FallbackXfce, ""
+	} else if len(refused) > 0 {
 		l.fallback, l.detail = platform.FallbackRefused, strings.Join(refused, "; ")
 	} else {
 		l.fallback, l.detail = platform.FallbackNoDesktop, ""
@@ -321,11 +340,16 @@ func (l *Lock) Refresh() (lost bool) {
 		return false
 	}
 	if h := l.held; h != nil {
-		if l.stillHeld(h) {
+		optedOut := h.desktop == "xfce" && !l.xfce
+		if !optedOut && l.stillHeld(h) {
 			return false
 		}
+		bus := l.bus
 		l.held = nil
 		l.acquire(true)
+		if optedOut && bus != nil && !closed(bus) {
+			h.api.uninhibit(bus, h.cookie)
+		}
 		return false
 	}
 	if l.takeDesktop(false) {

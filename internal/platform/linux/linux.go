@@ -19,14 +19,16 @@ import (
 // New returns the Linux backend.
 func New() platform.Platform {
 	logind := NewLogind()
+	lock := NewLock(NewSystemdInhibitor(logind))
 	return platform.Platform{
-		Name:      "linux",
-		Processes: NewProcScanner(),
-		Inhibitor: NewLock(NewSystemdInhibitor(logind)),
-		Battery:   NewPowerSupply(),
-		Thermal:   NewThermal(),
-		Holders:   logind,
-		Doctor:    Doctor,
+		Name:             "linux",
+		Processes:        NewProcScanner(),
+		Inhibitor:        lock,
+		Battery:          NewPowerSupply(),
+		Thermal:          NewThermal(),
+		Holders:          logind,
+		SetXfceKeepAwake: lock.SetXfceKeepAwake,
+		Doctor:           Doctor,
 	}
 }
 
@@ -54,7 +56,7 @@ polkit.addRule(function (action, subject) {
 // Doctor checks what Bulchimbeon needs on this machine. It only reads and tries short
 // inhibitors; it never changes the system. It reports false if the lock it would take now cannot
 // work: the desktop's suspend inhibitor with a desktop session, logind's sleep block without one.
-func Doctor(w io.Writer, lang engine.Lang) bool {
+func Doctor(w io.Writer, lang engine.Lang, xfceKeepAwake bool) bool {
 	t := func(ko, en, zh string) string { return engine.T(lang, ko, en, zh) }
 	ok := true
 	mark := func(good bool, text string) {
@@ -81,13 +83,15 @@ func Doctor(w io.Writer, lang engine.Lang) bool {
 	}
 
 	// With a desktop session, its own suspend inhibitor is the lock; logind's only without one.
-	desktop := tryDesktop(DialSessionBus)
+	desktop := tryDesktop(DialSessionBus, xfceKeepAwake)
 	onDesktop := desktop.OnDesktop()
 	switch {
 	case onDesktop:
 		mark(true, t("데스크톱 절전 억제: 가능 — ", "desktop suspend inhibitor: allowed: ", "桌面休眠抑制：已允许：")+platform.MethodText(desktop)+
 			map[string]string{platform.MethodGnome: t(" (GNOME·Cinnamon·MATE·Budgie 의 전원 관리자가 읽음)", " (read by the GNOME, Cinnamon, MATE and Budgie power managers)",
 				"（GNOME、Cinnamon、MATE、Budgie 的电源管理器会读取）")}[desktop.Method])
+	case desktop.Fallback == platform.FallbackXfce:
+		fmt.Fprintln(w, "  - "+t("데스크톱 절전 억제: XFCE — ", "desktop suspend inhibitor: XFCE: ", "桌面休眠抑制：XFCE：")+platform.FallbackText(desktop, lang))
 	case desktop.Fallback == platform.FallbackRefused:
 		mark(false, t("데스크톱 절전 억제: 거부됨 — ", "desktop suspend inhibitor: refused: ", "桌面休眠抑制：被拒绝：")+desktop.Detail)
 	default:

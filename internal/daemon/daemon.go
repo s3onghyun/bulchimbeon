@@ -115,6 +115,9 @@ func (d *Daemon) applySettings() {
 	e.BatteryFloor = d.settings.BatteryFloor
 	e.GraceMinutes = d.settings.AgentGraceMinutes
 	e.CountIdleSessions = d.settings.AgentWatchCountsIdle
+	if set := d.cfg.Platform.SetXfceKeepAwake; set != nil {
+		set(d.settings.XfceKeepAwake)
+	}
 }
 
 // Start begins the agent watch.

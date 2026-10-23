@@ -61,6 +61,7 @@ const (
 	FallbackNoBus     = "no-session-bus"  // the session bus cannot be reached
 	FallbackNoDesktop = "no-desktop"      // nothing on it serves a desktop inhibitor
 	FallbackRefused   = "desktop-refused" // the desktop refused the inhibitor
+	FallbackXfce      = "xfce-opt-in"     // XFCE's inhibitor is off unless xfceKeepAwake is set
 )
 
 // LockStatus is what the inhibitor holds.
@@ -102,6 +103,10 @@ func FallbackText(s LockStatus, lang engine.Lang) string {
 		return t("세션 버스에 데스크톱 없음", "no desktop on the session bus", "会话总线上没有桌面")
 	case FallbackRefused:
 		return t("데스크톱이 거부함: ", "the desktop refused: ", "桌面拒绝：") + s.Detail
+	case FallbackXfce:
+		return t("⚠️ XFCE 에서는 기본적으로 자동 절전을 막지 않습니다 (화면 잠금을 지키려고). 막으려면 `bulchimbeon config set xfceKeepAwake true` — 대신 근무 중에는 화면이 켜진 채 잠기지 않습니다",
+			"⚠️ auto-suspend is not blocked on XFCE by default (to keep the screen lock). To block it: `bulchimbeon config set xfceKeepAwake true`, but the screen then stays on and unlocked while on duty",
+			"⚠️ 在 XFCE 上默认不阻止自动休眠（以保留屏幕锁定）。如需阻止：`bulchimbeon config set xfceKeepAwake true`，但值班时屏幕会保持常亮且不锁定")
 	}
 	return ""
 }
@@ -186,8 +191,10 @@ type Platform struct {
 	Battery   BatterySource
 	Thermal   ThermalSource
 	Holders   HolderSource
+	// SetXfceKeepAwake passes the xfceKeepAwake setting to the inhibitor; nil where it has no meaning.
+	SetXfceKeepAwake func(on bool)
 	// Doctor checks the setup, prints the findings and returns false if something needs fixing.
-	Doctor func(w io.Writer, lang engine.Lang) bool
+	Doctor func(w io.Writer, lang engine.Lang, xfceKeepAwake bool) bool
 }
 
 // HolderSummary groups other programs' locks for display.
