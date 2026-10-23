@@ -1,6 +1,7 @@
 // Package settings is the settings front end outside macOS: a small JSON file with the
 // same public key names and values as the macOS UserDefaults domain (docs/compatibility.md).
-// `bulchimbeon config set` writes it; the daemon re-reads it on every tick.
+// `bulchimbeon config set` and the tray's uniform menu write it; the daemon and the tray
+// re-read it.
 package settings
 
 import (
@@ -16,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/s3onghyun/bulchimbeon/internal/engine"
+	"github.com/s3onghyun/bulchimbeon/internal/sprites"
 )
 
 // KeyLanguage picks the language outside macOS (macOS uses the app's AppleLanguages):
@@ -30,21 +32,23 @@ type Settings struct {
 	AgentGraceMinutes    int      `json:"agentGraceMinutes"`
 	AgentWatchCountsIdle bool     `json:"agentWatchCountsIdle"`
 	CustomAgents         []string `json:"customAgents"`
+	UniformTheme         string   `json:"uniformTheme"`
 	Language             string   `json:"language"`
 }
 
 // Defaults are the documented defaults.
 func Defaults() Settings {
 	return Settings{DutyMode: string(engine.ModeSystem), BatteryFloor: engine.DefaultBatteryFloor,
-		AgentGraceMinutes: engine.DefaultGraceMinutes, CustomAgents: []string{}, Language: "system"}
+		AgentGraceMinutes: engine.DefaultGraceMinutes, CustomAgents: []string{}, UniformTheme: engine.DefaultUniformTheme,
+		Language: "system"}
 }
 
 // Keys that `config set` accepts, in display order.
 var Keys = []string{engine.KeyDutyMode, engine.KeyBatteryFloor, engine.KeyAgentGraceMinutes,
-	engine.KeyAgentWatchCountsIdle, engine.KeyCustomAgents, KeyLanguage}
+	engine.KeyAgentWatchCountsIdle, engine.KeyCustomAgents, engine.KeyUniformTheme, KeyLanguage}
 
 // macOSOnly are public keys with no meaning outside the macOS app.
-var macOSOnly = []string{engine.KeyPatrolEnabled, engine.KeyPatrolScale, engine.KeyUniformTheme}
+var macOSOnly = []string{engine.KeyPatrolEnabled, engine.KeyPatrolScale}
 
 // Load reads the settings file. A missing file means defaults. Problems lists stored
 // values that were ignored.
@@ -99,18 +103,36 @@ func apply(s *Settings, key string, value json.RawMessage) error {
 			return errors.New("expected a list of names")
 		}
 		s.CustomAgents = v // engine.CustomKinds drops invalid names, as on macOS
+	case engine.KeyUniformTheme:
+		var v string
+		if json.Unmarshal(value, &v) != nil || !sprites.Valid(v) {
+			return errors.New("expected " + themeList())
+		}
+		s.UniformTheme = v
 	case KeyLanguage:
 		var v string
 		if json.Unmarshal(value, &v) != nil || !slices.Contains([]string{"system", "ko", "en", "zh"}, v) {
 			return errors.New("expected system, ko, en or zh")
 		}
 		s.Language = v
-	case engine.KeyPatrolEnabled, engine.KeyPatrolScale, engine.KeyUniformTheme:
+	case engine.KeyPatrolEnabled, engine.KeyPatrolScale:
 		// macOS only; kept in the file, ignored here
 	default:
 		return errors.New("unknown key")
 	}
 	return nil
+}
+
+// themeList is "default, navy, arctic or desert".
+func themeList() string {
+	var ids []string
+	for _, t := range sprites.Themes() {
+		ids = append(ids, t.ID)
+	}
+	if len(ids) < 2 {
+		return strings.Join(ids, "")
+	}
+	return strings.Join(ids[:len(ids)-1], ", ") + " or " + ids[len(ids)-1]
 }
 
 // Parse validates a `config set` value and returns it as stored JSON.
