@@ -1,0 +1,23 @@
+pkgbase = bulchimbeon-bin
+	pkgdesc = Keep the machine awake while AI coding agents work
+	pkgver = 0.8.1
+	pkgrel = 1
+	url = https://github.com/s3onghyun/bulchimbeon
+	arch = x86_64
+	arch = aarch64
+	license = MIT
+	depends = systemd
+	optdepends = gnome-shell-extension-appindicator: tray icon on GNOME
+	optdepends = plasma-workspace: tray icon on KDE Plasma
+	optdepends = xfce4-panel: tray icon on XFCE (Status Tray item)
+	provides = bulchimbeon
+	conflicts = bulchimbeon
+	options = !strip
+	options = !debug
+	backup = etc/xdg/autostart/bulchimbeon-tray.desktop
+	source_x86_64 = https://github.com/s3onghyun/bulchimbeon/releases/download/v0.8.1/bulchimbeon_0.8.1_linux_amd64.tar.gz
+	sha256sums_x86_64 = ef8a1b7f57a987442693a02022d5675dbb81419eaf0cf59d1783a54fbd970401
+	source_aarch64 = https://github.com/s3onghyun/bulchimbeon/releases/download/v0.8.1/bulchimbeon_0.8.1_linux_arm64.tar.gz
+	sha256sums_aarch64 = 59a2fab58d57b9d4d5ae8c15561018319ad6c85f08c54130acf9b36aa6a2ddd7
+
+pkgname = bulchimbeon-bin
