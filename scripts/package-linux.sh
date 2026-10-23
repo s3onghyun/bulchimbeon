@@ -78,8 +78,9 @@ Priority: optional
 Homepage: https://github.com/s3onghyun/bulchimbeon
 Description: keep the machine awake while AI coding agents work
  Bulchimbeon watches the current user's processes for AI coding agents
- (Claude Code, Codex, Gemini CLI and others) and holds a logind sleep
- inhibitor only while one of them is actually working.
+ (Claude Code, Codex, Gemini CLI and others) and holds the desktop's
+ suspend inhibitor, or a logind sleep inhibitor without a desktop, only
+ while one of them is actually working.
  .
  Each user enables it with: systemctl --user enable --now bulchimbeon
  .

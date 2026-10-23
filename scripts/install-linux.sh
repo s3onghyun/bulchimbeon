@@ -65,7 +65,7 @@ esac
 echo "Installed $bin_dir/bulchimbeon and $unit; the service is running."
 echo "$tray_note"
 echo "  bulchimbeon status     is the machine kept awake, and why"
-echo "  bulchimbeon doctor     check logind and polkit (SSH or headless machines need a polkit rule)"
+echo "  bulchimbeon doctor     check the desktop session, logind and polkit (SSH or headless machines need a polkit rule)"
 echo "  journalctl --user -u bulchimbeon -f"
 case ":$PATH:" in *":$bin_dir:"*) ;; *) echo "Note: $bin_dir is not in your PATH." ;; esac
 if [ "$(loginctl show-user "$(id -u)" --property=Linger --value 2>/dev/null || true)" = no ]; then
