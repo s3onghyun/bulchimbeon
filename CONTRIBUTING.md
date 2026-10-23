@@ -165,6 +165,8 @@ repository's MIT license. Maintainers may ask for a smaller PR, reproduction, te
 ```bash
 git tag vX.Y.Z && git push origin vX.Y.Z   # CI builds universal, signs, attests, and publishes the Release
 ./scripts/bump-cask.sh X.Y.Z               # verifies checksum and provenance, then updates the Homebrew tap
+./scripts/bump-aur.sh X.Y.Z                # same checks, then updates packaging/aur for the AUR (packaging/aur/README.md)
+# Fedora COPR, once set up: copr-cli buildscm ... --commit vX.Y.Z (packaging/rpm/README.md)
 ```
 
 ### Be kind
@@ -324,6 +326,8 @@ AI 도구를 보조로 써도 됩니다. PR 하나는 한 가지 문제에 집�
 ```bash
 git tag vX.Y.Z && git push origin vX.Y.Z   # CI 가 universal 빌드·서명·출처 증명·Release
 ./scripts/bump-cask.sh X.Y.Z               # 체크섬·출처 증명 검증 후 Homebrew tap 갱신
+./scripts/bump-aur.sh X.Y.Z                # 같은 검증 후 AUR 용 packaging/aur 갱신 (packaging/aur/README.md)
+# Fedora COPR (설정한 뒤): copr-cli buildscm ... --commit vX.Y.Z (packaging/rpm/README.md)
 ```
 
 ### 서로 존중해주세요

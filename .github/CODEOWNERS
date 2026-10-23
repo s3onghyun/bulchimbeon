@@ -10,3 +10,4 @@
 /go.mod @s3onghyun
 /go.sum @s3onghyun
 /packaging/ @s3onghyun
+/.copr/ @s3onghyun

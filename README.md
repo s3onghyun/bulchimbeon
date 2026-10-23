@@ -182,10 +182,11 @@ brew install s3onghyun/tap/bulchimbeon-linux
 brew services start bulchimbeon-linux    # systemd user unit, started at login
 ```
 
-Pick one install method. If you use Homebrew, do not also install the tarball or enable the `.deb` unit
+Pick one install method. If you use Homebrew, do not also install the tarball or enable the `.deb` or `.rpm` unit
 (`systemctl --user enable bulchimbeon`), or two daemons will run.
 
-Or download from [Releases](https://github.com/s3onghyun/bulchimbeon/releases): a tarball or a `.deb` for amd64 or arm64.
+Or download from [Releases](https://github.com/s3onghyun/bulchimbeon/releases): a tarball or a `.deb` for amd64 or arm64,
+or, from 0.9.0, an `.rpm` for x86_64 or aarch64.
 
 ```bash
 # Tarball: no root needed. Installs ~/.local/bin/bulchimbeon and a systemd user unit, then starts it
@@ -195,14 +196,22 @@ cd bulchimbeon_<version>_linux_amd64 && ./install-linux.sh
 # or the .deb: installs /usr/bin/bulchimbeon and the user unit; each user then enables it
 sudo apt install ./bulchimbeon_<version>_amd64.deb
 systemctl --user enable --now bulchimbeon
+
+# or the .rpm (Fedora and others, from 0.9.0): the same files; each user then enables it
+sudo dnf install ./bulchimbeon-<version>-1.x86_64.rpm
+systemctl --user enable --now bulchimbeon
 ```
+
+Coming soon, not published yet: a Fedora COPR repository (`dnf copr enable`) and the AUR package `bulchimbeon-bin`.
+Until then, use the `.rpm` on Fedora, and on Arch the tarball, or `makepkg -si` in
+[`packaging/aur/bulchimbeon-bin`](packaging/aur/bulchimbeon-bin) of a checkout.
 
 Verify the download (optional): `sha256sum -c SHA256SUMS --ignore-missing`, and
 `gh attestation verify <file> --repo s3onghyun/bulchimbeon`.
 
 Uninstall with `brew services stop bulchimbeon-linux && brew uninstall bulchimbeon-linux`,
 `./install-linux.sh --uninstall`, or `systemctl --user disable --now bulchimbeon` followed by
-`sudo apt remove bulchimbeon`. Your settings (`~/.config/bulchimbeon`) and duty log
+`sudo apt remove bulchimbeon` or `sudo dnf remove bulchimbeon`. Your settings (`~/.config/bulchimbeon`) and duty log
 (`~/.local/state/bulchimbeon`) are kept.
 
 To keep the service running while you are logged out, run `loginctl enable-linger` once.
@@ -240,7 +249,7 @@ sweating through a combat rest. Hover for the full status. The menu shows every 
 same order, then a **🧥 Uniform** picker that sets `uniformTheme`, and **Quit tray**, which closes the icon only:
 the daemon keeps watch without it.
 
-The `.deb` starts it with every desktop session through an XDG autostart entry,
+The `.deb` and `.rpm` start it with every desktop session through an XDG autostart entry,
 `/etc/xdg/autostart/bulchimbeon-tray.desktop`; `install-linux.sh` puts the same entry in `~/.config/autostart/`.
 With Homebrew, add `bulchimbeon tray` to your desktop's startup applications. Where there is nothing to show it in
 (SSH, a headless machine, a desktop without a tray), or for a user who has never started the daemon, it logs one line
@@ -367,6 +376,8 @@ Want to help? Start with [CONTRIBUTING.md](CONTRIBUTING.md).
 ```bash
 git tag vX.Y.Z && git push origin vX.Y.Z   # → the Release workflow builds, attests and uploads
 ./scripts/bump-cask.sh X.Y.Z               # → verifies checksums and provenance, then updates the tap's cask and Linux formula
+./scripts/bump-aur.sh X.Y.Z                # → same checks, then updates packaging/aur for the AUR (packaging/aur/README.md)
+# Fedora COPR, once set up: copr-cli buildscm ... --commit vX.Y.Z (packaging/rpm/README.md)
 ```
 
 Sprites are ASCII grids in `Sources/BulchimbeonCore/Sprites.swift`: one character per pixel, drawn as vector

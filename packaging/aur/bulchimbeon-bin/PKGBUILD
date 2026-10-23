@@ -1,0 +1,43 @@
+# Maintainer: s3onghyun <s3onghyun at users dot noreply dot github dot com>
+# Repackages the static binary from the GitHub release tarball (same files as the .deb and .rpm).
+# Updated by scripts/bump-aur.sh after it verifies the release's checksums and build provenance;
+# see packaging/aur/README.md.
+pkgname=bulchimbeon-bin
+pkgver=0.8.1
+pkgrel=1
+pkgdesc='Keep the machine awake while AI coding agents work'
+arch=('x86_64' 'aarch64')
+url='https://github.com/s3onghyun/bulchimbeon'
+license=('MIT')
+depends=('systemd')
+optdepends=('gnome-shell-extension-appindicator: tray icon on GNOME'
+            'plasma-workspace: tray icon on KDE Plasma'
+            'xfce4-panel: tray icon on XFCE (Status Tray item)')
+provides=('bulchimbeon')
+conflicts=('bulchimbeon')
+backup=('etc/xdg/autostart/bulchimbeon-tray.desktop')
+options=('!strip' '!debug')
+source_x86_64=("$url/releases/download/v$pkgver/bulchimbeon_${pkgver}_linux_amd64.tar.gz")
+source_aarch64=("$url/releases/download/v$pkgver/bulchimbeon_${pkgver}_linux_arm64.tar.gz")
+sha256sums_x86_64=('ef8a1b7f57a987442693a02022d5675dbb81419eaf0cf59d1783a54fbd970401')
+sha256sums_aarch64=('59a2fab58d57b9d4d5ae8c15561018319ad6c85f08c54130acf9b36aa6a2ddd7')
+
+package() {
+  local goarch=amd64
+  [[ $CARCH == aarch64 ]] && goarch=arm64
+  cd "bulchimbeon_${pkgver}_linux_${goarch}"
+
+  install -Dm0755 bulchimbeon "$pkgdir/usr/bin/bulchimbeon"
+  # the user unit runs the system-wide binary; each user enables it themselves
+  sed 's|^ExecStart=%h/.local/bin/bulchimbeon |ExecStart=/usr/bin/bulchimbeon |' bulchimbeon.service >unit
+  grep -qx 'ExecStart=/usr/bin/bulchimbeon run' unit
+  install -Dm0644 unit "$pkgdir/usr/lib/systemd/user/bulchimbeon.service"
+  # the tray starts with every desktop session; it exits at once where there is no tray host
+  sed -e 's|^TryExec=bulchimbeon$|TryExec=/usr/bin/bulchimbeon|' -e 's|^Exec=bulchimbeon tray$|Exec=/usr/bin/bulchimbeon tray|' \
+    bulchimbeon-tray.desktop >tray
+  grep -qx 'TryExec=/usr/bin/bulchimbeon' tray
+  grep -qx 'Exec=/usr/bin/bulchimbeon tray' tray
+  install -Dm0644 tray "$pkgdir/etc/xdg/autostart/bulchimbeon-tray.desktop"
+  install -Dm0644 README.md "$pkgdir/usr/share/doc/bulchimbeon/README.md"
+  install -Dm0644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

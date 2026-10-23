@@ -132,6 +132,8 @@ BULCHIMBEON_DEBUG=1 dist/Bulchimbeon.app/Contents/MacOS/Bulchimbeon
 ```bash
 git tag vX.Y.Z && git push origin vX.Y.Z   # → Release 워크플로가 빌드·증명·업로드
 ./scripts/bump-cask.sh X.Y.Z               # → 체크섬·출처 증명 검증 후 tap 의 cask·리눅스 formula 갱신
+./scripts/bump-aur.sh X.Y.Z                # → 같은 검증 후 AUR 용 packaging/aur 갱신 (packaging/aur/README.md)
+# Fedora COPR (설정한 뒤): copr-cli buildscm ... --commit vX.Y.Z (packaging/rpm/README.md)
 ```
 
 ## 동작 원리
@@ -212,10 +214,11 @@ brew install s3onghyun/tap/bulchimbeon-linux
 brew services start bulchimbeon-linux    # systemd 사용자 유닛, 로그인하면 시작
 ```
 
-설치 방법은 하나만 고르세요. Homebrew 로 깔았다면 tarball 을 또 설치하거나 `.deb` 유닛을 켜지
+설치 방법은 하나만 고르세요. Homebrew 로 깔았다면 tarball 을 또 설치하거나 `.deb`·`.rpm` 유닛을 켜지
 (`systemctl --user enable bulchimbeon`) 마세요. 데몬이 두 개 돕니다.
 
-또는 [Releases](https://github.com/s3onghyun/bulchimbeon/releases)에서 amd64·arm64 용 tarball 이나 `.deb` 를 받습니다.
+또는 [Releases](https://github.com/s3onghyun/bulchimbeon/releases)에서 amd64·arm64 용 tarball 이나 `.deb`,
+0.9.0 부터는 x86_64·aarch64 용 `.rpm` 을 받습니다.
 
 ```bash
 # tarball: root 불필요. ~/.local/bin/bulchimbeon 과 systemd 사용자 유닛을 설치하고 시작
@@ -225,10 +228,18 @@ cd bulchimbeon_<버전>_linux_amd64 && ./install-linux.sh
 # 또는 .deb: /usr/bin/bulchimbeon 과 사용자 유닛 설치. 쓰려는 사용자마다 켭니다
 sudo apt install ./bulchimbeon_<버전>_amd64.deb
 systemctl --user enable --now bulchimbeon
+
+# 또는 .rpm (Fedora 등, 0.9.0 부터): .deb 와 같은 파일. 쓰려는 사용자마다 켭니다
+sudo dnf install ./bulchimbeon-<버전>-1.x86_64.rpm
+systemctl --user enable --now bulchimbeon
 ```
 
+곧 나옵니다 (아직 공개 전): Fedora COPR 저장소(`dnf copr enable`)와 AUR 패키지 `bulchimbeon-bin`.
+그때까지 Fedora 는 `.rpm`, Arch 는 tarball 을 쓰거나 저장소를 받아
+[`packaging/aur/bulchimbeon-bin`](packaging/aur/bulchimbeon-bin) 에서 `makepkg -si` 하세요.
+
 검증(선택): `sha256sum -c SHA256SUMS --ignore-missing`, `gh attestation verify <파일> --repo s3onghyun/bulchimbeon`.
-제거: `brew services stop bulchimbeon-linux && brew uninstall bulchimbeon-linux`, `./install-linux.sh --uninstall`, 또는 `systemctl --user disable --now bulchimbeon` 후 `sudo apt remove bulchimbeon`.
+제거: `brew services stop bulchimbeon-linux && brew uninstall bulchimbeon-linux`, `./install-linux.sh --uninstall`, 또는 `systemctl --user disable --now bulchimbeon` 후 `sudo apt remove bulchimbeon`·`sudo dnf remove bulchimbeon`.
 설정(`~/.config/bulchimbeon`)과 근무일지(`~/.local/state/bulchimbeon`)는 남깁니다.
 로그아웃한 동안에도 돌리려면 한 번 `loginctl enable-linger`.
 
@@ -254,7 +265,7 @@ journalctl --user -u bulchimbeon -f      # 데몬 로그
 메뉴에는 `bulchimbeon status` 의 모든 줄(같은 순서), `uniformTheme` 을 바꾸는 **🧥 군복** 선택,
 그리고 **트레이 아이콘 닫기**가 있습니다. 닫아도 아이콘만 사라지고 데몬은 계속 근무합니다.
 
-`.deb` 는 XDG 자동 시작 항목 `/etc/xdg/autostart/bulchimbeon-tray.desktop` 으로 데스크톱에 로그인할 때마다 띄웁니다.
+`.deb`·`.rpm` 은 XDG 자동 시작 항목 `/etc/xdg/autostart/bulchimbeon-tray.desktop` 으로 데스크톱에 로그인할 때마다 띄웁니다.
 `install-linux.sh` 는 같은 항목을 `~/.config/autostart/` 에 둡니다. Homebrew 로 깔았다면 데스크톱의 시작 프로그램에
 `bulchimbeon tray` 를 추가하세요. 보여줄 곳이 없거나 (SSH, 헤드리스 기기, 트레이가 없는 데스크톱) 데몬을 한 번도 켜지 않은 사용자라면
 한 줄만 남기고 끝납니다.
