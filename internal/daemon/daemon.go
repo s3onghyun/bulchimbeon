@@ -156,6 +156,9 @@ func (d *Daemon) Tick() {
 	lost := false
 	if d.engine.OnDuty() {
 		lost = d.cfg.Platform.Inhibitor.Refresh()
+		if !lost {
+			d.reportLock() // the lock may have moved: a desktop session started or ended
+		}
 	}
 	d.run(d.engine.Tick(engine.Observation{Now: now, Battery: d.battery, Heat: d.thermal.Level,
 		AgentsOpen: open, AgentsBusy: busy, AssertionLost: lost}), now)

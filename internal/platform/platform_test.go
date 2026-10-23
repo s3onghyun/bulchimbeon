@@ -3,6 +3,8 @@ package platform
 import (
 	"slices"
 	"testing"
+
+	"github.com/s3onghyun/bulchimbeon/internal/engine"
 )
 
 func TestSummarizeHolders(t *testing.T) {
@@ -35,5 +37,31 @@ func TestLockStatusComplete(t *testing.T) {
 	}
 	if b, ok := st.Block("idle"); !ok || b.Held {
 		t.Errorf("Block(idle) = %+v, %v", b, ok)
+	}
+}
+
+func TestMethodAndFallbackText(t *testing.T) {
+	for want, s := range map[string]LockStatus{
+		"org.gnome.SessionManager":              {Method: MethodGnome},
+		"org.freedesktop.PowerManagement (KDE)": {Method: MethodFreedesktop, Desktop: "kde"},
+		"org.freedesktop.PowerManagement":       {Method: MethodFreedesktop},
+		"logind block-weak":                     {Method: MethodLogind, Mode: "block-weak"},
+		"logind":                                {Method: MethodLogind},
+	} {
+		if got := MethodText(s); got != want {
+			t.Errorf("MethodText(%+v) = %q, want %q", s, got, want)
+		}
+	}
+	if !(LockStatus{Method: MethodGnome}).OnDesktop() || !(LockStatus{Method: MethodFreedesktop}).OnDesktop() || (LockStatus{Method: MethodLogind}).OnDesktop() {
+		t.Error("OnDesktop")
+	}
+	if got := FallbackText(LockStatus{Fallback: FallbackNoBus, Detail: "x"}, engine.EN); got != "no session bus: x" {
+		t.Errorf("no bus: %q", got)
+	}
+	if got := FallbackText(LockStatus{Fallback: FallbackNoDesktop}, engine.KO); got != "세션 버스에 데스크톱 없음" {
+		t.Errorf("no desktop: %q", got)
+	}
+	if FallbackText(LockStatus{}, engine.EN) != "" {
+		t.Error("no fallback")
 	}
 }

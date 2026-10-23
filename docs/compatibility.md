@@ -82,7 +82,7 @@ bulchimbeon config set agentGraceMinutes 10
 |------|------|
 | `bulchimbeon run` | 에이전트 근무 데몬 (systemd 사용자 유닛이 실행). `--agent-watch` 도 받는다 (같은 뜻) |
 | `bulchimbeon status` | 지금 깨워 두는 중인지와 이유. 데몬이 돌지 않으면 종료 코드 `3` |
-| `bulchimbeon doctor` | systemd·logind·polkit 점검 |
+| `bulchimbeon doctor` | 데스크톱 세션·systemd·logind·polkit 점검 |
 | `bulchimbeon config` | 위 리눅스 설정 |
 | `bulchimbeon tray` | 데스크톱 패널의 트레이 아이콘 (StatusNotifierItem). 트레이 호스트나 세션 버스가 없거나 데몬을 한 번도 돌리지 않은 사용자면 한 줄 남기고 종료 코드 `0`. 데몬과 따로 돌며, 없어도 근무는 그대로 |
 

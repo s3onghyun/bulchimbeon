@@ -1,5 +1,6 @@
-// Package dbus is a small D-Bus client for the tray icon: the session bus connection, method
-// calls, replies and signals, and the marshalling those need.
+// Package dbus is a small D-Bus client for the tray icon and the Linux lock's desktop
+// inhibitor: the session bus connection, method calls, replies and signals, and the
+// marshalling those need.
 //
 // It is written against the D-Bus specification with the standard library only, because the
 // project takes no third-party dependencies, and it needs no cgo, so the static release build

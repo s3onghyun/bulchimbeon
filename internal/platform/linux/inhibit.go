@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -21,20 +22,23 @@ const (
 	InhibitWhy = "Bulchimbeon on duty: keeping AI agents awake"
 )
 
-// InhibitWhats are held as separate inhibitors. Measured on Ubuntu 24.04 (systemd 255):
-// one combined `--what=sleep:idle` request is checked against the lid-switch polkit action,
-// so it is denied even where `sleep` and `idle` alone are allowed.
-var InhibitWhats = []string{"sleep", "idle"}
+// InhibitWhats are the logind inhibitors held, each by its own helper. Only sleep: an idle lock
+// would also stop KDE, swayidle and hypridle from dimming and locking the screen, and the
+// promise is "Display may sleep".
+var InhibitWhats = []string{"sleep"}
 
-// SystemdInhibitor holds logind block inhibitors through `systemd-inhibit`.
+// SystemdInhibitor holds logind block inhibitors through `systemd-inhibit`. It is the lock
+// without a desktop session (see Lock).
 //
-// Each inhibitor is a child `systemd-inhibit --what=<what> --mode=block … cat` whose stdin is
+// Each inhibitor is a child `systemd-inhibit --what=<what> --mode=<mode> … cat` whose stdin is
 // a pipe only this process holds open. If the daemon dies, even by SIGKILL, the kernel closes
 // the pipe, cat sees EOF and exits, and systemd-inhibit releases the inhibitor at once. A
 // plain `sleep infinity` child would leak the lock (measured in the design report).
 type SystemdInhibitor struct {
 	Tool, Cat string
 	Logind    *Logind
+	// Mode is the inhibitor mode; empty asks systemd-inhibit for its version (LogindMode).
+	Mode string
 	// ConfirmTimeout bounds how long Acquire waits to see the inhibitor in logind, and
 	// UnconfirmedWait how long a helper must survive when logind cannot be asked.
 	ConfirmTimeout, UnconfirmedWait time.Duration
@@ -78,11 +82,43 @@ func (s *SystemdInhibitor) Acquire() {
 	}
 }
 
+// LogindMode is the mode that blocks a suspend asked by another user or by logind itself
+// (IdleAction) and still lets the lock's own user suspend: "block-weak" from systemd 257 on,
+// "block" before. Up to 256 logind skips a block lock of the caller's own uid; 257 obeys block
+// even then, which would also refuse the user's own suspend, and added block-weak for the old
+// behaviour (systemd NEWS, CHANGES WITH 257). Measured on systemd 255: with the block lock held, a
+// Suspend from the same user went through, one from another user was refused.
+func LogindMode(tool string) string {
+	out, err := run(3*time.Second, tool, "--version")
+	if err == nil && SystemdVersion(out) >= 257 {
+		return "block-weak"
+	}
+	return "block"
+}
+
+// SystemdVersion reads the major version from `systemd-inhibit --version`
+// ("systemd 255 (255.4-1ubuntu8.18)"), or 0.
+func SystemdVersion(out []byte) int {
+	f := strings.Fields(firstLine(string(out)))
+	if len(f) < 2 || f[0] != "systemd" {
+		return 0
+	}
+	digits := strings.IndexFunc(f[1], func(r rune) bool { return r < '0' || r > '9' })
+	if digits < 0 {
+		digits = len(f[1])
+	}
+	n, _ := strconv.Atoi(f[1][:digits])
+	return n
+}
+
 func (s *SystemdInhibitor) start(what string) (*inhibitChild, platform.Block) {
 	block := platform.Block{What: what}
 	if s.Tool == "" || s.Cat == "" {
 		block.Error = "systemd-inhibit not found"
 		return nil, block
+	}
+	if s.Mode == "" {
+		s.Mode = LogindMode(s.Tool)
 	}
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -96,7 +132,7 @@ func (s *SystemdInhibitor) start(what string) (*inhibitChild, platform.Block) {
 		block.Error = err.Error()
 		return nil, block
 	}
-	cmd := exec.Command(s.Tool, "--what="+what, "--mode=block", "--who="+InhibitWho, "--why="+InhibitWhy, s.Cat)
+	cmd := exec.Command(s.Tool, "--what="+what, "--mode="+s.Mode, "--who="+InhibitWho, "--why="+InhibitWhy, s.Cat)
 	cmd.Env = minimalEnv
 	cmd.Stdin = r
 	// An *os.File, so Wait returns when systemd-inhibit exits even though cat shares it.
@@ -163,7 +199,7 @@ func (s *SystemdInhibitor) listed(what string, pid int) (listed, ok bool) {
 		return false, false
 	}
 	for _, h := range holders {
-		if h.PID == pid && h.What == what && h.Mode == "block" {
+		if h.PID == pid && h.What == what && h.Mode == s.Mode {
 			return true, true
 		}
 	}
@@ -215,7 +251,7 @@ func (s *SystemdInhibitor) Refresh() (lost bool) {
 		if alive && listErr == nil {
 			alive, block.Confirmed = false, false
 			for _, h := range holders {
-				if h.PID == block.PID && h.What == what && h.Mode == "block" {
+				if h.PID == block.PID && h.What == what && h.Mode == s.Mode {
 					alive, block.Confirmed = true, true
 				}
 			}
@@ -235,7 +271,7 @@ func (s *SystemdInhibitor) Refresh() (lost bool) {
 func (s *SystemdInhibitor) Status() platform.LockStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	st := platform.LockStatus{Wanted: s.wanted, Method: "systemd-inhibit"}
+	st := platform.LockStatus{Wanted: s.wanted, Method: platform.MethodLogind, Mode: s.Mode}
 	if !s.wanted {
 		return st
 	}

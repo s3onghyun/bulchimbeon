@@ -248,15 +248,19 @@ func TestPolkitRule(t *testing.T) {
 }
 
 // fakeInhibit writes a stand-in for systemd-inhibit: it refuses --what=sleep like polkit
-// does over SSH, and otherwise runs its last argument (cat) as the real one does.
-func fakeInhibit(t *testing.T, denySleep bool) string {
+// does over SSH, and otherwise runs its last argument (cat) as the real one does. It appends
+// its arguments to args, one call per line, when args is not empty.
+func fakeInhibit(t *testing.T, denySleep bool, args string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "systemd-inhibit")
-	deny := ""
-	if denySleep {
-		deny = `for a in "$@"; do [ "$a" = --what=sleep ] && { echo "Failed to inhibit: Access denied" >&2; exit 1; }; done` + "\n"
+	script := "#!/bin/sh\n"
+	if args != "" {
+		script += `echo "$@" >>` + args + "\n"
 	}
-	script := "#!/bin/sh\n" + deny + `for a in "$@"; do last=$a; done` + "\nexec \"$last\"\n"
+	if denySleep {
+		script += `for a in "$@"; do [ "$a" = --what=sleep ] && { echo "Failed to inhibit: Access denied" >&2; exit 1; }; done` + "\n"
+	}
+	script += `for a in "$@"; do last=$a; done` + "\nexec \"$last\"\n"
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -265,17 +269,20 @@ func fakeInhibit(t *testing.T, denySleep bool) string {
 
 func alive(pid int) bool { return pid > 0 && syscallKill(pid) == nil }
 
-func TestInhibitorHoldsSleepAndIdleSeparately(t *testing.T) {
-	in := &SystemdInhibitor{Tool: fakeInhibit(t, false), Cat: findTool("cat"), ConfirmTimeout: 3e9, UnconfirmedWait: 2e8}
+func TestInhibitorHoldsSleepOnly(t *testing.T) {
+	args := filepath.Join(t.TempDir(), "args")
+	in := &SystemdInhibitor{Tool: fakeInhibit(t, false, args), Cat: findTool("cat"), Mode: "block-weak", ConfirmTimeout: 3e9, UnconfirmedWait: 2e8}
 	in.Acquire()
 	st := in.Status()
-	if !st.Wanted || !st.Complete() || len(st.Blocks) != 2 {
+	if !st.Wanted || !st.Complete() || len(st.Blocks) != 1 || st.Method != platform.MethodLogind || st.Mode != "block-weak" {
 		t.Fatalf("status = %+v", st)
 	}
 	sleep, _ := st.Block("sleep")
-	idle, _ := st.Block("idle")
-	if sleep.PID == idle.PID || !alive(sleep.PID) || !alive(idle.PID) || sleep.Confirmed {
-		t.Fatalf("blocks = %+v %+v (no logind here, so unconfirmed)", sleep, idle)
+	if !alive(sleep.PID) || sleep.Confirmed {
+		t.Fatalf("sleep = %+v (no logind here, so unconfirmed)", sleep)
+	}
+	if _, ok := st.Block("idle"); ok {
+		t.Error("an idle block keeps the screen from locking")
 	}
 	in.Acquire() // idempotent
 	if again, _ := in.Status().Block("sleep"); again.PID != sleep.PID {
@@ -285,35 +292,38 @@ func TestInhibitorHoldsSleepAndIdleSeparately(t *testing.T) {
 		t.Error("Refresh lost a live block")
 	}
 	in.Release()
-	if alive(sleep.PID) || alive(idle.PID) || in.Status().Wanted {
+	if alive(sleep.PID) || in.Status().Wanted {
 		t.Error("Release left a helper running")
+	}
+	data, _ := os.ReadFile(args)
+	if !strings.HasPrefix(string(data), "--what=sleep --mode=block-weak --who=Bulchimbeon --why=") {
+		t.Errorf("systemd-inhibit got %q", data)
 	}
 }
 
 func TestInhibitorReportsPolkitDenial(t *testing.T) {
-	in := &SystemdInhibitor{Tool: fakeInhibit(t, true), Cat: findTool("cat"), ConfirmTimeout: 3e9, UnconfirmedWait: 2e8}
+	in := &SystemdInhibitor{Tool: fakeInhibit(t, true, ""), Cat: findTool("cat"), Mode: "block", ConfirmTimeout: 3e9, UnconfirmedWait: 2e8}
 	in.Acquire()
 	defer in.Release()
 	st := in.Status()
 	sleep, _ := st.Block("sleep")
-	idle, _ := st.Block("idle")
-	if sleep.Held || !sleep.Denied || sleep.Error != "polkit denied" || !idle.Held || st.Complete() {
+	if sleep.Held || !sleep.Denied || sleep.Error != "polkit denied" || st.Complete() {
 		t.Fatalf("status = %+v", st)
 	}
 }
 
 func TestInhibitorNoticesALostHelper(t *testing.T) {
-	in := &SystemdInhibitor{Tool: fakeInhibit(t, false), Cat: findTool("cat"), ConfirmTimeout: 3e9, UnconfirmedWait: 2e8}
+	in := &SystemdInhibitor{Tool: fakeInhibit(t, false, ""), Cat: findTool("cat"), Mode: "block", ConfirmTimeout: 3e9, UnconfirmedWait: 2e8}
 	in.Acquire()
 	defer in.Release()
-	idle, _ := in.Status().Block("idle")
-	p, _ := os.FindProcess(idle.PID)
+	sleep, _ := in.Status().Block("sleep")
+	p, _ := os.FindProcess(sleep.PID)
 	p.Kill()
 	for i := 0; i < 50 && !in.Refresh(); i++ {
 		sleepBriefly()
 	}
-	if b, _ := in.Status().Block("idle"); b.Held {
-		t.Fatalf("idle still held after its helper died: %+v", b)
+	if b, _ := in.Status().Block("sleep"); b.Held {
+		t.Fatalf("sleep still held after its helper died: %+v", b)
 	}
 	in.Acquire() // the daemon re-acquires on the engine's reacquire effect
 	if !in.Status().Complete() {
@@ -330,6 +340,30 @@ func TestInhibitorWithoutTool(t *testing.T) {
 	in.Release()
 }
 
+// block-weak exists from systemd 257 on; up to 256 block already spares the user's own suspend.
+func TestLogindModeFollowsTheSystemdVersion(t *testing.T) {
+	for out, want := range map[string]int{"systemd 255 (255.4-1ubuntu8.18)\n+PAM +AUDIT": 255, "systemd 257 (257.7-1)": 257,
+		"systemd 258.1 (258.1-1.fc43)": 258, "systemd 262": 262, "": 0, "systemd": 0, "other 300": 0, "systemd v9": 0} {
+		if got := SystemdVersion([]byte(out)); got != want {
+			t.Errorf("SystemdVersion(%q) = %d, want %d", out, got, want)
+		}
+	}
+	tool := func(version string) string {
+		path := filepath.Join(t.TempDir(), "systemd-inhibit")
+		os.WriteFile(path, []byte("#!/bin/sh\necho '"+version+"'\n"), 0o755)
+		return path
+	}
+	if m := LogindMode(tool("systemd 255 (255.4-1ubuntu8.18)")); m != "block" {
+		t.Errorf("255: %s", m)
+	}
+	if m := LogindMode(tool("systemd 257 (257.7-1)")); m != "block-weak" {
+		t.Errorf("257: %s", m)
+	}
+	if m := LogindMode(""); m != "block" {
+		t.Errorf("no tool: %s", m)
+	}
+}
+
 // TestSystemdInhibitorAgainstLogind takes the real lock. Run it on a Linux machine with
 // BULCHIMBEON_TEST_LOGIND=1 (CI does not, because runners have no logind session).
 func TestSystemdInhibitorAgainstLogind(t *testing.T) {
@@ -341,12 +375,12 @@ func TestSystemdInhibitorAgainstLogind(t *testing.T) {
 	in.Acquire()
 	st := in.Status()
 	t.Logf("status: %+v", st)
-	idle, _ := st.Block("idle")
-	if !idle.Held || !idle.Confirmed {
-		t.Fatalf("idle block not confirmed: %+v", idle)
+	sleep, _ := st.Block("sleep")
+	if sleep.Denied {
+		t.Skip("polkit refused the sleep block here (no local login and no rule)")
 	}
-	if sleep, _ := st.Block("sleep"); !sleep.Held && !sleep.Denied {
-		t.Errorf("sleep neither held nor denied: %+v", sleep)
+	if !sleep.Held || !sleep.Confirmed {
+		t.Fatalf("sleep block not confirmed: %+v", sleep)
 	}
 	if in.Refresh() {
 		t.Error("Refresh lost a live block")
@@ -357,7 +391,7 @@ func TestSystemdInhibitorAgainstLogind(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, h := range holders {
-		if h.PID == idle.PID {
+		if h.PID == sleep.PID {
 			t.Errorf("still listed after Release: %+v", h)
 		}
 	}
