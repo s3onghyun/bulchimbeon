@@ -163,36 +163,37 @@ func notRunning(in StatusInput) string {
 	return ""
 }
 
-// LockSummary describes the lock in one line.
+// LockSummary describes the lock in one line: how it is held, and why logind holds it when
+// the desktop does not.
 func LockSummary(lock platform.LockStatus, lang engine.Lang) string {
 	t := func(ko, en, zh string) string { return engine.T(lang, ko, en, zh) }
 	if !lock.Wanted {
 		return t("잡지 않음", "not held", "未持有")
 	}
 	sleep, _ := lock.Block("sleep")
-	idle, _ := lock.Block("idle")
-	pids := func(bs ...platform.Block) string {
-		var p []string
-		for _, b := range bs {
-			if b.Held && b.PID > 0 {
-				p = append(p, strconv.Itoa(b.PID))
-			}
-		}
-		if len(p) == 0 {
-			return ""
-		}
-		return " (" + lock.Method + " pid " + strings.Join(p, ", ") + ")"
+	method := platform.MethodText(lock)
+	if lock.OnDesktop() && sleep.Held {
+		return t("자동 절전 차단 중 — ", "blocking auto-suspend via ", "正在阻止自动休眠：") + method
+	}
+	why := ""
+	if f := platform.FallbackText(lock, lang); f != "" {
+		why = ", " + f
 	}
 	switch {
-	case sleep.Held && idle.Held:
-		return t("잠자기·화면 꺼짐(sleep, idle) 차단 중", "blocking sleep and idle", "正在阻止休眠和空闲熄屏") + pids(sleep, idle)
 	case sleep.Held:
-		return t("잠자기(sleep) 차단 중, idle 차단 실패: ", "blocking sleep; idle failed: ", "正在阻止休眠；阻止空闲熄屏失败：") + idle.Error + pids(sleep)
-	case idle.Held && sleep.Denied:
-		return t("⚠️ 잠자기(sleep)는 막지 못함 — polkit 거부 (로컬 로그인이 아님: SSH·헤드리스). 화면 꺼짐(idle)만 차단 중이라 기기는 잠들 수 있습니다. `bulchimbeon doctor` 참고",
-			"⚠️ NOT blocking sleep: polkit refused it (not a local login, e.g. SSH or headless). Blocking idle only, so the machine can still suspend. See `bulchimbeon doctor`", "⚠️ 未能阻止休眠：polkit 拒绝授权（非本地登录，例如 SSH 或无显示器环境）。仅阻止空闲熄屏，设备仍可休眠。请运行 `bulchimbeon doctor`") + pids(idle)
-	case idle.Held:
-		return t("⚠️ 잠자기(sleep)는 막지 못함 — ", "⚠️ NOT blocking sleep: ", "⚠️ 未能阻止休眠：") + sleep.Error + t(". 화면 꺼짐(idle)만 차단 중", ". Blocking idle only", "。仅阻止空闲熄屏") + pids(idle)
+		pid := ""
+		if sleep.PID > 0 {
+			helper := lock.Method
+			if helper == platform.MethodLogind {
+				helper = "systemd-inhibit"
+			}
+			pid = " (" + helper + " pid " + strconv.Itoa(sleep.PID) + ")"
+		}
+		return t("잠자기 차단 중 — ", "blocking sleep via ", "正在阻止休眠：") + method + pid + why
+	case sleep.Denied:
+		return t("⚠️ 잠자기를 막지 못함 — polkit 거부 (로컬 로그인이 아님: SSH·헤드리스). 기기가 잠들 수 있습니다. `bulchimbeon doctor` 참고",
+			"⚠️ NOT blocking sleep: polkit refused it (not a local login, e.g. SSH or headless), so the machine can still suspend. See `bulchimbeon doctor`",
+			"⚠️ 未能阻止休眠：polkit 拒绝授权（非本地登录，例如 SSH 或无显示器环境），设备仍可休眠。请运行 `bulchimbeon doctor`") + why
 	}
 	var errs []string
 	for _, b := range lock.Blocks {
@@ -200,7 +201,7 @@ func LockSummary(lock platform.LockStatus, lang engine.Lang) string {
 			errs = append(errs, b.What+": "+b.Error)
 		}
 	}
-	return t("⚠️ 잠금을 잡지 못함 — ", "⚠️ NOT held: ", "⚠️ 未持有休眠锁：") + strings.Join(errs, "; ")
+	return t("⚠️ 잠금을 잡지 못함 — ", "⚠️ NOT held: ", "⚠️ 未持有休眠锁：") + strings.Join(errs, "; ") + why
 }
 
 func lockLine(in StatusInput, t func(string, string, string) string) string {
@@ -215,6 +216,15 @@ func lockLine(in StatusInput, t func(string, string, string) string) string {
 		return t("잡지 않음 — 근무 없음", "not held: off duty", "未持有：休息中")
 	}
 	text := LockSummary(st.Lock, in.Lang)
+	if st.Lock.OnDesktop() {
+		// a desktop inhibitor is not in logind's list; the daemon asks the session itself
+		if sleep, _ := st.Lock.Block("sleep"); sleep.Held && sleep.Confirmed {
+			return text + t(" · 세션에서 확인됨", " · confirmed by the session", " · 已在会话中确认")
+		} else if sleep.Held {
+			return text + t(" · ⚠️ 지금 세션이 절전을 막고 있지 않다고 답함", " · ⚠️ the session says suspend is not blocked right now", " · ⚠️ 会话表示当前未阻止休眠")
+		}
+		return text
+	}
 	if in.HoldersErr != nil {
 		return text + t(" · logind 확인 실패: ", " · could not ask logind: ", " · 无法查询 logind：") + in.HoldersErr.Error()
 	}

@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/s3onghyun/bulchimbeon/internal/engine"
+	"github.com/s3onghyun/bulchimbeon/internal/settings"
 )
 
 func runCLI(t *testing.T, args ...string) (int, string, string) {
@@ -109,6 +112,29 @@ func TestTrayWithoutASessionBus(t *testing.T) {
 	}
 	if code, out, _ := runCLI(t, "help"); code != exitOK || !strings.Contains(out, "tray") {
 		t.Errorf("help lacks tray: %q", out)
+	}
+}
+
+// Every settings key shows its value in `config get`, including the defaults.
+func TestConfigGetShowsEveryKey(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", "")
+	for _, key := range settings.Keys {
+		if key == engine.KeyCustomAgents {
+			continue // empty by default
+		}
+		if code, out, _ := runCLI(t, "config", "get", key); code != exitOK || strings.TrimSpace(out) == "" {
+			t.Errorf("config get %s = %d %q", key, code, out)
+		}
+	}
+	if code, out, _ := runCLI(t, "config", "get", "xfceKeepAwake"); code != exitOK || out != "false\n" {
+		t.Errorf("config get xfceKeepAwake = %d %q", code, out)
+	}
+	if code, _, errOut := runCLI(t, "config", "set", "xfceKeepAwake", "true"); code != exitOK {
+		t.Fatal(errOut)
+	}
+	if code, out, _ := runCLI(t, "config", "get", "xfceKeepAwake"); code != exitOK || out != "true\n" {
+		t.Errorf("config get xfceKeepAwake = %d %q", code, out)
 	}
 }
 

@@ -47,6 +47,7 @@ defaults write io.github.s3onghyun.bulchimbeon agentGraceMinutes -int 10
 | `dutyMode` | 저장은 되지만 리눅스 v0.1 은 항상 `system` 으로 근무한다 |
 | `patrolEnabled`, `patrolScale` | macOS 전용. `config set` 이 거부한다 |
 | `language` | 리눅스 전용 (`AppleLanguages` 대신): `system`(기본, `LANGUAGE`·`LC_ALL`·`LC_MESSAGES`·`LANG` 을 따름) · `ko` · `en` · `zh` (중국어 간체) |
+| `xfceKeepAwake` | 리눅스 전용, `true`·`false`(기본). `true` 면 XFCE 에서 근무 중 `org.freedesktop.PowerManagement` 절전 억제를 잡아 자동 절전을 막는다. 대신 xfce4-power-manager 가 화면을 켜 두고 잠그지 않는다. 데몬이 5초마다 다시 읽는다 |
 
 ```bash
 bulchimbeon config set customAgents goose amp
@@ -82,7 +83,7 @@ bulchimbeon config set agentGraceMinutes 10
 |------|------|
 | `bulchimbeon run` | 에이전트 근무 데몬 (systemd 사용자 유닛이 실행). `--agent-watch` 도 받는다 (같은 뜻) |
 | `bulchimbeon status` | 지금 깨워 두는 중인지와 이유. 데몬이 돌지 않으면 종료 코드 `3` |
-| `bulchimbeon doctor` | systemd·logind·polkit 점검 |
+| `bulchimbeon doctor` | 데스크톱 세션·systemd·logind·polkit 점검 |
 | `bulchimbeon config` | 위 리눅스 설정 |
 | `bulchimbeon tray` | 데스크톱 패널의 트레이 아이콘 (StatusNotifierItem). 트레이 호스트나 세션 버스가 없거나 데몬을 한 번도 돌리지 않은 사용자면 한 줄 남기고 종료 코드 `0`. 데몬과 따로 돌며, 없어도 근무는 그대로 |
 

@@ -31,11 +31,12 @@ type ProcessSource interface {
 	Scan(kinds []engine.AgentKind) (ProcessScan, error)
 }
 
-// Block is one part of the sleep lock, such as logind's "sleep" or "idle" inhibitor.
+// Block is one part of the sleep lock, such as logind's "sleep" inhibitor.
 type Block struct {
 	What string `json:"what"`
 	Held bool   `json:"held"`
-	// Confirmed means the OS itself lists the block (logind), not just a live helper.
+	// Confirmed means the OS itself lists the block (logind, or the desktop session), not
+	// just a live helper.
 	Confirmed bool `json:"confirmed"`
 	// PID is the helper process holding the block, if any.
 	PID int `json:"pid,omitempty"`
@@ -44,12 +45,74 @@ type Block struct {
 	Error  string `json:"error,omitempty"`
 }
 
+// Lock methods (LockStatus.Method).
+const (
+	// MethodGnome is org.gnome.SessionManager.Inhibit, which GNOME, Cinnamon, MATE and
+	// Budgie serve and their power managers read.
+	MethodGnome = "gnome-session"
+	// MethodFreedesktop is org.freedesktop.PowerManagement.Inhibit (KDE, XFCE).
+	MethodFreedesktop = "freedesktop"
+	// MethodLogind is a logind inhibitor.
+	MethodLogind = "logind"
+)
+
+// Why a logind lock stands in for a desktop one (LockStatus.Fallback).
+const (
+	FallbackNoBus     = "no-session-bus"  // the session bus cannot be reached
+	FallbackNoDesktop = "no-desktop"      // nothing on it serves a desktop inhibitor
+	FallbackRefused   = "desktop-refused" // the desktop refused the inhibitor
+	FallbackXfce      = "xfce-opt-in"     // XFCE's inhibitor is off unless xfceKeepAwake is set
+)
+
 // LockStatus is what the inhibitor holds.
 type LockStatus struct {
-	Wanted bool    `json:"wanted"`
-	Method string  `json:"method"`
-	Blocks []Block `json:"blocks"`
+	Wanted bool   `json:"wanted"`
+	Method string `json:"method"`
+	// Mode is the logind inhibitor mode: "block" or "block-weak".
+	Mode string `json:"mode,omitempty"`
+	// Desktop names the power manager behind a freedesktop lock when it is known: "kde" or "xfce".
+	Desktop string `json:"desktop,omitempty"`
+	// Fallback says why a logind lock is held instead of a desktop one, Detail what went wrong.
+	Fallback string  `json:"fallback,omitempty"`
+	Detail   string  `json:"detail,omitempty"`
+	Blocks   []Block `json:"blocks"`
 }
+
+// MethodText names how the lock is held, for `status` and `doctor`: the desktop interface,
+// or logind and its mode.
+func MethodText(s LockStatus) string {
+	switch s.Method {
+	case MethodGnome:
+		return "org.gnome.SessionManager"
+	case MethodFreedesktop:
+		return "org.freedesktop.PowerManagement" + map[string]string{"kde": " (KDE)", "xfce": " (XFCE)"}[s.Desktop]
+	}
+	if s.Mode != "" {
+		return s.Method + " " + s.Mode
+	}
+	return s.Method
+}
+
+// FallbackText says why logind holds the lock instead of the desktop, or "".
+func FallbackText(s LockStatus, lang engine.Lang) string {
+	t := func(ko, en, zh string) string { return engine.T(lang, ko, en, zh) }
+	switch s.Fallback {
+	case FallbackNoBus:
+		return t("세션 버스 없음: ", "no session bus: ", "无会话总线：") + s.Detail
+	case FallbackNoDesktop:
+		return t("세션 버스에 데스크톱 없음", "no desktop on the session bus", "会话总线上没有桌面")
+	case FallbackRefused:
+		return t("데스크톱이 거부함: ", "the desktop refused: ", "桌面拒绝：") + s.Detail
+	case FallbackXfce:
+		return t("⚠️ XFCE 에서는 기본적으로 자동 절전을 막지 않습니다 (화면 잠금을 지키려고). 막으려면 `bulchimbeon config set xfceKeepAwake true` — 대신 근무 중에는 화면이 켜진 채 잠기지 않습니다",
+			"⚠️ auto-suspend is not blocked on XFCE by default (to keep the screen lock). To block it: `bulchimbeon config set xfceKeepAwake true`, but the screen then stays on and unlocked while on duty",
+			"⚠️ 在 XFCE 上默认不阻止自动休眠（以保留屏幕锁定）。如需阻止：`bulchimbeon config set xfceKeepAwake true`，但值班时屏幕会保持常亮且不锁定")
+	}
+	return ""
+}
+
+// OnDesktop reports whether the desktop session holds the lock rather than the OS.
+func (s LockStatus) OnDesktop() bool { return s.Method == MethodGnome || s.Method == MethodFreedesktop }
 
 // Block returns the named block.
 func (s LockStatus) Block(what string) (Block, bool) {
@@ -128,8 +191,10 @@ type Platform struct {
 	Battery   BatterySource
 	Thermal   ThermalSource
 	Holders   HolderSource
+	// SetXfceKeepAwake passes the xfceKeepAwake setting to the inhibitor; nil where it has no meaning.
+	SetXfceKeepAwake func(on bool)
 	// Doctor checks the setup, prints the findings and returns false if something needs fixing.
-	Doctor func(w io.Writer, lang engine.Lang) bool
+	Doctor func(w io.Writer, lang engine.Lang, xfceKeepAwake bool) bool
 }
 
 // HolderSummary groups other programs' locks for display.

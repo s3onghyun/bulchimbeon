@@ -170,7 +170,8 @@ fake clock. Design notes, including signals we tried and rejected: [docs/design.
 Bulchimbeon also runs on Linux as a small daemon with a command line and a [tray icon](#tray-icon).
 It uses the same engine as the macOS app: a Go port that must pass the same golden test cases
 ([`testdata/engine`](testdata/engine)) as the Swift core, in CI on every pull request.
-Tested on Ubuntu 24.04 (systemd 255). It needs systemd and logind.
+Tested on Ubuntu 24.04 (systemd 255). It needs systemd and logind. While on duty it blocks automatic suspend
+with your desktop's own inhibitor, or with logind's when there is no desktop ([below](#the-sleep-lock-on-each-desktop)).
 
 ### Install
 
@@ -210,7 +211,7 @@ To keep the service running while you are logged out, run `loginctl enable-linge
 
 ```bash
 bulchimbeon status                       # on duty or not, and why
-bulchimbeon doctor                       # check systemd, logind and polkit on this machine
+bulchimbeon doctor                       # check the desktop session, systemd, logind and polkit
 bulchimbeon config set agentGraceMinutes 10
 bulchimbeon config set customAgents goose amp
 bulchimbeon config set language ko       # ko | en | zh | system (default: follows LANG)
@@ -220,7 +221,7 @@ journalctl --user -u bulchimbeon -f      # the daemon's log
 ```text
 $ bulchimbeon status
 🪖 Bulchimbeon — on duty for 0:35 (agent watch)
-Lock:      blocking sleep and idle (systemd-inhibit pid 3916014, 3916076) · confirmed in logind
+Lock:      blocking auto-suspend via org.gnome.SessionManager · confirmed by the session
 Why:       Claude Code pid 1174857 11.7% (process-tree CPU ≥ 2.0%, 60 s average)
 Agents:    Claude Code ×7 open, 1 working
 Handover:  5 min after the last agent goes quiet (agentGraceMinutes)
@@ -252,7 +253,7 @@ It is a StatusNotifierItem, the tray protocol KDE, XFCE and the GNOME AppIndicat
 | XFCE 4.16 or later | the **Status Tray** panel item (`systray`), which the default panel has |
 | XFCE 4.14 or older | the `xfce4-statusnotifier-plugin` panel item |
 | GNOME | the AppIndicator extension (`gnome-shell-extension-appindicator`, on by default in Ubuntu) |
-| KDE Plasma | nothing |
+| KDE Plasma | nothing. Off duty or standing by, the item is Passive, so Plasma keeps it in the tray's hidden icons until the private goes on duty |
 
 ```bash
 bulchimbeon tray &                          # show it now, in this desktop session
@@ -267,10 +268,30 @@ To stop it starting at login, turn it off in your desktop's session and startup 
 | | Linux |
 |---|---|
 | Agents | Your own processes from `/proc`, with the same matching rules and the same privacy limits as on macOS |
-| Sleep lock | Two logind block inhibitors, `sleep` and `idle`, each held by a `systemd-inhibit` child tied to a pipe. If the daemon dies, even with `kill -9`, both are released at once. They show up in `systemd-inhibit --list` as `Bulchimbeon` |
+| Sleep lock | The desktop session's suspend inhibitor, or a logind `sleep` inhibitor without one ([per desktop](#the-sleep-lock-on-each-desktop)). Never an idle lock. If the daemon dies, even with `kill -9`, the lock goes with it |
 | Battery stand-down | `/sys/class/power_supply` |
 | Heat | hwmon (`coretemp`, `k10temp`, …) or thermal zones: heat advisory 15 °C below the critical temperature, combat rest 5 °C below |
 | Duty log | `~/.local/state/bulchimbeon/duty-log.txt`, same format as on macOS |
+
+### The sleep lock on each desktop
+
+| Session | Lock while on duty | Still works |
+|---|---|---|
+| GNOME (Ubuntu, Fedora), Cinnamon, MATE, Budgie | `org.gnome.SessionManager.Inhibit` with the suspend flag only | the screen dims and locks; your own suspend from the menu. GNOME 46 (Ubuntu 24.04) backs any suspend inhibitor with a logind block lock of its own, so `systemctl suspend` in a terminal asks for `-i` |
+| KDE Plasma | `org.freedesktop.PowerManagement.Inhibit`, which PowerDevil applies to automatic suspend only | the screen dims, turns off and locks; manual suspend |
+| XFCE | by default a logind `sleep` inhibitor, as without a desktop, which does **not** stop xfce4-power-manager's automatic suspend on any systemd version (`block` and `block-weak` both let your own user's suspend through). `bulchimbeon config set xfceKeepAwake true` switches to `org.freedesktop.PowerManagement.Inhibit` | the screen blanks and locks; manual suspend. With `xfceKeepAwake`, automatic suspend is blocked too, but XFCE's power manager treats any inhibitor like presentation mode, so the screen then stays on and unlocked while on duty |
+| No desktop: headless, SSH only, sway, Hyprland, other compositors | a logind `sleep` inhibitor, `block-weak` on systemd 257 and later, `block` on 256 and older, held by a `systemd-inhibit` child tied to a pipe | your own suspend. It stops logind's `IdleAction` and other users' suspend requests. On systemd 256 and older, `systemctl suspend` in a terminal asks for `-i` |
+
+Why not logind everywhere: on systemd 256 and older (Ubuntu 24.04, Debian 12) logind ignores a block inhibitor
+for requests from the user who holds it, and GNOME's, XFCE's and Cinnamon's power managers ask logind to suspend as
+you. Measured on Ubuntu 24.04 GNOME: gsd-power's automatic suspend request went through logind while Bulchimbeon held
+its lock. On systemd
+257 and later a logind `block` lock does stop them, but it also refuses your own manual suspend.
+
+The daemon looks for the desktop on your session bus, the user bus that `systemd --user` gives its services. Log in
+to a desktop while it is on duty and the lock moves to the desktop within one check (5 seconds); log out and it moves
+back to logind. The desktop drops its inhibitor when the daemon's bus connection closes, so a crash releases it.
+`bulchimbeon status` shows which lock is held and why; `bulchimbeon doctor` tries each one.
 
 ### Limits
 
@@ -278,8 +299,8 @@ To stop it starting at login, turn it off in your desktop's session and startup 
   (`LidSwitchIgnoreInhibited=yes`), and Bulchimbeon never changes logind's settings.
 - **Over SSH or on a headless machine, the sleep block needs a polkit rule.** By default polkit
   allows a `sleep` block inhibitor only from a local login (someone at the machine's screen). From an
-  SSH session, or as a user service on a machine nobody logs into locally, logind refuses it.
-  Bulchimbeon then blocks only `idle`, and `bulchimbeon status` says plainly that sleep is not blocked.
+  SSH session, or as a user service on a machine nobody logs into locally, logind refuses it,
+  and `bulchimbeon status` says plainly that sleep is not blocked.
   To allow it for one user, save this as `/etc/polkit-1/rules.d/50-bulchimbeon.rules` (owner root, mode `0644`),
   with your user name; `bulchimbeon doctor` prints it with your name filled in:
 
@@ -293,7 +314,20 @@ To stop it starting at login, turn it off in your desktop's session and startup 
   ```
 
   It grants only `org.freedesktop.login1.inhibit-block-sleep` to that user; delete the file to undo.
-  Bulchimbeon never runs this for you. On a laptop with a normal desktop login you don't need it.
+  Bulchimbeon never runs this for you. A desktop session does not need it: its own inhibitor needs no polkit
+  permission. Only the logind lock, used without a desktop, does.
+- **sway, Hyprland and other compositors without a desktop power manager get the logind lock only.** It does not stop
+  an idle daemon that suspends as you (`swayidle` or `hypridle` running `systemctl suspend`), because logind lets your
+  own suspend through. Bulchimbeon holds no idle lock there either: on those compositors one would also stop the
+  screen from locking.
+- **On XFCE, automatic suspend is not blocked by default.** xfce4-power-manager treats any suspend inhibitor like
+  presentation mode and keeps the screen on and unlocked, so Bulchimbeon leaves the screen lock alone and holds only
+  the logind lock, which xfce4-power-manager's own suspend gets past on any systemd version. `bulchimbeon status`
+  and `doctor` say so. To block it anyway, accepting that the screen stays on and unlocked while on duty:
+  `bulchimbeon config set xfceKeepAwake true`.
+- **The desktop inhibitor covers your own session.** Another user's session on the same machine (fast user switching)
+  can still suspend it. A desktop whose session bus is private (started with `dbus-launch`, without
+  `dbus-user-session`) is invisible to the service, which then keeps the logind lock.
 - Only the "Display may sleep" watch mode exists on Linux (`dutyMode` is ignored), there is no patrol mode, and
   notifications go to the journal.
 - Windows is planned: the platform layer is in [`internal/platform`](internal/platform).

@@ -36,6 +36,7 @@ type fakeInhibitor struct {
 	wanted, denySleep, lose bool
 	acquires, releases      int
 	pid                     int
+	desktop                 bool // held by the desktop session instead of logind
 }
 
 func (f *fakeInhibitor) Acquire() {
@@ -54,13 +55,18 @@ func (f *fakeInhibitor) Refresh() bool {
 	return false
 }
 func (f *fakeInhibitor) Status() platform.LockStatus {
-	st := platform.LockStatus{Wanted: f.wanted, Method: "fake"}
+	st := platform.LockStatus{Wanted: f.wanted, Method: platform.MethodLogind, Mode: "block"}
 	if f.wanted {
+		st.Fallback = platform.FallbackNoDesktop
 		sleep := platform.Block{What: "sleep", Held: true, Confirmed: true, PID: f.pid}
 		if f.denySleep {
 			sleep = platform.Block{What: "sleep", Denied: true, Error: "polkit denied"}
 		}
-		st.Blocks = []platform.Block{sleep, {What: "idle", Held: true, Confirmed: true, PID: f.pid + 1}}
+		if f.desktop {
+			st = platform.LockStatus{Wanted: true, Method: platform.MethodGnome}
+			sleep = platform.Block{What: "sleep", Held: true, Confirmed: true}
+		}
+		st.Blocks = []platform.Block{sleep}
 	}
 	return st
 }
@@ -220,9 +226,9 @@ func TestSleepDeniedIsRetriedAndExplained(t *testing.T) {
 	if r.inh.acquires != 2 {
 		t.Errorf("not retried after a minute: %d", r.inh.acquires)
 	}
-	text, running := RenderStatus(StatusInput{State: r.state(), Lang: engine.EN, Now: r.now,
-		Holders: []platform.Holder{{Who: "Bulchimbeon", What: "idle", Mode: "block", PID: r.inh.pid + 1}}})
-	if !running || !strings.Contains(text, "NOT blocking sleep: polkit refused it") || !strings.Contains(text, "confirmed in logind") {
+	text, running := RenderStatus(StatusInput{State: r.state(), Lang: engine.EN, Now: r.now})
+	if !running || !strings.Contains(text, "NOT blocking sleep: polkit refused it") || strings.Contains(text, "confirmed in logind") ||
+		!strings.Contains(text, "no desktop on the session bus") {
 		t.Errorf("status:\n%s", text)
 	}
 }
@@ -324,9 +330,9 @@ func TestStatusExplainsStandbyAndDuty(t *testing.T) {
 	r.setBusy(100, true)
 	r.run(10 * time.Second)
 	text, _ = RenderStatus(StatusInput{State: r.state(), Lang: engine.KO, Now: r.now, LogTail: []string{"2026-10-16T08:40:05Z  근무 투입 — Claude Code 출근"},
-		Holders: []platform.Holder{{Who: "Bulchimbeon", What: "sleep", Mode: "block", PID: r.inh.pid}, {Who: "Bulchimbeon", What: "idle", Mode: "block", PID: r.inh.pid + 1},
+		Holders: []platform.Holder{{Who: "Bulchimbeon", What: "sleep", Mode: "block", PID: r.inh.pid},
 			{Who: "UPower", What: "sleep", Mode: "delay", PID: 3}}})
-	for _, want := range []string{"근무 중", "잠자기·화면 꺼짐(sleep, idle) 차단 중", "logind 에서 확인됨", "Claude Code pid 100",
+	for _, want := range []string{"근무 중", "잠자기 차단 중 — logind block (systemd-inhibit pid 10), 세션 버스에 데스크톱 없음", "logind 에서 확인됨", "Claude Code pid 100",
 		"잠자기 지연: UPower", "근무 투입 — Claude Code 출근"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("duty status lacks %q:\n%s", want, text)
@@ -339,7 +345,7 @@ func TestStatusReport(t *testing.T) {
 	r := newRig(t)
 	r.session(100, true)
 	r.run(10 * time.Second)
-	holders := []platform.Holder{{Who: "Bulchimbeon", What: "sleep", Mode: "block", PID: r.inh.pid}, {Who: "Bulchimbeon", What: "idle", Mode: "block", PID: r.inh.pid + 1}}
+	holders := []platform.Holder{{Who: "Bulchimbeon", What: "sleep", Mode: "block", PID: r.inh.pid}}
 	rep := Status(StatusInput{State: r.state(), Lang: engine.EN, Now: r.now, Holders: holders})
 	if !rep.Running || rep.Headline != "🪖 Bulchimbeon — on duty for 0:00 (agent watch)" {
 		t.Fatalf("report = %+v", rep)
@@ -347,7 +353,7 @@ func TestStatusReport(t *testing.T) {
 	var keys []string
 	for _, l := range rep.Lines {
 		keys = append(keys, l.Key)
-		if l.Key == "lock" && (l.Label != "Lock:" || l.Text != "blocking sleep and idle (fake pid 10, 11) · confirmed in logind") {
+		if l.Key == "lock" && (l.Label != "Lock:" || l.Text != "blocking sleep via logind block (systemd-inhibit pid 10), no desktop on the session bus · confirmed in logind") {
 			t.Errorf("lock line = %+v", l)
 		}
 	}
@@ -355,8 +361,31 @@ func TestStatusReport(t *testing.T) {
 		t.Errorf("keys = %q", keys)
 	}
 	text, _ := RenderStatus(StatusInput{State: r.state(), Lang: engine.EN, Now: r.now, Holders: holders})
-	if !strings.HasPrefix(text, rep.Headline+"\nLock:      blocking sleep and idle (fake pid 10, 11) · confirmed in logind") {
+	if !strings.HasPrefix(text, rep.Headline+"\nLock:      blocking sleep via logind block (systemd-inhibit pid 10), no desktop on the session bus · confirmed in logind\n") {
 		t.Errorf("terminal status:\n%s", text)
+	}
+}
+
+// On a desktop the lock is the session's inhibitor: logind does not list it, the session confirms it.
+func TestStatusOnADesktop(t *testing.T) {
+	r := newRig(t)
+	r.inh.desktop = true
+	r.session(100, true)
+	r.run(10 * time.Second)
+	text, _ := RenderStatus(StatusInput{State: r.state(), Lang: engine.EN, Now: r.now})
+	want := "Lock:      blocking auto-suspend via org.gnome.SessionManager · confirmed by the session\n"
+	if !strings.Contains(text, want) {
+		t.Errorf("status:\n%s", text)
+	}
+	if !strings.Contains(r.out.String(), "lock: blocking auto-suspend via org.gnome.SessionManager") {
+		t.Errorf("journal:\n%s", r.out)
+	}
+	// logout: the lock moves to logind and the journal says so, without a lost-post entry
+	r.inh.desktop = false
+	r.run(5 * time.Second)
+	if !strings.Contains(r.out.String(), "lock: blocking sleep via logind block (systemd-inhibit pid 10), no desktop on the session bus") ||
+		strings.Contains(r.log(), "Post abandoned") {
+		t.Errorf("journal:\n%s\nlog:\n%s", r.out, r.log())
 	}
 }
 

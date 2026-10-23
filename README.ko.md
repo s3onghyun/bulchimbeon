@@ -201,6 +201,7 @@ pmset -g assertions | grep Bulchimbeon   # 근무 중인지 확인
 리눅스에서는 명령줄과 [트레이 아이콘](#트레이-아이콘)이 있는 작은 데몬으로 돕니다.
 엔진은 맥 앱과 같습니다. Go 로 옮긴 엔진이 Swift Core 와 같은 골든 테스트([`testdata/engine`](testdata/engine))를
 PR 마다 CI 에서 통과해야 합니다. Ubuntu 24.04 (systemd 255)에서 확인했고, systemd·logind 가 필요합니다.
+근무 중에는 데스크톱 자체의 절전 억제로, 데스크톱이 없으면 logind 로 자동 절전을 막습니다([아래](#데스크톱별-잠자기-방지)).
 
 ### 설치
 
@@ -235,7 +236,7 @@ systemctl --user enable --now bulchimbeon
 
 ```bash
 bulchimbeon status                       # 지금 근무 중인지, 왜 그런지
-bulchimbeon doctor                       # systemd·logind·polkit 점검
+bulchimbeon doctor                       # 데스크톱 세션·systemd·logind·polkit 점검
 bulchimbeon config set agentGraceMinutes 10
 bulchimbeon config set customAgents goose amp
 bulchimbeon config set language ko       # ko | en | zh | system (기본: LANG 따름)
@@ -265,7 +266,7 @@ KDE·XFCE·GNOME AppIndicator 확장이 쓰는 트레이 규격 StatusNotifierIt
 | XFCE 4.16 이상 | 패널의 **상태 트레이(Status Tray)** 항목 (`systray`, 기본 패널에 있음) |
 | XFCE 4.14 이하 | 패널 항목 `xfce4-statusnotifier-plugin` |
 | GNOME | AppIndicator 확장 (`gnome-shell-extension-appindicator`, 우분투는 기본으로 켜져 있음) |
-| KDE Plasma | 없음 |
+| KDE Plasma | 없음. 근무 중이 아니면(대기·취침) 항목이 Passive 라 Plasma 는 숨은 아이콘에 두고, 근무에 들어가면 패널에 보입니다 |
 
 ```bash
 bulchimbeon tray &                          # 지금 이 데스크톱 세션에 띄우기
@@ -280,10 +281,29 @@ bulchimbeon config set uniformTheme navy    # default | navy | arctic | desert: 
 | | 리눅스 |
 |---|---|
 | 에이전트 | `/proc` 의 내 프로세스만. 판별 규칙·개인정보 제한은 맥과 같음 |
-| 잠자기 방지 | logind block inhibitor 두 개(`sleep`, `idle`). 각각 파이프에 묶인 `systemd-inhibit` 자식이 쥐고 있어, 데몬이 죽으면(`kill -9` 포함) 즉시 풀림. `systemd-inhibit --list` 에 `Bulchimbeon` 으로 보임 |
+| 잠자기 방지 | 데스크톱 세션의 절전 억제, 데스크톱이 없으면 logind `sleep` inhibitor ([데스크톱별](#데스크톱별-잠자기-방지)). idle 잠금은 잡지 않음. 데몬이 죽으면(`kill -9` 포함) 잠금도 함께 풀림 |
 | 배터리 철수 | `/sys/class/power_supply` |
 | 폭염 | hwmon(`coretemp`, `k10temp` 등) 또는 thermal zone: 위험 온도 15 °C 아래면 주의보, 5 °C 아래면 전투휴식 |
 | 근무일지 | `~/.local/state/bulchimbeon/duty-log.txt` (맥과 같은 형식) |
+
+### 데스크톱별 잠자기 방지
+
+| 세션 | 근무 중 잠금 | 그대로 되는 것 |
+|---|---|---|
+| GNOME (Ubuntu, Fedora), Cinnamon, MATE, Budgie | `org.gnome.SessionManager.Inhibit`, 절전 플래그만 | 화면이 어두워지고 잠김, 메뉴로 내가 하는 절전. GNOME 46 (Ubuntu 24.04)은 절전 억제가 있으면 자기 logind block 잠금도 잡아서, 터미널의 `systemctl suspend` 는 `-i` 를 요구합니다 |
+| KDE Plasma | `org.freedesktop.PowerManagement.Inhibit` (PowerDevil 은 자동 절전에만 적용) | 화면 어두워짐·꺼짐·잠금, 수동 절전 |
+| XFCE | 기본은 데스크톱이 없을 때처럼 logind `sleep` inhibitor. systemd 버전과 상관없이 xfce4-power-manager 의 자동 절전을 **막지 못합니다** (`block`·`block-weak` 모두 내 사용자의 절전 요청은 통과시킴). `bulchimbeon config set xfceKeepAwake true` 로 `org.freedesktop.PowerManagement.Inhibit` 를 씀 | 화면 꺼짐·잠금, 수동 절전. `xfceKeepAwake` 를 켜면 자동 절전도 막지만, XFCE 전원 관리자는 어떤 억제든 프레젠테이션 모드처럼 다뤄서 근무 중에는 화면이 켜진 채 잠기지 않습니다 |
+| 데스크톱 없음: 헤드리스, SSH 만, sway, Hyprland 등 컴포지터 | logind `sleep` inhibitor. systemd 257 이상은 `block-weak`, 256 이하는 `block`. 파이프에 묶인 `systemd-inhibit` 자식이 쥠 | 내가 하는 절전. logind 의 `IdleAction` 과 다른 사용자의 절전 요청은 막습니다. systemd 256 이하에서는 터미널의 `systemctl suspend` 가 `-i` 를 요구합니다 |
+
+logind 만 쓰지 않는 이유: systemd 256 이하(Ubuntu 24.04, Debian 12)의 logind 는 잠금을 쥔 사용자 본인의 요청에는
+block inhibitor 를 무시하고, GNOME·XFCE·Cinnamon 의 전원 관리자는 사용자로 logind 에 절전을 요청합니다.
+Ubuntu 24.04 GNOME 에서 실측: 불침번이 logind 잠금을 쥐고 있어도 gsd-power 의 자동 절전 요청이 logind 를 통과했습니다.
+systemd 257 이상에서는 logind `block` 잠금이 이를 막지만, 내가 직접 하는 절전까지 거부합니다.
+
+데몬은 세션 버스, 즉 `systemd --user` 가 서비스에 주는 사용자 버스에서 데스크톱을 찾습니다. 근무 중에 데스크톱에
+로그인하면 다음 점검(5초) 안에 잠금이 데스크톱으로, 로그아웃하면 logind 로 옮겨 갑니다. 데몬의 버스 연결이 끊기면
+데스크톱이 억제를 풀기 때문에, 데몬이 죽어도 잠금이 남지 않습니다. `bulchimbeon status` 가 어떤 잠금을 왜 쥐었는지
+보여주고, `bulchimbeon doctor` 가 하나씩 시험합니다.
 
 ### 한계
 
@@ -291,11 +311,20 @@ bulchimbeon config set uniformTheme navy    # default | navy | arctic | desert: 
   불침번은 logind 설정을 바꾸지 않습니다.
 - **SSH·헤드리스 기기에서 잠자기 차단에는 polkit 규칙이 필요합니다.** polkit 은 기본적으로 로컬 로그인(화면 앞)에서만
   `sleep` 차단을 허용합니다. SSH 세션이나, 아무도 로컬로 로그인하지 않는 기기의 사용자 서비스에서는 거부됩니다.
-  그러면 불침번은 `idle` 만 막고, `bulchimbeon status` 가 잠자기는 막지 못한다고 분명히 알려줍니다.
+  그러면 `bulchimbeon status` 가 잠자기는 막지 못한다고 분명히 알려줍니다.
   한 사용자에게만 허용하려면 위 [English](README.md#limits) 섹션의 규칙을 사용자 이름을 넣어
   `/etc/polkit-1/rules.d/50-bulchimbeon.rules` (root 소유, `0644`)로 저장하세요. `bulchimbeon doctor` 가 이름을 채워 출력합니다.
   `org.freedesktop.login1.inhibit-block-sleep` 하나만 허용하며, 파일을 지우면 원래대로 돌아갑니다. 불침번이 대신 실행하지 않습니다.
-  데스크톱으로 로그인하는 노트북에서는 필요 없습니다.
+  데스크톱 세션은 자체 절전 억제를 쓰므로 polkit 권한이 필요 없습니다. 데스크톱이 없을 때 쓰는 logind 잠금에만 필요합니다.
+- **sway, Hyprland 처럼 데스크톱 전원 관리자가 없는 컴포지터는 logind 잠금만 받습니다.** 사용자로 절전하는 idle 데몬
+  (`swayidle`, `hypridle` 이 실행하는 `systemctl suspend`)은 막지 못합니다. logind 가 본인의 절전은 통과시키기 때문입니다.
+  그렇다고 idle 잠금을 잡으면 이 컴포지터들에서는 화면 잠금까지 멈추므로 잡지 않습니다.
+- **XFCE 에서는 기본적으로 자동 절전을 막지 않습니다.** xfce4-power-manager 는 어떤 절전 억제든 프레젠테이션 모드처럼
+  다뤄 화면을 켜 두고 잠그지 않으므로, 불침번은 화면 잠금을 건드리지 않고 logind 잠금만 쥡니다. systemd 버전과 상관없이
+  xfce4-power-manager 의 자동 절전이 이 잠금을 통과합니다. `bulchimbeon status` 와 `doctor` 가 그렇게 알립니다.
+  근무 중 화면이 켜진 채 잠기지 않는 것을 감수하고 막으려면 `bulchimbeon config set xfceKeepAwake true`.
+- **데스크톱 억제는 내 세션만 지킵니다.** 같은 기기의 다른 사용자 세션(빠른 사용자 전환)은 여전히 기기를 재울 수
+  있습니다. 세션 버스가 따로인 데스크톱(`dbus-user-session` 없이 `dbus-launch` 로 시작)은 서비스가 볼 수 없어 logind 잠금을 유지합니다.
 - 리눅스에는 "화면은 꺼져도 깨어 있음" 근무 형태만 있고(`dutyMode` 무시), 순찰 모드는 없으며, 알림은 저널로 갑니다.
 - Windows 는 계획 중입니다: 플랫폼 계층은 [`internal/platform`](internal/platform).
 

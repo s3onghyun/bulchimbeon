@@ -158,7 +158,7 @@ func newRig(t *testing.T) *rig {
 		paths: daemon.Paths{Settings: filepath.Join(dir, "config", "settings.json"), State: filepath.Join(dir, "state", "state.json"),
 			Log: filepath.Join(dir, "state", "duty-log.txt")}}
 	en := engine.EN
-	holders := []platform.Holder{{Who: platform.Who, What: "sleep", Mode: "block", PID: 5}, {Who: platform.Who, What: "idle", Mode: "block", PID: 6}}
+	holders := []platform.Holder{{Who: platform.Who, What: "sleep", Mode: "block", PID: 5}, {Who: "UPower", What: "sleep", Mode: "delay", PID: 3}}
 	r.tray = &tray{cfg: Config{Paths: r.paths, Lang: &en, Log: r.log, Now: func() time.Time { return r.now },
 		Alive: func(int) bool { return true }, Getenv: func(string) string { return "" }, Holders: func() ([]platform.Holder, error) { return holders, nil }},
 		bus: r.bus, settings: settings.Defaults(), cache: map[string][]any{}, holders: holders, holdersCh: make(chan holdersResult, 1)}
@@ -174,8 +174,8 @@ func (r *rig) state(order, pose string, onDuty, resting bool) {
 			Processes: []daemon.ProcessState{{PID: 100, Working: onDuty, TreeCPU: 9.5, Reason: "executableName"}}}}}
 	if onDuty {
 		st.DutyStartedAt = &started
-		st.Lock = platform.LockStatus{Wanted: true, Method: "systemd-inhibit",
-			Blocks: []platform.Block{{What: "sleep", Held: true, PID: 5}, {What: "idle", Held: true, PID: 6}}}
+		st.Lock = platform.LockStatus{Wanted: true, Method: platform.MethodGnome,
+			Blocks: []platform.Block{{What: "sleep", Held: true, Confirmed: true}}}
 	}
 	data, _ := json.Marshal(st)
 	os.MkdirAll(filepath.Dir(r.paths.State), 0o700)
@@ -248,6 +248,43 @@ func labels(items []menu) []string {
 
 // tests ---------------------------------------------------------------------
 
+// KDE keeps Passive items in the tray's overflow: the private shows in the panel only on duty
+// (or sweating through a combat rest), and NewStatus tells the host when that changes.
+func TestItemStatusIsActiveOnlyOnDuty(t *testing.T) {
+	r := newRig(t)
+	status := func() string {
+		reply := r.call(itemPath, propsIface, "Get", "ss", itemIface, "Status")
+		return reply.Body[0].(dbus.Variant).Value.(string)
+	}
+	newStatus := func() int { return r.bus.count(&r.bus.emits, "NewStatus") }
+	for _, c := range []struct {
+		order, pose     string
+		onDuty, resting bool
+		want            string
+		signals         int
+	}{
+		{"agentWatch", "standby", false, false, "Passive", 0},
+		{"agentWatch", "duty", true, false, "Active", 1},
+		{"agentWatch", "duty", true, false, "Active", 1}, // no change, no signal
+		{"agentWatch", "heat", false, true, "Active", 1},
+		{"agentWatch", "salute", false, false, "Passive", 2},
+		{"off", "sleeping", false, false, "Passive", 2},
+		{"agentWatch", "duty", true, false, "Active", 3},
+	} {
+		r.state(c.order, c.pose, c.onDuty, c.resting)
+		r.tray.refresh()
+		if got := status(); got != c.want || newStatus() != c.signals {
+			t.Errorf("%s: Status %s, NewStatus ×%d; want %s, ×%d", c.pose, got, newStatus(), c.want, c.signals)
+		}
+	}
+	// a daemon that is gone is not on duty, whatever its last state file says
+	r.tray.cfg.Alive = func(int) bool { return false }
+	r.tray.refresh()
+	if status() != "Passive" || newStatus() != 4 {
+		t.Errorf("gone: Status %s, NewStatus ×%d", status(), newStatus())
+	}
+}
+
 func TestPoseAndStatusFollowTheStateFile(t *testing.T) {
 	r := newRig(t)
 	for _, c := range []struct {
@@ -272,11 +309,11 @@ func TestPoseAndStatusFollowTheStateFile(t *testing.T) {
 	// the status block is every line of `bulchimbeon status`
 	r.state("agentWatch", "duty", true, false)
 	r.tray.refresh()
-	want := []string{"Lock: blocking sleep and idle (systemd-inhibit pid 5, 6) · confirmed in logind",
+	want := []string{"Lock: blocking auto-suspend via org.gnome.SessionManager · confirmed by the session",
 		"Why: Claude Code pid 100 9.5% (process-tree CPU ≥ 2.0%, 60 s average)",
 		"Agents: Claude Code ×1 open, 1 working", "Handover: 5 min after the last agent goes quiet (agentGraceMinutes)",
 		"Power: battery: none · heat: no sensor · lid: not handled (closing it still suspends)",
-		"Others: blocking sleep: none · delaying sleep: none · blocking idle: none", "Log: " + r.paths.Log}
+		"Others: blocking sleep: none · delaying sleep: UPower · blocking idle: none", "Log: " + r.paths.Log}
 	if !reflect.DeepEqual(r.tray.view.status, want) {
 		t.Errorf("status = %q", r.tray.view.status)
 	}
@@ -286,7 +323,7 @@ func TestPoseAndStatusFollowTheStateFile(t *testing.T) {
 	r.tray.refresh()
 	if r.tray.view.pose != engine.PoseSleeping || !strings.Contains(r.tray.view.headline, "is not running: process 77 is gone") ||
 		!reflect.DeepEqual(r.tray.view.status, []string{"Start it: systemctl --user start bulchimbeon  (or bulchimbeon run)",
-			"⚠️ Bulchimbeon locks still listed: sleep (pid 5), idle (pid 6)"}) {
+			"⚠️ Bulchimbeon locks still listed: sleep (pid 5)"}) {
 		t.Errorf("gone: %s %q %q", r.tray.view.pose, r.tray.view.headline, r.tray.view.status)
 	}
 	r.tray.cfg.Alive = func(int) bool { return true }
@@ -343,10 +380,10 @@ func TestMenuLayoutAndUniformChoice(t *testing.T) {
 		t.Fatalf("root = %+v", root)
 	}
 	got := labels(root.children)
-	want := []string{"🪖 Bulchimbeon — on duty for 1:30 (agent watch)", "Lock: blocking sleep and idle (systemd-inhibit pid 5, 6) · confirmed in logind",
+	want := []string{"🪖 Bulchimbeon — on duty for 1:30 (agent watch)", "Lock: blocking auto-suspend via org.gnome.SessionManager · confirmed by the session",
 		"Why: Claude Code pid 100 9.5% (process-tree CPU ≥ 2.0%, 60 s average)", "Agents: Claude Code ×1 open, 1 working",
 		"Handover: 5 min after the last agent goes quiet (agentGraceMinutes)", "Power: battery: none · heat: no sensor · lid: not handled (closing it still suspends)",
-		"Others: blocking sleep: none · delaying sleep: none · blocking idle: none", "Log: " + r.paths.Log,
+		"Others: blocking sleep: none · delaying sleep: UPower · blocking idle: none", "Log: " + r.paths.Log,
 		"--", "🧥 Uniform", "--", "Quit tray (the watch keeps running)"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("menu = %q", got)
@@ -511,7 +548,7 @@ func TestItemPropertiesAndCalls(t *testing.T) {
 		kv := kv.([]any)
 		props[kv[0].(string)] = kv[1].(dbus.Variant).Value
 	}
-	if props["Id"] != "bulchimbeon" || props["Status"] != "Active" || props["Menu"] != menuPath || props["ItemIsMenu"] != true ||
+	if props["Id"] != "bulchimbeon" || props["Status"] != "Passive" || props["Menu"] != menuPath || props["ItemIsMenu"] != true ||
 		props["IconThemePath"] != r.tray.iconRoot || !strings.HasPrefix(props["IconName"].(string), "bulchimbeon-default-") {
 		t.Errorf("properties = %v", props)
 	}
@@ -845,29 +882,37 @@ func TestQuitFromTheMenu(t *testing.T) {
 	}
 }
 
-// `bulchimbeon run` never talks to the session bus: the go command's Linux build of the
-// daemon's packages does not include the D-Bus client or the tray.
-func TestDaemonDoesNotUseTheSessionBus(t *testing.T) {
+// The daemon loop never talks to the session bus, and nothing on the daemon's side links the
+// tray. Only the Linux lock does, as a client that owns no name and exports nothing
+// (TestLockIsAClientOnly in internal/platform/linux), to hold the desktop's suspend inhibitor.
+func TestDaemonUsesTheSessionBusOnlyForTheLock(t *testing.T) {
 	gobin := filepath.Join(runtime.GOROOT(), "bin", "go")
 	if _, err := os.Stat(gobin); err != nil {
 		t.Skipf("no go command: %v", err)
 	}
 	const module = "github.com/s3onghyun/bulchimbeon/"
-	cmd := exec.Command(gobin, "list", "-deps", "./internal/daemon", "./internal/platform/linux")
-	cmd.Dir = filepath.Join("..", "..")
-	cmd.Env = append(os.Environ(), "GOOS=linux")
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("go list: %v", err)
+	deps := func(pkg string) []string {
+		cmd := exec.Command(gobin, "list", "-deps", pkg)
+		cmd.Dir = filepath.Join("..", "..")
+		cmd.Env = append(os.Environ(), "GOOS=linux")
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("go list %s: %v", pkg, err)
+		}
+		return strings.Fields(string(out))
 	}
-	deps := strings.Fields(string(out))
+	loop := deps("./internal/daemon")
 	for _, pkg := range []string{"internal/dbus", "internal/tray"} {
-		if slices.Contains(deps, module+pkg) {
-			t.Errorf("the daemon's packages depend on %s", pkg)
+		if slices.Contains(loop, module+pkg) {
+			t.Errorf("internal/daemon depends on %s", pkg)
 		}
 	}
-	if !slices.Contains(deps, module+"internal/engine") || !slices.Contains(deps, module+"internal/platform/linux") {
-		t.Errorf("go list -deps = %q", deps)
+	backend := deps("./internal/platform/linux")
+	if slices.Contains(backend, module+"internal/tray") {
+		t.Error("internal/platform/linux depends on internal/tray")
+	}
+	if !slices.Contains(loop, module+"internal/engine") || !slices.Contains(backend, module+"internal/dbus") {
+		t.Errorf("go list -deps = %q, %q", loop, backend)
 	}
 }
 

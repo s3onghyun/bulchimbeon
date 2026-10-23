@@ -66,7 +66,7 @@ CI runs these in the `go (linux)` job.
 | `Tests/BulchimbeonCoreTests/` | Swift Testing suites for the Core target, including scenario tests with a fake clock | |
 | `testdata/engine/` | Golden fixtures that the Swift tests and the Go tests both run ([format](testdata/engine/README.md)) | Required |
 | `internal/engine/` | The Go port of the Core engine for the Linux daemon | **Required**: must pass `testdata/engine` |
-| `internal/platform/`, `internal/daemon/`, `cmd/bulchimbeon/` | Linux backend (`/proc`, logind, sysfs), the daemon loop and the `bulchimbeon` command; a Windows stub | Unit tests with recorded fixtures |
+| `internal/platform/`, `internal/daemon/`, `cmd/bulchimbeon/` | Linux backend (`/proc`, logind, sysfs, the desktop's suspend inhibitor), the daemon loop and the `bulchimbeon` command; a Windows stub | Unit tests with recorded fixtures |
 | `internal/sprites/`, `internal/tray/`, `internal/dbus/` | The Linux tray icon: sprites drawn from `testdata/engine/sprites.json`, the StatusNotifierItem and its menu, a small standard-library D-Bus client | Pixel-for-pixel against the fixture; a fake bus; a real `dbus-daemon` when installed |
 | `docs/` | Design notes (`design.md`), the [compatibility promise](docs/compatibility.md), media | |
 
@@ -232,7 +232,7 @@ CI 는 이것을 `go (linux)` 잡에서 돌립니다.
 | `Tests/BulchimbeonCoreTests/` | Core 타깃의 Swift Testing 테스트 (가짜 시계로 도는 시나리오 테스트 포함) | |
 | `testdata/engine/` | Swift 테스트와 Go 테스트가 함께 돌리는 골든 픽스처 ([형식](testdata/engine/README.md)) | 필수 |
 | `internal/engine/` | 리눅스 데몬용 Go 엔진 (Core 엔진을 옮긴 것) | **필수**: `testdata/engine` 통과 |
-| `internal/platform/`, `internal/daemon/`, `cmd/bulchimbeon/` | 리눅스 백엔드(`/proc`·logind·sysfs), 데몬 루프, `bulchimbeon` 명령, Windows 자리 | 기록된 픽스처로 단위 테스트 |
+| `internal/platform/`, `internal/daemon/`, `cmd/bulchimbeon/` | 리눅스 백엔드(`/proc`·logind·sysfs·데스크톱 절전 억제), 데몬 루프, `bulchimbeon` 명령, Windows 자리 | 기록된 픽스처로 단위 테스트 |
 | `internal/sprites/`, `internal/tray/`, `internal/dbus/` | 리눅스 트레이 아이콘: `testdata/engine/sprites.json` 으로 그리는 스프라이트, StatusNotifierItem 과 메뉴, 표준 라이브러리로 만든 작은 D-Bus 클라이언트 | 픽스처와 픽셀 단위 비교, 가짜 버스, 설치돼 있으면 실제 `dbus-daemon` |
 | `docs/` | 설계서(`design.md`), [호환성 약속](docs/compatibility.md), 미디어 | |
 
