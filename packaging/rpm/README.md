@@ -26,8 +26,23 @@ Ubuntu's signed archive, like `dpkg-deb`), not from a container image or a downl
 files go into `SHA256SUMS`, the build-provenance attestation and the release, next to the `.deb`.
 `package-rpm.sh` is reproducible from `SOURCE_DATE_EPOCH`, like `package-linux.sh`.
 
-The `rpm (fedora)` job in `.github/workflows/packaging.yml` builds both `.rpm` files and installs the
-x86_64 one in a Fedora container on pull requests that touch packaging.
+Local install check (needs docker; a manual check, not run in CI). `package-rpm.sh` needs the tarball
+that `package-linux.sh` wrote to `dist/linux` and `rpmbuild` (Ubuntu's `rpm` package); setting
+`SOURCE_DATE_EPOCH` means it does not need git inside the container:
+
+```sh
+./scripts/package-linux.sh 0.0.0~dev amd64
+docker run --rm -v "$PWD:/src" -w /src ubuntu:24.04 sh -c \
+'apt-get update -q && apt-get install -y -q --no-install-recommends rpm && SOURCE_DATE_EPOCH=0 ./scripts/package-rpm.sh 0.0.0~dev amd64'
+docker run --rm -v "$PWD/dist/linux:/rpms:ro" -w /rpms fedora:44 sh -euxc '
+dnf -y -q install ./bulchimbeon-0.0.0~dev-1.x86_64.rpm
+bulchimbeon version
+rpm -V bulchimbeon
+test "$(systemctl --global is-enabled bulchimbeon.service || true)" = disabled
+rpm -e bulchimbeon
+if rpm -q bulchimbeon; then exit 1; fi
+test ! -e /usr/bin/bulchimbeon'
+```
 
 ## Fedora COPR
 

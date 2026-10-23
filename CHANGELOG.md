@@ -5,7 +5,7 @@
 
 ## 다음 버전
 
-- 리눅스 `.rpm`: 릴리스에 x86_64·aarch64 용 `bulchimbeon-<버전>-1.<아키텍처>.rpm` 을 더한다. `.deb` 와 같은 파일(`/usr/bin`, 켜지 않은 systemd 사용자 유닛, 트레이 자동 시작 항목, 문서·라이선스)이고, 같은 tarball 의 바이너리를 Ubuntu 저장소의 `rpmbuild` 로 다시 포장한다. `SHA256SUMS`·빌드 출처 증명에 들어가고, 패키징을 바꾸는 PR 마다 Fedora 컨테이너에서 설치·제거를 시험한다 (`packaging/rpm`, `scripts/package-rpm.sh`)
+- 리눅스 `.rpm`: 릴리스에 x86_64·aarch64 용 `bulchimbeon-<버전>-1.<아키텍처>.rpm` 을 더한다. `.deb` 와 같은 파일(`/usr/bin`, 켜지 않은 systemd 사용자 유닛, 트레이 자동 시작 항목, 문서·라이선스)이고, 같은 tarball 의 바이너리를 Ubuntu 저장소의 `rpmbuild` 로 다시 포장한다. `SHA256SUMS`·빌드 출처 증명에 들어간다 (`packaging/rpm`, `scripts/package-rpm.sh`)
 - Fedora COPR 준비: `.copr/Makefile` 이 릴리스 tarball 을 `SHA256SUMS` 로 검증해 소스 rpm 을 만든다. 소유자가 COPR 프로젝트를 만들기 전까지는 공개되지 않는다 (`packaging/rpm/README.md`)
 - AUR 준비: `packaging/aur/bulchimbeon-bin` 의 `PKGBUILD`·`.SRCINFO` (x86_64·aarch64, 릴리스 tarball 과 sha256), 그리고 체크섬·출처 증명을 검증한 뒤에만 이를 갱신하는 `scripts/bump-aur.sh`. 소유자가 AUR 에 올리기 전까지는 공개되지 않는다 (`packaging/aur/README.md`)
 
