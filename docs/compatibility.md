@@ -22,7 +22,7 @@
 | `customAgents` | 문자열 배열 | 실행 파일 이름 | 없음 | (메뉴 없음) |
 | `patrolEnabled` | 불리언 | `true` · `false` | `true` | 🚶 순찰 모드 |
 | `patrolScale` | 정수 | `2` · `3` | `2` | 이등병 크기 |
-| `uniformTheme` | 문자열 | `default` · `navy` · `arctic` (테마 id) | `default` | 🪖 군복 |
+| `uniformTheme` | 문자열 | `default` · `navy` · `arctic` (테마 id) | `default` | 🧥 군복 |
 
 ```bash
 defaults write io.github.s3onghyun.bulchimbeon customAgents -array goose amp
