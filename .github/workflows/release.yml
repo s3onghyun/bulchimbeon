@@ -39,8 +39,9 @@ jobs:
           gh release create "$GITHUB_REF_NAME" dist/*.zip dist/*.sha256 \
             --title "불침번 $GITHUB_REF_NAME" --generate-notes --verify-tag
 
-  # Linux daemon: tar.gz and .deb for amd64 and arm64, attached to the release above.
-  # Plain `go build` and `dpkg-deb` (scripts/package-linux.sh), no third-party packaging action.
+  # Linux daemon: tar.gz, .deb and .rpm for amd64 and arm64, attached to the release above.
+  # Plain `go build`, `dpkg-deb` (scripts/package-linux.sh) and `rpmbuild` from Ubuntu's own
+  # `rpm` package (scripts/package-rpm.sh, repackaging the tarball's binary), no third-party packaging action.
   linux:
     needs: release
     runs-on: ubuntu-24.04
@@ -61,17 +62,23 @@ jobs:
         run: |
           go vet ./...
           go test ./...
+      - name: Install rpmbuild
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends rpm
       - name: Build
         run: |
           for arch in amd64 arm64; do
             ./scripts/package-linux.sh "${GITHUB_REF_NAME#v}" "$arch"
+            ./scripts/package-rpm.sh "${GITHUB_REF_NAME#v}" "$arch"
           done
-          cd dist/linux && sha256sum ./*.tar.gz ./*.deb > SHA256SUMS && cat SHA256SUMS
+          cd dist/linux && sha256sum ./*.tar.gz ./*.deb ./*.rpm > SHA256SUMS && cat SHA256SUMS
       - name: Verify
         run: |
           cd dist/linux
           sha256sum -c SHA256SUMS
           for deb in ./*.deb; do dpkg-deb --info "$deb"; done
+          for rpm in ./*.rpm; do rpm -qip "$rpm" && rpm -qlp "$rpm"; done
           tar -xzOf "bulchimbeon_${GITHUB_REF_NAME#v}_linux_amd64.tar.gz" "bulchimbeon_${GITHUB_REF_NAME#v}_linux_amd64/bulchimbeon" > bulchimbeon
           chmod +x bulchimbeon && ./bulchimbeon version && rm bulchimbeon
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -79,9 +86,10 @@ jobs:
           subject-path: |
             dist/linux/*.tar.gz
             dist/linux/*.deb
+            dist/linux/*.rpm
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload "$GITHUB_REF_NAME" dist/linux/*.tar.gz dist/linux/*.deb dist/linux/SHA256SUMS \
+          gh release upload "$GITHUB_REF_NAME" dist/linux/*.tar.gz dist/linux/*.deb dist/linux/*.rpm dist/linux/SHA256SUMS \
             --repo "$GITHUB_REPOSITORY"
