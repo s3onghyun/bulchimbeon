@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"go/parser"
-	"go/token"
 	"image/png"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
+	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -156,9 +158,10 @@ func newRig(t *testing.T) *rig {
 		paths: daemon.Paths{Settings: filepath.Join(dir, "config", "settings.json"), State: filepath.Join(dir, "state", "state.json"),
 			Log: filepath.Join(dir, "state", "duty-log.txt")}}
 	en := engine.EN
+	holders := []platform.Holder{{Who: platform.Who, What: "sleep", Mode: "block", PID: 5}, {Who: platform.Who, What: "idle", Mode: "block", PID: 6}}
 	r.tray = &tray{cfg: Config{Paths: r.paths, Lang: &en, Log: r.log, Now: func() time.Time { return r.now },
-		Alive: func(int) bool { return true }, Getenv: func(string) string { return "" }},
-		bus: r.bus, settings: settings.Defaults(), cache: map[string][]any{}}
+		Alive: func(int) bool { return true }, Getenv: func(string) string { return "" }, Holders: func() ([]platform.Holder, error) { return holders, nil }},
+		bus: r.bus, settings: settings.Defaults(), cache: map[string][]any{}, holders: holders, holdersCh: make(chan holdersResult, 1)}
 	return r
 }
 
@@ -266,12 +269,14 @@ func TestPoseAndStatusFollowTheStateFile(t *testing.T) {
 		}
 	}
 
-	// the status block is `bulchimbeon status`'s lock, why, agents and handover lines
+	// the status block is every line of `bulchimbeon status`
 	r.state("agentWatch", "duty", true, false)
 	r.tray.refresh()
-	want := []string{"Lock: blocking sleep and idle (systemd-inhibit pid 5, 6)",
+	want := []string{"Lock: blocking sleep and idle (systemd-inhibit pid 5, 6) · confirmed in logind",
 		"Why: Claude Code pid 100 9.5% (process-tree CPU ≥ 2.0%, 60 s average)",
-		"Agents: Claude Code ×1 open, 1 working", "Handover: 5 min after the last agent goes quiet (agentGraceMinutes)"}
+		"Agents: Claude Code ×1 open, 1 working", "Handover: 5 min after the last agent goes quiet (agentGraceMinutes)",
+		"Power: battery: none · heat: no sensor · lid: not handled (closing it still suspends)",
+		"Others: blocking sleep: none · delaying sleep: none · blocking idle: none", "Log: " + r.paths.Log}
 	if !reflect.DeepEqual(r.tray.view.status, want) {
 		t.Errorf("status = %q", r.tray.view.status)
 	}
@@ -280,7 +285,8 @@ func TestPoseAndStatusFollowTheStateFile(t *testing.T) {
 	r.tray.cfg.Alive = func(int) bool { return false }
 	r.tray.refresh()
 	if r.tray.view.pose != engine.PoseSleeping || !strings.Contains(r.tray.view.headline, "is not running: process 77 is gone") ||
-		!reflect.DeepEqual(r.tray.view.status, []string{"Start it: systemctl --user start bulchimbeon  (or bulchimbeon run)"}) {
+		!reflect.DeepEqual(r.tray.view.status, []string{"Start it: systemctl --user start bulchimbeon  (or bulchimbeon run)",
+			"⚠️ Bulchimbeon locks still listed: sleep (pid 5), idle (pid 6)"}) {
 		t.Errorf("gone: %s %q %q", r.tray.view.pose, r.tray.view.headline, r.tray.view.status)
 	}
 	r.tray.cfg.Alive = func(int) bool { return true }
@@ -337,18 +343,20 @@ func TestMenuLayoutAndUniformChoice(t *testing.T) {
 		t.Fatalf("root = %+v", root)
 	}
 	got := labels(root.children)
-	want := []string{"🪖 Bulchimbeon — on duty for 1:30 (agent watch)", "Lock: blocking sleep and idle (systemd-inhibit pid 5, 6)",
+	want := []string{"🪖 Bulchimbeon — on duty for 1:30 (agent watch)", "Lock: blocking sleep and idle (systemd-inhibit pid 5, 6) · confirmed in logind",
 		"Why: Claude Code pid 100 9.5% (process-tree CPU ≥ 2.0%, 60 s average)", "Agents: Claude Code ×1 open, 1 working",
-		"Handover: 5 min after the last agent goes quiet (agentGraceMinutes)", "--", "🧥 Uniform", "--", "Quit tray (the watch keeps running)"}
+		"Handover: 5 min after the last agent goes quiet (agentGraceMinutes)", "Power: battery: none · heat: no sensor · lid: not handled (closing it still suspends)",
+		"Others: blocking sleep: none · delaying sleep: none · blocking idle: none", "Log: " + r.paths.Log,
+		"--", "🧥 Uniform", "--", "Quit tray (the watch keeps running)"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("menu = %q", got)
 	}
-	for _, c := range root.children[:5] {
+	for _, c := range root.children[:8] {
 		if c.props["enabled"] != false {
 			t.Errorf("status line %q is clickable", c.props["label"])
 		}
 	}
-	uniform := root.children[6]
+	uniform := root.children[9]
 	if uniform.props["children-display"] != "submenu" || len(uniform.children) != len(sprites.Themes()) {
 		t.Fatalf("uniform = %+v", uniform)
 	}
@@ -377,8 +385,8 @@ func TestMenuLayoutAndUniformChoice(t *testing.T) {
 		t.Fatalf("stored uniformTheme = %s", v)
 	}
 	rev2, root := r.layout()
-	if rev2 <= rev || !reflect.DeepEqual(radio(root.children[6]), []int32{0, 1, 0, 0}) {
-		t.Errorf("after navy: revision %d→%d, %v", rev, rev2, radio(root.children[6]))
+	if rev2 <= rev || !reflect.DeepEqual(radio(root.children[9]), []int32{0, 1, 0, 0}) {
+		t.Errorf("after navy: revision %d→%d, %v", rev, rev2, radio(root.children[9]))
 	}
 	if r.bus.count(&r.bus.emits, "NewIcon") != icons+1 || r.bus.count(&r.bus.emits, "LayoutUpdated") == 0 {
 		t.Errorf("signals = %q", r.bus.emits)
@@ -411,6 +419,83 @@ func TestMenuLayoutAndUniformChoice(t *testing.T) {
 	}
 	if reply := r.call(menuPath, propsIface, "Get", "ss", menuIface, "Version"); reply.Body[0].(dbus.Variant).Value != uint32(3) {
 		t.Errorf("Version = %v", reply.Body)
+	}
+}
+
+// The menu shows every line of `bulchimbeon status`, in its order; the tooltip has them in full.
+func TestMenuMirrorsStatus(t *testing.T) {
+	r := newRig(t)
+	r.state("agentWatch", "duty", true, false)
+	st, err := daemon.ReadState(r.paths.State)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.Speech = "All quiet."
+	st.Problems = []string{`uniformTheme "pink" (not a theme)`}
+	st.ScanError = "ps: <scan> failed & retried"
+	write := func() {
+		data, _ := json.Marshal(st)
+		if err := os.WriteFile(r.paths.State, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write()
+	if err := os.WriteFile(r.paths.Log, []byte("08:00 one\n08:01 two\n08:02 three\n08:03 four\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r.tray.holders = append(r.tray.holders, platform.Holder{Who: "UPower", What: "sleep", Mode: "delay", PID: 3})
+	r.tray.refresh()
+
+	text, _ := daemon.RenderStatus(daemon.StatusInput{State: st, StatePath: r.paths.State, Holders: r.tray.holders,
+		LogTail: []string{"08:01 two", "08:02 three", "08:03 four"}, Alive: func(int) bool { return true }, Lang: engine.EN, Now: r.now})
+	padding := regexp.MustCompile(`^(\S+:) +`)
+	var want []string
+	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
+		want = append(want, padding.ReplaceAllString(strings.TrimLeft(line, " "), "$1 "))
+	}
+	menuLabels := func() []string {
+		_, root := r.layout()
+		got := labels(root.children)
+		return got[:slices.Index(got, "--")]
+	}
+	if got := menuLabels(); !reflect.DeepEqual(got, want) {
+		t.Errorf("menu:\n%s\nstatus:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	for _, key := range []string{"Others: blocking sleep: none · delaying sleep: UPower", "Private: “All quiet.”", "08:03 four", "Settings: ignored uniformTheme", "Error: ps: <scan>"} {
+		if !slices.ContainsFunc(want, func(l string) bool { return strings.HasPrefix(l, key) }) {
+			t.Errorf("the fixture lacks %q", key)
+		}
+	}
+	tooltip := func() string {
+		reply := r.call(itemPath, propsIface, "Get", "ss", itemIface, "ToolTip")
+		return reply.Body[0].(dbus.Variant).Value.([]any)[3].(string)
+	}
+	if got, esc := tooltip(), strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(strings.Join(want, "\n")); got != esc {
+		t.Errorf("tooltip = %q, want %q", got, esc)
+	}
+
+	// a long line is cut in the menu and whole in the tooltip
+	st.ScanError = strings.Repeat("long ", 40) + "end"
+	write()
+	r.tray.refresh()
+	got := menuLabels()
+	if last := got[len(got)-1]; len([]rune(last)) != maxLabel || !strings.HasPrefix(last, "Error: long long") || !strings.HasSuffix(last, "…") {
+		t.Errorf("long menu line = %q", last)
+	}
+	if !strings.HasSuffix(tooltip(), "\nError: "+st.ScanError) {
+		t.Errorf("tooltip = %q", tooltip())
+	}
+
+	// opening the menu asks logind again
+	r.tray.holdersAt = r.now
+	r.call(menuPath, menuIface, "AboutToShow", "i", int32(0))
+	select {
+	case res := <-r.tray.holdersCh:
+		if len(res.holders) != 2 || res.err != nil {
+			t.Errorf("holders = %v, %v", res.holders, res.err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("AboutToShow did not ask for the lock listing")
 	}
 }
 
@@ -559,6 +644,8 @@ func TestIconFiles(t *testing.T) {
 	}
 }
 
+func noHolders() ([]platform.Holder, error) { return nil, nil }
+
 // runPaths are a settings file and the state file of a daemon that has run.
 func runPaths(t *testing.T) daemon.Paths {
 	dir := t.TempDir()
@@ -573,7 +660,7 @@ func runPaths(t *testing.T) daemon.Paths {
 func TestNoIconWhenTheDaemonNeverRan(t *testing.T) {
 	bus := newFakeBus(true)
 	var log bytes.Buffer
-	err := Run(context.Background(), Config{Dial: func() (Bus, error) { return bus, nil }, Log: &log,
+	err := Run(context.Background(), Config{Dial: func() (Bus, error) { return bus, nil }, Holders: noHolders, Log: &log,
 		Paths: daemon.Paths{Settings: filepath.Join(t.TempDir(), "s.json"), State: filepath.Join(t.TempDir(), "state.json")}})
 	if err != nil || strings.Count(log.String(), "\n") != 1 || !strings.Contains(log.String(), "never run") ||
 		bus.count(&bus.calls, "RequestName") != 0 {
@@ -595,7 +682,7 @@ func TestNoTrayHostExitsQuietly(t *testing.T) {
 	bus := newFakeBus(false)
 	var log bytes.Buffer
 	runtime := t.TempDir()
-	err := Run(context.Background(), Config{Dial: func() (Bus, error) { return bus, nil }, Log: &log, WatcherWait: 20 * time.Millisecond,
+	err := Run(context.Background(), Config{Dial: func() (Bus, error) { return bus, nil }, Holders: noHolders, Log: &log, WatcherWait: 20 * time.Millisecond,
 		RuntimeDir: runtime, Paths: runPaths(t)})
 	if err != nil || strings.Count(log.String(), "\n") != 1 || !strings.Contains(log.String(), "no tray host") {
 		t.Errorf("Run = %v, log %q", err, log.String())
@@ -615,7 +702,7 @@ func TestRegistersWhenTheHostAppearsAndAgainAfterARestart(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error)
 	go func() {
-		done <- Run(ctx, Config{Dial: func() (Bus, error) { return bus, nil }, Log: &log, WatcherWait: time.Minute, PID: 7,
+		done <- Run(ctx, Config{Dial: func() (Bus, error) { return bus, nil }, Holders: noHolders, Log: &log, WatcherWait: time.Minute, PID: 7,
 			Frames: make(chan time.Time), Paths: runPaths(t)})
 	}()
 	owner := func(newOwner string) {
@@ -651,7 +738,7 @@ func TestOneTrayPerSession(t *testing.T) {
 	bus := newFakeBus(true)
 	bus.taken = map[string]bool{instanceName: true}
 	var log bytes.Buffer
-	err := Run(context.Background(), Config{Dial: func() (Bus, error) { return bus, nil }, Log: &log, Paths: runPaths(t)})
+	err := Run(context.Background(), Config{Dial: func() (Bus, error) { return bus, nil }, Holders: noHolders, Log: &log, Paths: runPaths(t)})
 	if err != nil || strings.Count(log.String(), "\n") != 1 || !strings.Contains(log.String(), "already running") ||
 		bus.count(&bus.calls, "RegisterStatusNotifierItem") != 0 {
 		t.Errorf("Run = %v, log %q, calls %q", err, log.String(), bus.calls)
@@ -668,7 +755,7 @@ func TestRetriesARefusedRegistration(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error)
 	go func() {
-		done <- Run(ctx, Config{Dial: func() (Bus, error) { return bus, nil }, Log: &log, Frames: make(chan time.Time),
+		done <- Run(ctx, Config{Dial: func() (Bus, error) { return bus, nil }, Holders: noHolders, Log: &log, Frames: make(chan time.Time),
 			Paths: runPaths(t)})
 	}()
 	for i := 0; i < 2; i++ {
@@ -697,7 +784,7 @@ func TestQuitFromTheMenu(t *testing.T) {
 	dir := filepath.Dir(paths.Settings)
 	done := make(chan error)
 	go func() {
-		done <- Run(context.Background(), Config{Dial: func() (Bus, error) { return bus, nil }, Log: &log, Frames: make(chan time.Time),
+		done <- Run(context.Background(), Config{Dial: func() (Bus, error) { return bus, nil }, Holders: noHolders, Log: &log, Frames: make(chan time.Time),
 			RuntimeDir: runtime, Paths: paths})
 	}()
 	select {
@@ -726,45 +813,29 @@ func TestQuitFromTheMenu(t *testing.T) {
 	}
 }
 
-// `bulchimbeon run` never talks to the session bus: the daemon's packages do not import the
-// D-Bus client or the tray.
+// `bulchimbeon run` never talks to the session bus: the go command's Linux build of the
+// daemon's packages does not include the D-Bus client or the tray.
 func TestDaemonDoesNotUseTheSessionBus(t *testing.T) {
+	gobin := filepath.Join(runtime.GOROOT(), "bin", "go")
+	if _, err := os.Stat(gobin); err != nil {
+		t.Skipf("no go command: %v", err)
+	}
 	const module = "github.com/s3onghyun/bulchimbeon/"
-	seen := map[string]bool{}
-	var walk func(pkg string)
-	walk = func(pkg string) {
-		if seen[pkg] {
-			return
-		}
-		seen[pkg] = true
-		dir := filepath.Join("..", "..", strings.TrimPrefix(pkg, module))
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, e := range entries {
-			if !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
-				continue
-			}
-			f, err := parser.ParseFile(token.NewFileSet(), filepath.Join(dir, e.Name()), nil, parser.ImportsOnly)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, imp := range f.Imports {
-				path, _ := strconv.Unquote(imp.Path.Value)
-				if path == module+"internal/dbus" || path == module+"internal/tray" {
-					t.Errorf("%s imports %s", pkg, path)
-				}
-				if strings.HasPrefix(path, module) {
-					walk(path)
-				}
-			}
+	cmd := exec.Command(gobin, "list", "-deps", "./internal/daemon", "./internal/platform/linux")
+	cmd.Dir = filepath.Join("..", "..")
+	cmd.Env = append(os.Environ(), "GOOS=linux")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("go list: %v", err)
+	}
+	deps := strings.Fields(string(out))
+	for _, pkg := range []string{"internal/dbus", "internal/tray"} {
+		if slices.Contains(deps, module+pkg) {
+			t.Errorf("the daemon's packages depend on %s", pkg)
 		}
 	}
-	walk(module + "internal/daemon")
-	walk(module + "internal/platform/linux")
-	if !seen[module+"internal/engine"] || !seen[module+"internal/platform"] {
-		t.Errorf("walked %v", seen)
+	if !slices.Contains(deps, module+"internal/engine") || !slices.Contains(deps, module+"internal/platform/linux") {
+		t.Errorf("go list -deps = %q", deps)
 	}
 }
 

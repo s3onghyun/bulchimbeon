@@ -65,21 +65,6 @@ func TestCLI(t *testing.T) {
 	}
 }
 
-func TestTail(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "log")
-	os.WriteFile(path, []byte("a\nb\nc\nd\n"), 0o600)
-	if got := tail(path, 3); strings.Join(got, ",") != "b,c,d" {
-		t.Errorf("tail = %q", got)
-	}
-	os.WriteFile(path, nil, 0o600)
-	if got := tail(path, 3); got != nil {
-		t.Errorf("empty = %q", got)
-	}
-	if got := tail(filepath.Join(path, "missing"), 3); got != nil {
-		t.Errorf("missing = %q", got)
-	}
-}
-
 func TestChineseCLI(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	for _, key := range []string{"XDG_CONFIG_HOME", "XDG_STATE_HOME", "LANGUAGE", "LC_ALL", "LC_MESSAGES"} {

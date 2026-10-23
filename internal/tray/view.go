@@ -8,6 +8,7 @@ import (
 	"github.com/s3onghyun/bulchimbeon/internal/daemon"
 	"github.com/s3onghyun/bulchimbeon/internal/dbus"
 	"github.com/s3onghyun/bulchimbeon/internal/engine"
+	"github.com/s3onghyun/bulchimbeon/internal/platform"
 	"github.com/s3onghyun/bulchimbeon/internal/settings"
 	"github.com/s3onghyun/bulchimbeon/internal/sprites"
 )
@@ -18,22 +19,22 @@ type view struct {
 	pose     engine.Pose
 	theme    string
 	headline string   // the first line of `bulchimbeon status`: tooltip and menu
-	status   []string // the lines below it the menu shows
+	status   []string // the lines below it, in full
 }
 
 // snapshot is what a view is made from.
 type snapshot struct {
-	state     *daemon.State
-	statePath string
-	settings  settings.Settings
-	lang      engine.Lang
-	now       time.Time
-	alive     func(pid int) bool
-	home      string
+	state      *daemon.State
+	statePath  string
+	settings   settings.Settings
+	holders    []platform.Holder
+	holdersErr error
+	logTail    []string
+	lang       engine.Lang
+	now        time.Time
+	alive      func(pid int) bool
+	home       string
 }
-
-// statusKeys are the `bulchimbeon status` lines the menu shows, in their order there.
-var statusKeys = map[string]bool{"start": true, "leftovers": true, "lock": true, "why": true, "agents": true, "handover": true}
 
 // maxLabel keeps a menu item to a readable width.
 const maxLabel = 100
@@ -41,18 +42,22 @@ const maxLabel = 100
 // buildView takes the status text from the same code as `bulchimbeon status`, and the pose
 // from the state file, where the daemon writes the engine's pose: no duty decision is made here.
 func buildView(in snapshot) view {
-	r := daemon.Status(daemon.StatusInput{State: in.state, StatePath: in.statePath, NoHolders: true,
-		Alive: in.alive, Lang: in.lang, Now: in.now, Home: in.home})
+	r := daemon.Status(daemon.StatusInput{State: in.state, StatePath: in.statePath, Holders: in.holders, HoldersErr: in.holdersErr,
+		LogTail: in.logTail, Alive: in.alive, Lang: in.lang, Now: in.now, Home: in.home})
 	v := view{lang: in.lang, pose: engine.PoseSleeping, theme: sprites.Named(in.settings.UniformTheme).ID, headline: r.Headline}
 	if r.Running {
 		v.pose = engine.Pose(in.state.Pose) // an unknown pose draws the sleeping private
 	}
 	for _, l := range r.Lines {
-		if statusKeys[l.Key] {
-			v.status = append(v.status, statusLabel(l))
-		}
+		v.status = append(v.status, statusLabel(l))
 	}
 	return v
+}
+
+// tooltip is the whole status, one line each, escaped for hosts that read it as markup.
+func (v view) tooltip() string {
+	text := strings.Join(append([]string{v.headline}, v.status...), "\n")
+	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(text)
 }
 
 // statusLabel joins a label and its text the way a menu reads, "Lock: held". The terminal
@@ -68,7 +73,7 @@ func statusLabel(l daemon.StatusLine) string {
 		}
 		text = label + text
 	}
-	return truncate(text, maxLabel)
+	return text
 }
 
 func truncate(s string, n int) string {
@@ -107,7 +112,7 @@ func (v view) menu() item {
 	root := item{id: idRoot, props: map[string]dbus.Variant{"children-display": str("submenu")}}
 	for i, line := range append([]string{v.headline}, v.status...) {
 		root.children = append(root.children, item{id: int32(1 + i), props: map[string]dbus.Variant{
-			"label": str(mnemonic(line)), "enabled": dbus.MakeVariant("b", false)}})
+			"label": str(mnemonic(truncate(line, maxLabel))), "enabled": dbus.MakeVariant("b", false)}})
 	}
 	root.children = append(root.children, item{id: idSeparator, props: map[string]dbus.Variant{"type": str("separator")}})
 

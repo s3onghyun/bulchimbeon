@@ -24,6 +24,7 @@ import (
 	"github.com/s3onghyun/bulchimbeon/internal/daemon"
 	"github.com/s3onghyun/bulchimbeon/internal/dbus"
 	"github.com/s3onghyun/bulchimbeon/internal/engine"
+	"github.com/s3onghyun/bulchimbeon/internal/platform"
 	"github.com/s3onghyun/bulchimbeon/internal/settings"
 	"github.com/s3onghyun/bulchimbeon/internal/tray"
 )
@@ -224,7 +225,7 @@ func statusCmd(args []string, stdout, stderr io.Writer) int {
 		in.HoldersErr = err
 	}
 	if in.State != nil {
-		in.LogTail = tail(in.State.LogPath, 3)
+		in.LogTail = daemon.Tail(in.State.LogPath, 3)
 	}
 	text, running := daemon.RenderStatus(in)
 	fmt.Fprint(stdout, text)
@@ -246,6 +247,12 @@ func trayCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "bulchimbeon: "+err.Error())
 		return exitFail
 	}
+	// the lock listing, asked as `status` asks it
+	plat, platErr := newPlatform()
+	holders := func() ([]platform.Holder, error) { return nil, platErr }
+	if platErr == nil {
+		holders = plat.Holders.Holders
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	err = tray.Run(ctx, tray.Config{
@@ -260,7 +267,7 @@ func trayCmd(args []string, stdout, stderr io.Writer) int {
 			}
 			return conn, nil
 		},
-		Paths: p, Home: home, Lang: f.override(), Getenv: os.Getenv, Log: stderr, Alive: alive, PID: os.Getpid(),
+		Paths: p, Home: home, Lang: f.override(), Getenv: os.Getenv, Log: stderr, Alive: alive, Holders: holders, PID: os.Getpid(),
 		RuntimeDir: os.Getenv("XDG_RUNTIME_DIR"),
 	})
 	if err != nil {
@@ -368,34 +375,4 @@ func contains(list []string, s string) bool {
 		}
 	}
 	return false
-}
-
-// tail returns the last n lines of a file (the duty log), without reading all of it.
-func tail(path string, n int) []string {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil
-	}
-	defer f.Close()
-	const chunk = 8 << 10
-	info, err := f.Stat()
-	if err != nil {
-		return nil
-	}
-	start := max(info.Size()-chunk, 0)
-	buf := make([]byte, info.Size()-start)
-	if _, err := f.ReadAt(buf, start); err != nil && !errors.Is(err, io.EOF) {
-		return nil
-	}
-	lines := strings.Split(strings.TrimRight(string(buf), "\n"), "\n")
-	if start > 0 && len(lines) > 0 {
-		lines = lines[1:] // the first line may be cut
-	}
-	if len(lines) > n {
-		lines = lines[len(lines)-n:]
-	}
-	if len(lines) == 1 && lines[0] == "" {
-		return nil
-	}
-	return lines
 }

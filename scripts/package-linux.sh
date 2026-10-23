@@ -57,8 +57,9 @@ grep -q '^ExecStart=/usr/bin/bulchimbeon run$' "$deb/usr/lib/systemd/user/bulchi
 chmod 0644 "$deb/usr/lib/systemd/user/bulchimbeon.service"
 # the tray starts with every desktop session; it exits at once where there is no tray host
 install -d "$deb/etc/xdg/autostart"
-sed 's|^Exec=bulchimbeon tray$|Exec=/usr/bin/bulchimbeon tray|' packaging/linux/bulchimbeon-tray.desktop \
-	>"$deb/etc/xdg/autostart/bulchimbeon-tray.desktop"
+sed -e 's|^TryExec=bulchimbeon$|TryExec=/usr/bin/bulchimbeon|' -e 's|^Exec=bulchimbeon tray$|Exec=/usr/bin/bulchimbeon tray|' \
+	packaging/linux/bulchimbeon-tray.desktop >"$deb/etc/xdg/autostart/bulchimbeon-tray.desktop"
+grep -q '^TryExec=/usr/bin/bulchimbeon$' "$deb/etc/xdg/autostart/bulchimbeon-tray.desktop"
 grep -q '^Exec=/usr/bin/bulchimbeon tray$' "$deb/etc/xdg/autostart/bulchimbeon-tray.desktop"
 chmod 0644 "$deb/etc/xdg/autostart/bulchimbeon-tray.desktop"
 echo /etc/xdg/autostart/bulchimbeon-tray.desktop >"$deb/DEBIAN/conffiles"

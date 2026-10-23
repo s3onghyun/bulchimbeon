@@ -3,8 +3,9 @@
 // GNOME AppIndicator extension show) with a com.canonical.dbusmenu menu.
 //
 // It is a separate process from the daemon and only reads what the daemon writes: the pose
-// and the `bulchimbeon status` lines come from state.json, the uniform from the settings file,
-// which its uniform menu also writes. Without a session bus or a tray host it exits quietly,
+// and the `bulchimbeon status` lines come from state.json, the duty log and logind's lock
+// listing (asked as `status` asks it), the uniform from the settings file, which its uniform
+// menu also writes. Without a session bus or a tray host it exits quietly,
 // so the daemon works the same with or without a desktop.
 package tray
 
@@ -21,6 +22,7 @@ import (
 	"github.com/s3onghyun/bulchimbeon/internal/daemon"
 	"github.com/s3onghyun/bulchimbeon/internal/dbus"
 	"github.com/s3onghyun/bulchimbeon/internal/engine"
+	"github.com/s3onghyun/bulchimbeon/internal/platform"
 	"github.com/s3onghyun/bulchimbeon/internal/settings"
 	"github.com/s3onghyun/bulchimbeon/internal/sprites"
 )
@@ -47,7 +49,9 @@ type Config struct {
 	Log    io.Writer
 	Now    func() time.Time
 	Alive  func(pid int) bool
-	PID    int
+	// Holders lists the sleep locks in logind, as `bulchimbeon status` asks it.
+	Holders func() ([]platform.Holder, error)
+	PID     int
 	// RuntimeDir is $XDG_RUNTIME_DIR, where the icon files go. Empty: pixmaps only.
 	RuntimeDir string
 	// WatcherWait is how long to wait at start for a tray host (the panel may start after
@@ -77,6 +81,9 @@ const (
 	errInterface = "org.freedesktop.DBus.Error.UnknownInterface"
 )
 
+// holdersEvery is how often the lock listing is asked again (it runs busctl).
+const holdersEvery = 5 * time.Second
+
 // retryAfter is how long to wait before registering again with a host that refused.
 var retryAfter = 5 * time.Second
 
@@ -91,6 +98,12 @@ type tray struct {
 	view     view
 	revision uint32
 
+	holders    []platform.Holder
+	holdersErr error
+	holdersAt  time.Time
+	asking     bool
+	holdersCh  chan holdersResult
+
 	tick       int
 	frameKey   string
 	pixmaps    []any
@@ -104,6 +117,11 @@ type tray struct {
 	everShown  bool
 	lastErr    error // the last refused registration
 	quit       bool
+}
+
+type holdersResult struct {
+	holders []platform.Holder
+	err     error
 }
 
 func (t *tray) logf(format string, args ...any) {
@@ -132,7 +150,7 @@ func Run(ctx context.Context, cfg Config) error {
 		defer ticker.Stop()
 		cfg.Frames = ticker.C
 	}
-	t := &tray{cfg: cfg, settings: settings.Defaults(), cache: map[string][]any{}}
+	t := &tray{cfg: cfg, settings: settings.Defaults(), cache: map[string][]any{}, holdersCh: make(chan holdersResult, 1)}
 
 	bus, err := cfg.Dial()
 	if err != nil {
@@ -175,6 +193,8 @@ func Run(ctx context.Context, cfg Config) error {
 		return fmt.Errorf("look for a tray host: %w", err)
 	}
 	t.watcher = len(reply) == 1 && reply[0] == true
+	t.holders, t.holdersErr = cfg.Holders()
+	t.holdersAt = cfg.Now()
 	t.refresh()
 	t.animate()
 
@@ -213,8 +233,14 @@ func Run(ctx context.Context, cfg Config) error {
 		case <-cfg.Frames:
 			t.tick++
 			if t.tick%2 == 0 {
+				t.askHolders(false)
 				t.refresh()
 			}
+			t.animate()
+		case res := <-t.holdersCh:
+			t.asking = false
+			t.holders, t.holdersErr = res.holders, res.err
+			t.refresh()
 			t.animate()
 		case err := <-registered:
 			switch {
@@ -277,28 +303,45 @@ func (t *tray) writeIcons() {
 	t.animate()
 }
 
-// refresh re-reads the settings and the state file and tells the host what changed.
+// askHolders asks logind for its lock listing beside the loop, at most every holdersEvery
+// unless the menu is opening; the answer arrives on holdersCh.
+func (t *tray) askHolders(menuOpening bool) {
+	now := t.cfg.Now()
+	if t.asking || (!menuOpening && now.Sub(t.holdersAt) < holdersEvery) {
+		return
+	}
+	t.asking = true
+	t.holdersAt = now
+	ask, out := t.cfg.Holders, t.holdersCh
+	go func() {
+		holders, err := ask()
+		out <- holdersResult{holders, err}
+	}()
+}
+
+// refresh re-reads the settings, the state file and the duty log, and tells the host what changed.
 func (t *tray) refresh() bool {
 	if s, _, err := settings.Load(t.cfg.Paths.Settings); err == nil {
 		t.settings = s // a broken file keeps the last good settings, as in the daemon
 	}
 	st, err := daemon.ReadState(t.cfg.Paths.State)
+	var logTail []string
 	if err != nil {
 		st = nil
+	} else {
+		logTail = daemon.Tail(st.LogPath, 3)
 	}
-	v := buildView(snapshot{state: st, statePath: t.cfg.Paths.State, settings: t.settings,
-		lang: daemon.ResolveLang(t.cfg.Lang, t.settings, t.cfg.Getenv), now: t.cfg.Now(), alive: t.cfg.Alive, home: t.cfg.Home})
+	v := buildView(snapshot{state: st, statePath: t.cfg.Paths.State, settings: t.settings, holders: t.holders, holdersErr: t.holdersErr,
+		logTail: logTail, lang: daemon.ResolveLang(t.cfg.Lang, t.settings, t.cfg.Getenv), now: t.cfg.Now(), alive: t.cfg.Alive, home: t.cfg.Home})
 	old := t.view
 	t.view = v
-	if old.headline != v.headline {
-		t.emit(itemPath, itemIface, "NewToolTip", "")
-	}
 	if old.lang != v.lang {
 		t.emit(itemPath, itemIface, "NewTitle", "")
 	}
 	if sameMenu(old, v) {
 		return false
 	}
+	t.emit(itemPath, itemIface, "NewToolTip", "")
 	t.revision++
 	t.emit(menuPath, menuIface, "LayoutUpdated", "ui", t.revision, idRoot)
 	return true
@@ -364,7 +407,7 @@ func (t *tray) itemProperties() map[string]dbus.Variant {
 		"AttentionIconName":   str(""),
 		"AttentionIconPixmap": none,
 		"AttentionMovieName":  str(""),
-		"ToolTip":             dbus.MakeVariant("(sa(iiay)ss)", []any{"", []any{}, v.headline, ""}),
+		"ToolTip":             dbus.MakeVariant("(sa(iiay)ss)", []any{"", []any{}, v.headline, v.tooltip()}),
 		// for screen readers, as the macOS menu bar label
 		"IconAccessibleDesc":      str(v.headline),
 		"AttentionAccessibleDesc": str(""),
@@ -535,10 +578,12 @@ func (t *tray) menuCall(m *dbus.Message, args func(string) bool) {
 		t.bus.Reply(m, "ai", missing)
 	case "AboutToShow":
 		if args("i") {
+			t.askHolders(true)
 			t.bus.Reply(m, "b", t.refresh())
 		}
 	case "AboutToShowGroup":
 		if args("ai") {
+			t.askHolders(true)
 			changed := t.refresh()
 			updates := []int32{}
 			if changed {

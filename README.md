@@ -235,8 +235,8 @@ same detection rules, a 5-second check, engage when an agent's process tree uses
 
 `bulchimbeon tray` puts the private in your desktop panel, in the same poses as on the Mac menu bar and animated the
 same way: asleep when the daemon is off, looking around while it waits for an agent, flashlight on while on duty,
-sweating through a combat rest. Hover for the status line. The menu shows the `bulchimbeon status` lines (duty, lock,
-why, agents, handover), a **🧥 Uniform** picker that sets `uniformTheme`, and **Quit tray**, which closes the icon only:
+sweating through a combat rest. Hover for the full status. The menu shows every line of `bulchimbeon status` in the
+same order, then a **🧥 Uniform** picker that sets `uniformTheme`, and **Quit tray**, which closes the icon only:
 the daemon keeps watch without it.
 
 The `.deb` starts it with every desktop session through an XDG autostart entry,

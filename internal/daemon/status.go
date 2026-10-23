@@ -1,7 +1,10 @@
 package daemon
 
 import (
+	"errors"
 	"fmt"
+	"io"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -20,14 +23,11 @@ type StatusInput struct {
 	StatePath  string
 	Holders    []platform.Holder // live lock listing
 	HoldersErr error
-	// NoHolders: the caller did not ask logind (the tray). The lock line is the daemon's own
-	// view and the line about other apps is left out.
-	NoHolders bool
-	Alive     func(pid int) bool
-	LogTail   []string
-	Lang      engine.Lang
-	Now       time.Time
-	Home      string
+	Alive      func(pid int) bool
+	LogTail    []string
+	Lang       engine.Lang
+	Now        time.Time
+	Home       string
 }
 
 // StatusReport is `bulchimbeon status` line by line, so the tray menu shows the same lines.
@@ -106,7 +106,7 @@ func Status(in StatusInput) StatusReport {
 			n+" min after the last agent goes quiet (agentGraceMinutes)", "最后一个代理空闲 "+n+" 分钟后交班 (agentGraceMinutes)"))
 	}
 	line("power", t("전원", "Power:", "电源："), powerLine(st, t))
-	if in.HoldersErr == nil && !in.NoHolders {
+	if in.HoldersErr == nil {
 		line("others", t("다른 앱", "Others:", "其他应用："), othersLine(in, t))
 	}
 	if st.Speech != "" {
@@ -215,9 +215,6 @@ func lockLine(in StatusInput, t func(string, string, string) string) string {
 		return t("잡지 않음 — 근무 없음", "not held: off duty", "未持有：休息中")
 	}
 	text := LockSummary(st.Lock, in.Lang)
-	if in.NoHolders {
-		return text
-	}
 	if in.HoldersErr != nil {
 		return text + t(" · logind 확인 실패: ", " · could not ask logind: ", " · 无法查询 logind：") + in.HoldersErr.Error()
 	}
@@ -340,4 +337,34 @@ func ours(holders []platform.Holder, keep map[int]bool) []string {
 		}
 	}
 	return out
+}
+
+// Tail returns the last n lines of a file (the duty log), without reading all of it.
+func Tail(path string, n int) []string {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	const chunk = 8 << 10
+	info, err := f.Stat()
+	if err != nil {
+		return nil
+	}
+	start := max(info.Size()-chunk, 0)
+	buf := make([]byte, info.Size()-start)
+	if _, err := f.ReadAt(buf, start); err != nil && !errors.Is(err, io.EOF) {
+		return nil
+	}
+	lines := strings.Split(strings.TrimRight(string(buf), "\n"), "\n")
+	if start > 0 && len(lines) > 0 {
+		lines = lines[1:] // the first line may be cut
+	}
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	if len(lines) == 1 && lines[0] == "" {
+		return nil
+	}
+	return lines
 }

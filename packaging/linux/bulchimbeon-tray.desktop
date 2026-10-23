@@ -1,6 +1,7 @@
 # Bulchimbeon (불침번) tray icon, started with the desktop session.
 # Installed by the .deb to /etc/xdg/autostart/ (Exec=/usr/bin/bulchimbeon tray), or by
 # scripts/install-linux.sh to ~/.config/autostart/ (Exec=~/.local/bin/bulchimbeon tray).
+# TryExec skips the entry once the binary is removed (the .deb keeps this conffile until purge).
 # Without a tray host (no panel, SSH, or XFCE without the Status Tray item), or for a user who has
 # never started the daemon, it exits at once.
 [Desktop Entry]
@@ -11,6 +12,7 @@ Name[zh_CN]=Bulchimbeon 托盘
 Comment=Shows whether this machine is kept awake for AI coding agents
 Comment[ko]=AI 코딩 에이전트 때문에 이 기기를 깨워 두는 중인지 보여줍니다
 Comment[zh_CN]=显示设备是否正为 AI 编程代理保持唤醒
+TryExec=bulchimbeon
 Exec=bulchimbeon tray
 Terminal=false
 X-GNOME-Autostart-enabled=true

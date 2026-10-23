@@ -334,29 +334,44 @@ func TestStatusExplainsStandbyAndDuty(t *testing.T) {
 	}
 }
 
-// The tray shows the same lines without asking logind: the daemon's own lock view, no line
-// about other apps.
-func TestStatusReportWithoutHolders(t *testing.T) {
+// The tray shows the report line by line; RenderStatus prints the same lines.
+func TestStatusReport(t *testing.T) {
 	r := newRig(t)
 	r.session(100, true)
 	r.run(10 * time.Second)
-	rep := Status(StatusInput{State: r.state(), Lang: engine.EN, Now: r.now, NoHolders: true})
+	holders := []platform.Holder{{Who: "Bulchimbeon", What: "sleep", Mode: "block", PID: r.inh.pid}, {Who: "Bulchimbeon", What: "idle", Mode: "block", PID: r.inh.pid + 1}}
+	rep := Status(StatusInput{State: r.state(), Lang: engine.EN, Now: r.now, Holders: holders})
 	if !rep.Running || rep.Headline != "🪖 Bulchimbeon — on duty for 0:00 (agent watch)" {
 		t.Fatalf("report = %+v", rep)
 	}
 	var keys []string
 	for _, l := range rep.Lines {
 		keys = append(keys, l.Key)
-		if l.Key == "lock" && (l.Label != "Lock:" || l.Text != "blocking sleep and idle (fake pid 10, 11)") {
+		if l.Key == "lock" && (l.Label != "Lock:" || l.Text != "blocking sleep and idle (fake pid 10, 11) · confirmed in logind") {
 			t.Errorf("lock line = %+v", l)
 		}
 	}
-	if strings.Join(keys, " ") != "lock why agents handover power private log" {
+	if strings.Join(keys, " ") != "lock why agents handover power others private log" {
 		t.Errorf("keys = %q", keys)
 	}
-	text, _ := RenderStatus(StatusInput{State: r.state(), Lang: engine.EN, Now: r.now})
-	if !strings.HasPrefix(text, rep.Headline+"\nLock:      blocking sleep and idle (fake pid 10, 11) · ⚠️ not in logind") {
+	text, _ := RenderStatus(StatusInput{State: r.state(), Lang: engine.EN, Now: r.now, Holders: holders})
+	if !strings.HasPrefix(text, rep.Headline+"\nLock:      blocking sleep and idle (fake pid 10, 11) · confirmed in logind") {
 		t.Errorf("terminal status:\n%s", text)
+	}
+}
+
+func TestTail(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "log")
+	os.WriteFile(path, []byte("a\nb\nc\nd\n"), 0o600)
+	if got := Tail(path, 3); strings.Join(got, ",") != "b,c,d" {
+		t.Errorf("tail = %q", got)
+	}
+	os.WriteFile(path, nil, 0o600)
+	if got := Tail(path, 3); got != nil {
+		t.Errorf("empty = %q", got)
+	}
+	if got := Tail(filepath.Join(path, "missing"), 3); got != nil {
+		t.Errorf("missing = %q", got)
 	}
 }
 

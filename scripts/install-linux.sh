@@ -54,8 +54,9 @@ case $bin_dir in
 	;;
 *)
 	mkdir -p "$(dirname -- "$autostart")"
-	sed "s|^Exec=bulchimbeon tray\$|Exec=$bin_dir/bulchimbeon tray|" "$tray_src" >"$autostart"
+	sed -e "s|^TryExec=bulchimbeon\$|TryExec=$bin_dir/bulchimbeon|" -e "s|^Exec=bulchimbeon tray\$|Exec=$bin_dir/bulchimbeon tray|" "$tray_src" >"$autostart"
 	chmod 0644 "$autostart"
+	grep -q "^TryExec=$bin_dir/bulchimbeon\$" "$autostart" || fail "could not write $autostart"
 	grep -q "^Exec=$bin_dir/bulchimbeon tray\$" "$autostart" || fail "could not write $autostart"
 	tray_note="The tray icon starts at your next login ($autostart); to show it now: bulchimbeon tray &"
 	;;
