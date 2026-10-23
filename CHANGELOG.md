@@ -5,6 +5,8 @@
 
 ## 다음 버전
 
+## 0.8.1 — 2026-10-23
+
 - 리눅스 잠금 수정: 데스크톱 세션이 있으면 그 데스크톱의 절전 억제로 자동 절전을 막는다. GNOME·Cinnamon·MATE·Budgie 는 `org.gnome.SessionManager.Inhibit`(절전 플래그 4 만), KDE 는 `org.freedesktop.PowerManagement.Inhibit`. 지금까지 잡던 logind 잠금은 systemd 256 이하(Ubuntu 24.04, Debian 12)에서 잠금을 쥔 사용자 본인의 요청에는 무시되고, gsd-power·xfce4-power-manager·csd-power 는 사용자로 절전을 요청하므로, GNOME·XFCE·Cinnamon 에서는 근무 중에도 자동 절전이 일어났다 (Ubuntu 24.04 GNOME 에서 실측)
 - 리눅스 잠금: 데스크톱이 없으면(헤드리스·SSH·sway·Hyprland) logind `sleep` 잠금을 systemd 257 이상에서는 `block-weak` 로 잡아, 내가 하는 절전(메뉴, `systemctl suspend`)은 그대로 된다. 256 이하는 지금처럼 `block`
 - 리눅스 잠금: `idle` 잠금을 더는 잡지 않는다. KDE·swayidle·hypridle 에서도 화면이 설정대로 어두워지고 잠긴다 (화면은 꺼져도 깨어 있음). 대신 sway·Hyprland 에서 idle 데몬이 사용자로 실행하는 자동 절전은 막지 못한다
