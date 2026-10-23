@@ -8,7 +8,7 @@ Golden test cases for the duty engine. The same files are run by two test suites
 | `internal/engine/fixture*_test.go` (`go test ./...`, CI job `go (linux)`) | the Go port used by the Linux daemon |
 
 So behavior is locked across operating systems: a change to agent detection, CPU averaging, the duty state
-machine, the battery or heat rules, the duty-log line or the private's lines must keep both suites green.
+machine, the battery or heat rules, the duty-log line, the private's lines or the sprites must keep both suites green.
 
 ## Rules
 
@@ -16,6 +16,7 @@ machine, the battery or heat rules, the duty-log line or the private's lines mus
   update the fixture so `swift test` passes, then make the Go port pass the same file. Never edit a
   fixture only to make the Go port pass.
 - Edit the JSON by hand. Keep cases small and give each a `name` that says what it pins.
+  The one exception is `sprites.json`, which the Swift tests write (below).
 - Add a measured process shape (from `ps`, `/proc`, `--diagnose` or `bulchimbeon status`) when you add an agent,
   plus one false-positive case, the same way `CONTRIBUTING.md` asks for the Swift tests.
 - Times are seconds. Scenario times are relative to `t0`; CPU-history times are relative to
@@ -97,3 +98,27 @@ Each step runs one operation at time `at`, then checks the result:
 | `effects` | the exact effect list, in order: `{type: acquire, mode}`, `release`, `reacquire`, `enableLid`, `restoreLid`, `{type: notify, line, args?}` (a `lines.json` function; `args` may be `{ko, en}`), `{type: log, kind, ko, en}` |
 | `state` | fields that change at this step. Runners keep the full expected state and compare all of it after every step: `isOnDuty`, `order` (`off`, `timed`, `agentWatch`), `orderUntil`, `resting`, `mode`, `heat`, `quote`, `dutyStartedAt`, `watchDetail` (`{ko, en}` or null), `lidEngagedByUs`, `lidSleepDisabled` |
 | `checks` | `{at, pose}` and `{at, speech: lines.json speech function \| null}`, evaluated after the step |
+
+### `sprites.json`: the private's sprites
+
+Generated from the Swift core, not edited by hand: every registered uniform theme (`UniformTheme.all`) and
+every pose (`Sprites.Pose`), as `Sprites.frames(pose, theme:)` returns them. The Linux tray icon draws this file.
+
+| Key | Meaning |
+|-----|---------|
+| `size` | the sprite is `size` × `size` pixels |
+| `frameSeconds` | one frame per this many seconds (the macOS menu-bar timer) |
+| `transparent` | the row character for a transparent pixel |
+| `poses` | the poses, in `Sprites.Pose` order |
+| `themes` | `{id, name: {ko, en, zh}, palette: {char: "#RRGGBB"}, poseFrames: {pose: [frame index…]}, frames: [[row…]]}` in menu order. `palette` holds the theme's resolved colors for every character its frames use; `frames` holds each distinct frame once |
+
+After changing `Sprites.swift` or `UniformTheme.swift`, regenerate and copy it, then run both suites:
+
+```sh
+BULCHIMBEON_WRITE_SPRITES=1 swift test --filter SpriteFixtureTests
+cp testdata/engine/sprites.json internal/sprites/sprites.json
+```
+
+`SpriteFixtureTests` fails when the file differs from the core. The Go tests check that
+`internal/sprites/sprites.json` (embedded in the binary) is byte-identical to this file, and that the tray
+renders every frame pixel for pixel from its rows and palette.

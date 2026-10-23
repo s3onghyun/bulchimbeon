@@ -1,7 +1,10 @@
 package daemon
 
 import (
+	"errors"
 	"fmt"
+	"io"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -27,68 +30,99 @@ type StatusInput struct {
 	Home       string
 }
 
+// StatusReport is `bulchimbeon status` line by line, so the tray menu shows the same lines.
+type StatusReport struct {
+	Running  bool
+	Headline string
+	Lines    []StatusLine
+}
+
+// StatusLine is one line under the headline. Label is empty on continuation lines and on the
+// hints shown when the daemon is not running.
+type StatusLine struct {
+	Key   string // start, leftovers, lock, why, agents, handover, power, others, private, log, logTail, settings, error
+	Label string
+	Text  string
+}
+
 // RenderStatus explains whether the machine is being kept awake and why. It reports false
 // when the daemon is not running. The text is for people; its format is not promised.
 func RenderStatus(in StatusInput) (string, bool) {
-	t := func(ko, en, zh string) string { return engine.T(in.Lang, ko, en, zh) }
+	r := Status(in)
 	var b strings.Builder
-	line := func(label, text string) { b.WriteString(padLabel(label) + text + "\n") }
+	b.WriteString(r.Headline + "\n")
+	for _, l := range r.Lines {
+		if r.Running {
+			b.WriteString(padLabel(l.Label))
+		}
+		b.WriteString(l.Text + "\n")
+	}
+	return b.String(), r.Running
+}
+
+// Status is what RenderStatus prints.
+func Status(in StatusInput) StatusReport {
+	t := func(ko, en, zh string) string { return engine.T(in.Lang, ko, en, zh) }
+	var r StatusReport
+	line := func(key, label, text string) {
+		r.Lines = append(r.Lines, StatusLine{Key: key, Label: label, Text: text})
+	}
 	st := in.State
 
 	if reason := notRunning(in); reason != "" {
-		b.WriteString(t("불침번이 실행 중이 아닙니다: ", "Bulchimbeon is not running: ", "Bulchimbeon 未运行：") + reason + "\n")
-		b.WriteString(t("시작: systemctl --user start bulchimbeon  (또는 bulchimbeon run)",
-			"Start it: systemctl --user start bulchimbeon  (or bulchimbeon run)", "启动：systemctl --user start bulchimbeon（或 bulchimbeon run）") + "\n")
+		r.Headline = t("불침번이 실행 중이 아닙니다: ", "Bulchimbeon is not running: ", "Bulchimbeon 未运行：") + reason
+		line("start", "", t("시작: systemctl --user start bulchimbeon  (또는 bulchimbeon run)",
+			"Start it: systemctl --user start bulchimbeon  (or bulchimbeon run)", "启动：systemctl --user start bulchimbeon（或 bulchimbeon run）"))
 		if leftovers := ours(in.Holders, nil); len(leftovers) > 0 {
-			b.WriteString(t("⚠️ 남아 있는 불침번 잠금: ", "⚠️ Bulchimbeon locks still listed: ", "⚠️ 仍存在 Bulchimbeon 休眠锁：") + strings.Join(leftovers, ", ") + "\n")
+			line("leftovers", "", t("⚠️ 남아 있는 불침번 잠금: ", "⚠️ Bulchimbeon locks still listed: ", "⚠️ 仍存在 Bulchimbeon 休眠锁：")+strings.Join(leftovers, ", "))
 		}
-		return b.String(), false
+		return r
 	}
+	r.Running = true
 
-	// headline
 	switch {
 	case st.Resting:
-		b.WriteString(t("🥵 불침번 — 전투휴식 중 (폭염 경보). 식으면 복귀합니다", "🥵 Bulchimbeon — combat rest (heat warning), resumes when it cools down", "🥵 Bulchimbeon — 降温休息中（过热警报），降温后恢复") + "\n")
+		r.Headline = t("🥵 불침번 — 전투휴식 중 (폭염 경보). 식으면 복귀합니다", "🥵 Bulchimbeon — combat rest (heat warning), resumes when it cools down", "🥵 Bulchimbeon — 降温休息中（过热警报），降温后恢复")
 	case st.OnDuty && st.DutyStartedAt != nil:
 		clock := engine.FormatClock(in.Now.Sub(*st.DutyStartedAt))
-		b.WriteString(t("🪖 불침번 — 근무 중 · "+clock+" 경과 (에이전트 근무)", "🪖 Bulchimbeon — on duty for "+clock+" (agent watch)", "🪖 Bulchimbeon — 已值班 "+clock+"（代理值班）") + "\n")
+		r.Headline = t("🪖 불침번 — 근무 중 · "+clock+" 경과 (에이전트 근무)", "🪖 Bulchimbeon — on duty for "+clock+" (agent watch)", "🪖 Bulchimbeon — 已值班 "+clock+"（代理值班）")
 	case st.Order == "agentWatch":
-		b.WriteString(t("👀 불침번 — 근무 대기 중. 에이전트가 일을 시작하면 투입합니다", "👀 Bulchimbeon — standing by until an agent starts working", "👀 Bulchimbeon — 待命中，等待代理开始工作") + "\n")
+		r.Headline = t("👀 불침번 — 근무 대기 중. 에이전트가 일을 시작하면 투입합니다", "👀 Bulchimbeon — standing by until an agent starts working", "👀 Bulchimbeon — 待命中，等待代理开始工作")
 	default:
-		b.WriteString(t("💤 불침번 — 근무 없음", "💤 Bulchimbeon — off duty", "💤 Bulchimbeon — 休息中") + "\n")
+		r.Headline = t("💤 불침번 — 근무 없음", "💤 Bulchimbeon — off duty", "💤 Bulchimbeon — 休息中")
 	}
 
-	line(t("잠금", "Lock:", "休眠锁："), lockLine(in, t))
+	line("lock", t("잠금", "Lock:", "休眠锁："), lockLine(in, t))
 	if why := whyLine(st, t); why != "" {
-		line(t("이유", "Why:", "原因："), why)
+		line("why", t("이유", "Why:", "原因："), why)
 	}
-	line(t("에이전트", "Agents:", "代理："), agentsLine(st, t))
+	line("agents", t("에이전트", "Agents:", "代理："), agentsLine(st, t))
 	if st.Settings.AgentWatchCountsIdle {
-		line(t("교대", "Handover:", "交班："), t("열린 세션도 근무로 인정 (agentWatchCountsIdle) — 모두 닫히면 교대",
+		line("handover", t("교대", "Handover:", "交班："), t("열린 세션도 근무로 인정 (agentWatchCountsIdle) — 모두 닫히면 교대",
 			"open sessions count (agentWatchCountsIdle): hands over once all are closed", "计入已打开的会话 (agentWatchCountsIdle)：全部关闭后交班"))
 	} else {
 		n := strconv.Itoa(st.Settings.AgentGraceMinutes)
-		line(t("교대", "Handover:", "交班："), t("마지막 에이전트가 조용해지고 "+n+"분 뒤 (agentGraceMinutes)",
+		line("handover", t("교대", "Handover:", "交班："), t("마지막 에이전트가 조용해지고 "+n+"분 뒤 (agentGraceMinutes)",
 			n+" min after the last agent goes quiet (agentGraceMinutes)", "最后一个代理空闲 "+n+" 分钟后交班 (agentGraceMinutes)"))
 	}
-	line(t("전원", "Power:", "电源："), powerLine(st, t))
+	line("power", t("전원", "Power:", "电源："), powerLine(st, t))
 	if in.HoldersErr == nil {
-		line(t("다른 앱", "Others:", "其他应用："), othersLine(in, t))
+		line("others", t("다른 앱", "Others:", "其他应用："), othersLine(in, t))
 	}
 	if st.Speech != "" {
-		line(t("이등병", "Private:", "小士兵："), "“"+st.Speech+"”")
+		line("private", t("이등병", "Private:", "小士兵："), "“"+st.Speech+"”")
 	}
-	line(t("근무일지", "Log:", "日志："), Tilde(st.LogPath, in.Home))
+	line("log", t("근무일지", "Log:", "日志："), Tilde(st.LogPath, in.Home))
 	for _, l := range in.LogTail {
-		line("", l)
+		line("logTail", "", l)
 	}
 	for _, p := range st.Problems {
-		line(t("설정", "Settings:", "设置："), t("무시한 값 — ", "ignored ", "已忽略 ")+p)
+		line("settings", t("설정", "Settings:", "设置："), t("무시한 값 — ", "ignored ", "已忽略 ")+p)
 	}
 	if st.ScanError != "" {
-		line(t("오류", "Error:", "错误："), st.ScanError)
+		line("error", t("오류", "Error:", "错误："), st.ScanError)
 	}
-	return b.String(), true
+	return r
 }
 
 // labelWidth is the label column in terminal cells. Hangul is two cells wide, so padding by
@@ -303,4 +337,34 @@ func ours(holders []platform.Holder, keep map[int]bool) []string {
 		}
 	}
 	return out
+}
+
+// Tail returns the last n lines of a file (the duty log), without reading all of it.
+func Tail(path string, n int) []string {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	const chunk = 8 << 10
+	info, err := f.Stat()
+	if err != nil {
+		return nil
+	}
+	start := max(info.Size()-chunk, 0)
+	buf := make([]byte, info.Size()-start)
+	if _, err := f.ReadAt(buf, start); err != nil && !errors.Is(err, io.EOF) {
+		return nil
+	}
+	lines := strings.Split(strings.TrimRight(string(buf), "\n"), "\n")
+	if start > 0 && len(lines) > 0 {
+		lines = lines[1:] // the first line may be cut
+	}
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	if len(lines) == 1 && lines[0] == "" {
+		return nil
+	}
+	return lines
 }

@@ -27,6 +27,7 @@ func TestSetUnsetRoundTrip(t *testing.T) {
 		{"batteryFloor", []string{"0"}},
 		{"agentWatchCountsIdle", []string{"true"}},
 		{"customAgents", []string{"goose", "amp"}},
+		{"uniformTheme", []string{"desert"}},
 		{"language", []string{"ko"}},
 		{"dutyMode", []string{"system"}},
 	} {
@@ -36,7 +37,7 @@ func TestSetUnsetRoundTrip(t *testing.T) {
 	}
 	s, problems, err := Load(path)
 	want := Settings{DutyMode: "system", BatteryFloor: 0, AgentGraceMinutes: 10, AgentWatchCountsIdle: true,
-		CustomAgents: []string{"goose", "amp"}, Language: "ko"}
+		CustomAgents: []string{"goose", "amp"}, UniformTheme: "desert", Language: "ko"}
 	if err != nil || len(problems) != 0 || !reflect.DeepEqual(s, want) {
 		t.Fatalf("Load = %+v, %v, %v", s, problems, err)
 	}
@@ -76,7 +77,8 @@ func TestSetRejectsValuesOutsideThePromise(t *testing.T) {
 		{"language", []string{"ja"}, "system, ko, en or zh"},
 		{"dutyMode", []string{"hybrid"}, "display, system or lid"},
 		{"patrolScale", []string{"2"}, "macOS app"},
-		{"uniformTheme", []string{"navy"}, "macOS app"},
+		{"uniformTheme", []string{"camo"}, "default, navy, arctic or desert"},
+		{"uniformTheme", []string{"Navy"}, "default, navy, arctic or desert"},
 		{"simulateHeat", []string{"alert"}, "unknown key"},
 		{"nope", []string{"1"}, "unknown key"},
 		{"batteryFloor", []string{"10", "20"}, "exactly one"},
@@ -99,7 +101,8 @@ func TestHandEditedFileFallsBackPerKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.AgentGraceMinutes != 5 || s.BatteryFloor != 10 || !reflect.DeepEqual(s.CustomAgents, []string{"goose", "../x"}) {
+	if s.AgentGraceMinutes != 5 || s.BatteryFloor != 10 || !reflect.DeepEqual(s.CustomAgents, []string{"goose", "../x"}) ||
+		s.UniformTheme != "navy" {
 		t.Errorf("settings = %+v", s)
 	}
 	if len(problems) != 3 || !strings.HasPrefix(problems[0], "agentGraceMinutes") || !strings.HasPrefix(problems[1], "simulateHeat") ||

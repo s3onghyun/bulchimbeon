@@ -65,21 +65,6 @@ func TestCLI(t *testing.T) {
 	}
 }
 
-func TestTail(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "log")
-	os.WriteFile(path, []byte("a\nb\nc\nd\n"), 0o600)
-	if got := tail(path, 3); strings.Join(got, ",") != "b,c,d" {
-		t.Errorf("tail = %q", got)
-	}
-	os.WriteFile(path, nil, 0o600)
-	if got := tail(path, 3); got != nil {
-		t.Errorf("empty = %q", got)
-	}
-	if got := tail(filepath.Join(path, "missing"), 3); got != nil {
-		t.Errorf("missing = %q", got)
-	}
-}
-
 func TestChineseCLI(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	for _, key := range []string{"XDG_CONFIG_HOME", "XDG_STATE_HOME", "LANGUAGE", "LC_ALL", "LC_MESSAGES"} {
@@ -107,5 +92,37 @@ func TestChineseCLI(t *testing.T) {
 	}
 	if code, out, _ := runCLI(t, "status", "--lang", "zh"); code != exitNotRunning || !strings.Contains(out, "Bulchimbeon 未运行") {
 		t.Fatalf("Chinese override = %d %q", code, out)
+	}
+}
+
+// `tray` on a machine with no session bus (SSH, headless, a systemd service): one line, exit 0.
+func TestTrayWithoutASessionBus(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "")
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	code, out, errOut := runCLI(t, "tray")
+	if code != exitOK || out != "" || strings.Count(errOut, "\n") != 1 || !strings.Contains(errOut, "no session bus") {
+		t.Errorf("tray = %d %q %q", code, out, errOut)
+	}
+	if code, _, _ := runCLI(t, "tray", "now"); code != exitUsage {
+		t.Errorf("tray now = %d", code)
+	}
+	if code, out, _ := runCLI(t, "help"); code != exitOK || !strings.Contains(out, "tray") {
+		t.Errorf("help lacks tray: %q", out)
+	}
+}
+
+// The tray's uniform menu and `config set` share the uniformTheme key.
+func TestUniformThemeSetting(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", "")
+	if code, _, errOut := runCLI(t, "config", "set", "uniformTheme", "desert"); code != exitOK {
+		t.Fatal(errOut)
+	}
+	if code, out, _ := runCLI(t, "config", "get", "uniformTheme"); code != exitOK || out != "desert\n" {
+		t.Errorf("config get = %d %q", code, out)
+	}
+	if code, _, errOut := runCLI(t, "config", "set", "uniformTheme", "camo"); code != exitFail || !strings.Contains(errOut, "default, navy, arctic or desert") {
+		t.Errorf("config set camo = %d %q", code, errOut)
 	}
 }

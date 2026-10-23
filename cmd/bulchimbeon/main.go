@@ -6,6 +6,7 @@
 //	bulchimbeon status     is the machine being kept awake, and why
 //	bulchimbeon doctor     check systemd, logind and polkit on this machine
 //	bulchimbeon config     show or change settings
+//	bulchimbeon tray       the private in the desktop panel (StatusNotifierItem)
 package main
 
 import (
@@ -21,8 +22,11 @@ import (
 	"time"
 
 	"github.com/s3onghyun/bulchimbeon/internal/daemon"
+	"github.com/s3onghyun/bulchimbeon/internal/dbus"
 	"github.com/s3onghyun/bulchimbeon/internal/engine"
+	"github.com/s3onghyun/bulchimbeon/internal/platform"
 	"github.com/s3onghyun/bulchimbeon/internal/settings"
+	"github.com/s3onghyun/bulchimbeon/internal/tray"
 )
 
 // version is set by the release build (-ldflags "-X main.version=…").
@@ -55,6 +59,8 @@ func cli(args []string, stdout, stderr io.Writer) int {
 		return doctorCmd(rest, stdout, stderr)
 	case "config":
 		return configCmd(rest, stdout, stderr)
+	case "tray":
+		return trayCmd(rest, stdout, stderr)
 	case "version", "--version":
 		fmt.Fprintln(stdout, "bulchimbeon "+version)
 		return exitOK
@@ -76,6 +82,7 @@ func usage(w io.Writer, lang engine.Lang) {
   status     지금 깨워 두는 중인지, 왜 그런지
   doctor     systemd·logind·polkit 점검 (SSH·헤드리스용 polkit 규칙 안내)
   config     설정 보기·바꾸기: config [list | get <키> | set <키> <값>... | unset <키>]
+  tray       패널 트레이 아이콘 (StatusNotifierItem). 없어도 데몬은 그대로 근무합니다
   version    버전
 
 설정 파일: ~/.config/bulchimbeon/settings.json · 근무일지: ~/.local/state/bulchimbeon/duty-log.txt
@@ -87,6 +94,7 @@ Usage: bulchimbeon <command> [--lang ko|en|zh]
   status     whether the machine is being kept awake, and why
   doctor     check systemd, logind and polkit (and the polkit rule for SSH or headless use)
   config     show or change settings: config [list | get <key> | set <key> <value>... | unset <key>]
+  tray       tray icon for the desktop panel (StatusNotifierItem); the daemon works without it
   version    print the version
 
 Settings: ~/.config/bulchimbeon/settings.json · duty log: ~/.local/state/bulchimbeon/duty-log.txt
@@ -98,6 +106,7 @@ Settings: ~/.config/bulchimbeon/settings.json · duty log: ~/.local/state/bulchi
   status     查看设备是否保持唤醒及原因
   doctor     检查 systemd、logind 和 polkit（含 SSH 或无显示器环境的 polkit 规则说明）
   config     查看或修改设置：config [list | get <键> | set <键> <值>... | unset <键>]
+  tray       桌面面板托盘图标（StatusNotifierItem）；没有它守护进程照常值班
   version    显示版本
 
 设置：~/.config/bulchimbeon/settings.json · 值班日志：~/.local/state/bulchimbeon/duty-log.txt
@@ -216,12 +225,54 @@ func statusCmd(args []string, stdout, stderr io.Writer) int {
 		in.HoldersErr = err
 	}
 	if in.State != nil {
-		in.LogTail = tail(in.State.LogPath, 3)
+		in.LogTail = daemon.Tail(in.State.LogPath, 3)
 	}
 	text, running := daemon.RenderStatus(in)
 	fmt.Fprint(stdout, text)
 	if !running {
 		return exitNotRunning
+	}
+	return exitOK
+}
+
+// trayCmd shows the tray icon. Without a session bus or a tray host it exits 0 after one
+// line, so an autostart entry is harmless on a machine with no panel.
+func trayCmd(args []string, stdout, stderr io.Writer) int {
+	f := newFlags("tray", stderr)
+	if rest, err := f.parse(args); err != nil || len(rest) > 0 {
+		return exitUsage
+	}
+	p, home, err := paths()
+	if err != nil {
+		fmt.Fprintln(stderr, "bulchimbeon: "+err.Error())
+		return exitFail
+	}
+	// the lock listing, asked as `status` asks it
+	plat, platErr := newPlatform()
+	holders := func() ([]platform.Holder, error) { return nil, platErr }
+	if platErr == nil {
+		holders = plat.Holders.Holders
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	err = tray.Run(ctx, tray.Config{
+		Dial: func() (tray.Bus, error) {
+			addr, err := dbus.SessionBusAddress(os.Getenv)
+			if err != nil {
+				return nil, err
+			}
+			conn, err := dbus.Dial(addr)
+			if err != nil {
+				return nil, err
+			}
+			return conn, nil
+		},
+		Paths: p, Home: home, Lang: f.override(), Getenv: os.Getenv, Log: stderr, Alive: alive, Holders: holders, PID: os.Getpid(),
+		RuntimeDir: os.Getenv("XDG_RUNTIME_DIR"),
+	})
+	if err != nil {
+		fmt.Fprintln(stderr, "bulchimbeon tray: "+err.Error())
+		return exitFail
 	}
 	return exitOK
 }
@@ -309,6 +360,8 @@ func show(s settings.Settings, key string) string {
 		return fmt.Sprint(s.AgentWatchCountsIdle)
 	case engine.KeyCustomAgents:
 		return strings.Join(s.CustomAgents, " ")
+	case engine.KeyUniformTheme:
+		return s.UniformTheme
 	case settings.KeyLanguage:
 		return s.Language
 	}
@@ -322,34 +375,4 @@ func contains(list []string, s string) bool {
 		}
 	}
 	return false
-}
-
-// tail returns the last n lines of a file (the duty log), without reading all of it.
-func tail(path string, n int) []string {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil
-	}
-	defer f.Close()
-	const chunk = 8 << 10
-	info, err := f.Stat()
-	if err != nil {
-		return nil
-	}
-	start := max(info.Size()-chunk, 0)
-	buf := make([]byte, info.Size()-start)
-	if _, err := f.ReadAt(buf, start); err != nil && !errors.Is(err, io.EOF) {
-		return nil
-	}
-	lines := strings.Split(strings.TrimRight(string(buf), "\n"), "\n")
-	if start > 0 && len(lines) > 0 {
-		lines = lines[1:] // the first line may be cut
-	}
-	if len(lines) > n {
-		lines = lines[len(lines)-n:]
-	}
-	if len(lines) == 1 && lines[0] == "" {
-		return nil
-	}
-	return lines
 }
