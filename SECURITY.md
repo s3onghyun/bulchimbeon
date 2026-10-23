@@ -39,7 +39,7 @@
 | 설정·상태 파일 | 심볼릭 링크로 다른 파일 덮어쓰기, 반쯤 쓴 파일 | 파일 0600·디렉토리 0700, 임시 파일에 쓴 뒤 `rename`. 근무일지는 macOS 와 같이 `O_NOFOLLOW`·줄바꿈 제거·1MB 회전. 허용 값 밖의 설정은 기본값으로 |
 | 트레이 아이콘 (`bulchimbeon tray`, 세션 D-Bus) | 세션 버스로 들어온 호출로 정보 유출·설정 변조, 조작된 메시지로 크래시, 의존성 공급망 | 데몬과 따로 도는 프로세스이고, 데몬은 트레이 코드를 링크하지 않으며 세션 버스는 위의 잠금에만 씀 (테스트로 확인). 같은 사용자의 세션 버스에만 붙음 (unix 소켓, EXTERNAL 인증, TCP 주소 거부). 보여주는 것은 `bulchimbeon status` 와 같은 줄뿐이라 프로세스 인자·환경변수 없음. 메뉴로 바꿀 수 있는 것은 `uniformTheme` 하나이고, 알려진 테마 id 만 설정 저장소를 거쳐 기록. 받은 메시지는 크기 상한(32 MiB)·서명·패딩을 검사하고 unix fd 전달은 거부. D-Bus 클라이언트는 표준 라이브러리로 직접 구현 (서드파티 의존성 0개 유지) |
 | 트레이 아이콘 파일 | 다른 사용자가 바꿔치기, 반쯤 쓴 파일 | `$XDG_RUNTIME_DIR/bulchimbeon/tray-icons` (사용자 전용 런타임 디렉토리 안, 디렉토리 0700·파일 0600, 임시 파일에 쓴 뒤 `rename`). 런타임 디렉토리가 없으면 만들지 않고 픽스맵만 씀 |
-| 배포 (tar.gz, .deb) | 변조된 파일, 공급망 | CI 에서만 빌드 (`go build -trimpath`, `dpkg-deb`, 서드파티 패키징 도구 없음, 재현 가능한 빌드), `SHA256SUMS` + 빌드 출처 증명, Action 은 GitHub 소유·커밋 SHA 고정. 설치 스크립트는 네트워크·root 없이 `~/.local/bin`·`~/.config/systemd/user`·`~/.config/autostart` 에만 씀. 자동 시작 항목의 `Exec` 에는 평범한 경로만 넣고, 따옴표가 필요한 경로면 항목을 만들지 않음 |
+| 배포 (tar.gz, .deb, .rpm, AUR·COPR 레시피) | 변조된 파일, 공급망 | CI 에서만 빌드 (`go build -trimpath`, `dpkg-deb`, Ubuntu 저장소의 `rpmbuild` 로 tarball 의 바이너리를 다시 포장, 서드파티 패키징 도구 없음, 재현 가능한 빌드), `SHA256SUMS` + 빌드 출처 증명, Action 은 GitHub 소유·커밋 SHA 고정. AUR `PKGBUILD` 는 `scripts/bump-aur.sh` 가 체크섬·출처 증명을 검증한 뒤에만 sha256 을 넣고, COPR 소스 rpm 은 릴리스의 `SHA256SUMS` 와 맞는 tarball 로만 만든다. 어느 쪽도 저장소에서 자동으로 올리지 않음. 설치 스크립트는 네트워크·root 없이 `~/.local/bin`·`~/.config/systemd/user`·`~/.config/autostart` 에만 씀. 자동 시작 항목의 `Exec` 에는 평범한 경로만 넣고, 따옴표가 필요한 경로면 항목을 만들지 않음 |
 
 알려진 한계: 덮개를 닫으면 잠든다 (logind 설정은 바꾸지 않음). 같은 사용자가 `claude` 라는 이름의 바쁜 프로세스를 띄우면 근무를 유지시킬 수 있다 (macOS 와 같음).
 
