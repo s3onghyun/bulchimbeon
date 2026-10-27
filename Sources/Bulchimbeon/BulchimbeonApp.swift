@@ -74,11 +74,21 @@ struct DutyMenu: View {
     @ObservedObject var duty: DutyController
     @ObservedObject var patrol: PatrolController
     @ObservedObject var uniform: UniformSetting
+    @AppStorage(SettingsKey.hasSeenWelcome.rawValue) private var hasSeenWelcome = false
 
     private static let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
     private static let repoURL = URL(string: "https://github.com/s3onghyun/bulchimbeon")!
 
     var body: some View {
+        if !hasSeenWelcome {
+            Text(L10n.t("👋 메뉴 막대의 이등병을 누르면", "👋 Click the soldier in the menu bar", "👋 点击菜单栏的小士兵，"))
+            Text(L10n.t("언제든 이 메뉴가 열려요.", "to open this menu anytime.", "随时打开此菜单。"))
+            Text(L10n.t("에이전트 근무: 일하는 에이전트를 따라가요.", "Agent watch follows working agents.", "代理值班：跟随正在工作的代理。"))
+            Text(L10n.t("근무 서기: 정한 시간 동안 켜져요.", "Stand watch runs for a time you choose.", "开始值班：按你选定的时长运行。"))
+            Text(L10n.t("근무 형태에서 화면·시스템·덮개를 골라요.", "Watch mode picks display, system or lid.", "在“值班模式”中选择屏幕、系统或合盖。"))
+            Button(L10n.t("알겠습니다", "Got it", "知道了")) { hasSeenWelcome = true }
+            Divider()
+        }
         Text(L10n.t("불침번 — ", "Bulchimbeon — ", "Bulchimbeon — ") + duty.statusLine)
         if duty.order == .agentWatch, let detail = duty.watchDetail {
             Text(detail)

@@ -11,6 +11,22 @@
 
 ![불침번 데모](docs/media/demo.gif)
 
+## 바로 시작하기
+
+설치: `brew install --cask s3onghyun/tap/bulchimbeon` — 또는 [최신 macOS zip을 내려받아](https://github.com/s3onghyun/bulchimbeon/releases) `/Applications`로 옮긴다.
+
+**첫 실행:** 아직 공증을 받지 않아 macOS가 한 번 막는다. [설치의 첫 실행 안내](#설치)를 따른다.
+
+**지원 에이전트:** Claude Code · Codex · Gemini CLI · Cursor Agent · Copilot CLI · Aider · OpenCode (사용자 지정 에이전트도 가능).
+
+### 자주 묻는 질문
+
+**그냥 `caffeinate`나 Amphetamine을 쓰면 안 되나?** 수동으로 일정 시간 맥을 깨워둘 때는 좋은 도구다. 불침번은 AI 에이전트가 실제로 일하는 동안에만 잠자기 방지를 켜고 끄므로, 밤새 켜진 채로 남지 않는다.
+
+**무엇을 살피거나 보내나?** hook을 쓰지 않고 네트워크 연결도 하지 않는다. 지원 에이전트가 일하는지 판단하려고 내 계정의 로컬 프로세스 메타데이터만 살피며, 프로세스 명령줄이나 환경 변수는 저장하거나 출력하지 않는다.
+
+**덮개를 닫아도 깨어 있게 할 수 있나?** 가능하지만 덮개 닫고 근무를 켤 때 관리자 승인이 필요하다. 근무가 끝나거나 앱을 종료하면 원래 덮개 잠자기 설정으로 되돌린다.
+
 | 상태 | 이등병 | 언제 |
 |------|--------|------|
 | 💤 취침 | 방탄모 쓰고 꾸벅, zzz | 근무 없음 |
