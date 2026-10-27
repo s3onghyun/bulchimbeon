@@ -15,7 +15,7 @@
 
 설치: `brew install --cask s3onghyun/tap/bulchimbeon` — 또는 [최신 macOS zip을 내려받아](https://github.com/s3onghyun/bulchimbeon/releases) `/Applications`로 옮긴다.
 
-**첫 실행:** 이 앱은 ad-hoc 서명만 되어 있고 아직 Apple 공증을 받지 않았다. macOS가 막으면 앱을 우클릭 → **열기**를 누른다. 그래도 안 되면(macOS 15 이상 포함) **시스템 설정 → 개인정보 보호 및 보안 → 그래도 열기**를 누른다.
+**첫 실행:** 아직 공증을 받지 않아 macOS가 한 번 막는다. [설치의 첫 실행 안내](#설치)를 따른다.
 
 **지원 에이전트:** Claude Code · Codex · Gemini CLI · Cursor Agent · Copilot CLI · Aider · OpenCode (사용자 지정 에이전트도 가능).
 

@@ -15,6 +15,22 @@
 
 ![Bulchimbeon 演示](docs/media/demo.gif)
 
+## 快速开始
+
+安装：`brew install --cask s3onghyun/tap/bulchimbeon` —— 或[下载最新的 macOS zip](https://github.com/s3onghyun/bulchimbeon/releases) 并移动到 `/Applications`。
+
+**首次启动：** 应用尚未经过公证，macOS 会拦截一次。请按照[安装中的首次启动步骤](#安装)操作。
+
+**支持的代理：** Claude Code · Codex · Gemini CLI · Cursor Agent · Copilot CLI · Aider · OpenCode（也可添加自定义代理）。
+
+### 常见问题
+
+**为什么不直接用 `caffeinate` 或 Amphetamine？** 想手动让 Mac 保持唤醒一段固定时间时，它们很好用。Bulchimbeon 只在 AI 代理真正干活时开启和关闭防休眠，所以不会整夜开着。
+
+**它会查看或发送什么？** 不使用 hook，也不建立任何网络连接。它只查看你自己账户的本地进程元数据来判断支持的代理是否在工作，从不保存或输出进程命令行和环境变量。
+
+**合上盖子也能保持唤醒吗？** 可以，但开启合盖模式需要管理员授权。值班结束或退出应用时，会恢复原来的合盖睡眠设置。
+
 | 状态 | 小兵 | 何时 |
 |------|------|------|
 | 💤 就寝 | 戴着钢盔打瞌睡，zzz | 没有需要守护的任务 |

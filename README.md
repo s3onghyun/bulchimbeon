@@ -19,7 +19,7 @@ A pixel-art private takes that shift for your Mac.
 
 Install: `brew install --cask s3onghyun/tap/bulchimbeon` — or [download the latest macOS zip](https://github.com/s3onghyun/bulchimbeon/releases) and move it to `/Applications`.
 
-**First launch:** this ad-hoc signed app is not notarized yet. If macOS blocks it, right-click the app → **Open**; if that does not work (including on macOS 15+), go to **System Settings → Privacy & Security → Open Anyway**.
+**First launch:** the app is not notarized yet, so macOS blocks it once. See the [first-launch steps under Install](#install).
 
 **Supported agents:** Claude Code · Codex · Gemini CLI · Cursor Agent · Copilot CLI · Aider · OpenCode (and your own custom agents).
 

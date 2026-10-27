@@ -1,6 +1,6 @@
 {
   "publicKeys": ["dutyMode", "batteryFloor", "agentGraceMinutes", "agentWatchCountsIdle", "customAgents", "patrolEnabled", "patrolScale", "uniformTheme"],
-  "internalKeys": ["dutyOrder", "dutyOrderUntil", "lidEngagedByUs", "simulateHeat"],
+  "internalKeys": ["dutyOrder", "dutyOrderUntil", "lidEngagedByUs", "hasSeenWelcome", "simulateHeat"],
   "dutyModes": ["display", "system", "lid"],
   "batteryFloors": [10, 20, 30, 0],
   "defaultBatteryFloor": 20,

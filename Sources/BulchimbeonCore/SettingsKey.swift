@@ -19,6 +19,8 @@ public enum SettingsKey: String, CaseIterable, Sendable {
     case dutyOrder
     case dutyOrderUntil
     case lidEngagedByUs
+    /// 첫 실행 안내를 닫았는지
+    case hasSeenWelcome
     /// 시험용. `advisory|alert|normal` 로 발열 단계를 흉내 낸다
     case simulateHeat
 
@@ -27,7 +29,7 @@ public enum SettingsKey: String, CaseIterable, Sendable {
         case .dutyMode, .batteryFloor, .agentGraceMinutes, .agentWatchCountsIdle,
              .customAgents, .patrolEnabled, .patrolScale, .uniformTheme:
             true
-        case .dutyOrder, .dutyOrderUntil, .lidEngagedByUs, .simulateHeat:
+        case .dutyOrder, .dutyOrderUntil, .lidEngagedByUs, .hasSeenWelcome, .simulateHeat:
             false
         }
     }
