@@ -64,7 +64,7 @@ Bulchimbeon stays awake **only while an agent is working** and hands the Mac bac
 | ⚠️ Lid safety net | Restores normal lid sleep (`disablesleep` back to off) when the watch ends or the app quits; after a crash, the next launch offers **Restore lid sleep** in the menu |
 | 🌡️ Heat advisory → 🔥 combat rest | Warns when the Mac heats up; when it gets critical, pauses the watch to cool down and **resumes automatically** once it cools (no more cooking a closed Mac in a bag) |
 | ⚠️ Abandoned-post check | If the sleep block disappears for any reason, it is re-engaged immediately |
-| 🕵️ Watchdog | In lid-closed mode, restores normal sleep within 5 s when the app quits, you end the watch, or a fixed watch reaches its deadline — no second password prompt needed; re-enabling replaces rather than stacks it |
+| 🕵️ Watchdog | In lid-closed mode, restores normal sleep within 5 s when the app quits or the watch ends (including a timed watch running out) — no second password prompt needed; re-enabling replaces rather than stacks it |
 | 📋 Night-watch handover | Come back after 10+ minutes away and get a report of what happened while you were gone |
 | 🔁 Survives restarts | Remaining watch time carries over app restarts, updates and reboots (for security, a lid-closed watch comes back as a system watch; turn lid mode back on from the menu to re-approve it) |
 | 🖥️ Who else is holding the Mac awake | The menu shows other apps blocking sleep, e.g. "Vivaldi (video)" |
@@ -347,8 +347,8 @@ The app runs `pmset` with admin rights and reads other processes' metadata, so i
 [SECURITY.md](SECURITY.md).
 
 - No network access, no third-party dependencies
-- No shell-injection surface: absolute paths, minimal environment, and only an app PID, fixed deadline, and safely quoted app-owned stop-flag path enter the admin command
-- The root lid watchdog gets an immutable deadline at approval time. A user-owned, non-world-writable empty stop flag can only make it run `pmset -a disablesleep 0`; it never reads the flag, follows it elsewhere, writes it, or extends a watch
+- No shell-injection surface: absolute paths, minimal environment, and only an app PID and a safely quoted app-owned stop-flag path enter the admin command
+- The root lid watchdog has no deadline to extend; the app owns all watch timing. A user-owned, non-world-writable empty stop flag can only make it run `pmset -a disablesleep 0`; it never reads the flag, follows it elsewhere, or writes it
 - Never stores or prints other processes' arguments or environment; never reads AI transcripts
 - Hardened runtime, SHA-256 checksums and build provenance for releases, CI actions pinned by commit SHA
 

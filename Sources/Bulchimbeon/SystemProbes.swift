@@ -36,11 +36,11 @@ enum SystemProbes {
 
     /// `pmset -a disablesleep` 변경. 관리자 암호 프롬프트가 뜬다. 취소하면 false.
     ///
-    /// 보안: 명령에 들어가는 가변 값은 이 앱의 PID·고정 기한(정수)·셸 인용한 정지 플래그 경로뿐이다.
-    /// 켤 때는 "당직 감시병"(LidCommands.enable)을 함께 띄워, 앱이 강제 종료되거나 고정 근무 기한이 지나도
+    /// 보안: 명령에 들어가는 가변 값은 이 앱의 PID(정수)와 셸 인용한 정지 플래그 경로뿐이다.
+    /// 켤 때는 "당직 감시병"(LidCommands.enable)을 함께 띄워, 앱이 강제 종료되거나 근무 종료 플래그가 생기면
     /// 5초 안에 원복된다. 정지 플래그는 안전한 방향(`disablesleep 0`)으로만 쓸 수 있다.
     /// 프롬프트에 실행할 명령을 그대로 보여줘, 사용자가 무엇에 암호를 주는지 알 수 있게 한다.
-    static func setLidSleepDisabled(_ disabled: Bool, deadline: Date? = nil) -> Bool {
+    static func setLidSleepDisabled(_ disabled: Bool) -> Bool {
         let pid = getpid()
         let stopSignal: URL?
         if disabled {
@@ -51,10 +51,10 @@ enum SystemProbes {
             stopSignal = nil
         }
         let command = disabled
-            ? LidCommands.enable(pid: pid, deadline: deadline, stopSignal: stopSignal!.path)
+            ? LidCommands.enable(pid: pid, stopSignal: stopSignal!.path)
             : LidCommands.disable(pid: pid)
         let shown = "/usr/bin/pmset -a disablesleep \(disabled ? 1 : 0)"
-            + (disabled ? L10n.t(" (+ 앱 종료·고정 근무 종료 시 자동 원복 감시)", " (+ watchdog restores on app exit or fixed duty end)", "（应用退出或固定值班结束时自动恢复）") : "")
+            + (disabled ? L10n.t(" (+ 앱 종료·근무 종료 시 자동 원복 감시)", " (+ watchdog restores on app exit or duty end)", "（应用退出或值班结束时自动恢复）") : "")
         let prompt = L10n.t("불침번이 덮개 잠자기 설정을 바꾸려 합니다.\n실행 명령: ",
                             "Bulchimbeon wants to change the lid sleep setting.\nCommand: ", "Bulchimbeon 将更改合盖休眠设置。\n执行命令：") + shown
         let script = "do shell script \"\(appleScriptEscaped(command))\" with prompt \"\(appleScriptEscaped(prompt))\" with administrator privileges"
@@ -94,9 +94,15 @@ enum SystemProbes {
     }
 
     /// root 감시병은 이 파일의 존재만 lstat으로 확인한다. 내용을 읽거나 쓰거나 지우지 않는다.
-    private static func requestLidSleepRestore() -> Bool {
+    /// 감시병이 없으면 false. 앱 종료 때는 기다리지 않고 이것만 부른다.
+    @discardableResult
+    static func signalLidWatchdogStop() -> Bool {
         guard lidWatchdogAlive(), let signal = lidStopSignalURL() else { return false }
-        _ = FileManager.default.createFile(atPath: signal.path, contents: nil)
+        return FileManager.default.createFile(atPath: signal.path, contents: nil)
+    }
+
+    private static func requestLidSleepRestore() -> Bool {
+        guard signalLidWatchdogStop(), let signal = lidStopSignalURL() else { return false }
         for _ in 0..<29 { // 5초 감시 주기 + `pmset -g` 확인 여유, 최장 약 7초
             // `pmset -g`가 실패한 것을 "0"으로 오인하면 플래그를 너무 빨리 지워 감시병을 못 깨운다.
             if lidSleepDisabledState() == false {
@@ -118,7 +124,7 @@ enum SystemProbes {
     }
 
     /// nil은 `pmset -g` 자체를 확인하지 못한 경우라, 감시병 정지 신호를 지우지 않는다.
-    private static func lidSleepDisabledState() -> Bool? {
+    static func lidSleepDisabledState() -> Bool? {
         guard let output = run("/usr/bin/pmset", ["-g"]) else { return nil }
         return PmsetParser.sleepDisabled(output)
     }

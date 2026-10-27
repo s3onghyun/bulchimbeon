@@ -221,9 +221,7 @@ final class DutyController: ObservableObject {
             case .reacquire:
                 assertion.reacquire()
             case .enableLid:
-                let deadline: Date?
-                if case .timed(let until) = engine.order { deadline = until } else { deadline = nil }
-                let ok = await Task.detached { SystemProbes.setLidSleepDisabled(true, deadline: deadline) }.value
+                let ok = await Task.detached { SystemProbes.setLidSleepDisabled(true) }.value
                 await run(engine.lidEnableResult(ok, now: Date()))
             case .restoreLid:
                 let ok = await Task.detached { SystemProbes.restoreLidSleepWithWatchdog() }.value
@@ -306,6 +304,8 @@ final class DutyController: ObservableObject {
     func shutdown() {
         assertion.release()
         guard engine.lidEngagedByUs else { return }
+        // 당직 감시병이 살아 있으면 정지 플래그와 앱 종료 중 먼저 본 쪽으로 5초 안에 원복하므로 기다리지 않는다
+        if SystemProbes.signalLidWatchdogStop() { return }
         if SystemProbes.restoreLidSleepWithWatchdog() {
             _ = engine.lidRestoreResult(true)
             persist()
@@ -368,9 +368,16 @@ final class DutyController: ObservableObject {
         let scanAgents = order != .off || Date().timeIntervalSince(lastScan) >= 30
         let customAgents = defaults.stringArray(forKey: Keys.customAgents) ?? []
         let kinds = AgentCatalog.builtIn + AgentCatalog.customKinds(customAgents)
-        let (scanned, battery, assertions) = await Task.detached {
-            (scanAgents ? SystemProbes.processes(kinds: kinds) : nil, SystemProbes.battery(), PowerHolderProbe.assertions())
+        let lidBefore = engine.lidSleepDisabled
+        let (scanned, battery, assertions, lidNow) = await Task.detached {
+            (scanAgents ? SystemProbes.processes(kinds: kinds) : nil, SystemProbes.battery(), PowerHolderProbe.assertions(),
+             lidBefore ? SystemProbes.lidSleepDisabledState() : nil)
         }.value
+        // 밖에서 덮개 잠자기가 복구됐으면 덮개 근무를 주장하지 않는다 (확인 중 바뀐 상태는 건드리지 않음)
+        if lidBefore && engine.lidSleepDisabled && lidNow == false {
+            await run(engine.lidRestoreResult(true))
+            if engine.isOnDuty && engine.mode == .lid { await run(engine.setMode(.system, now: Date())) }
+        }
         otherHolders = PowerHolders.summarize(assertions, ownPID: getpid())
         now = Date()
         if let scanned {
