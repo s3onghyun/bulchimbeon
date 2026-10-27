@@ -70,6 +70,9 @@ final class DutyController: ObservableObject {
     @Published private var demoPose: Sprites.Pose?
     private var quoteKind: DutyEngine.QuoteKind = .off
     private var ticking = false
+    /// 진행 중인 덮개 켜기·복구 수와, 지금까지 시작한 횟수 (점검이 그 사이의 pmset 값을 믿지 않도록)
+    private var lidCommandsInFlight = 0
+    private var lidCommandsStarted = 0
     private var lastScan = Date.distantPast
     private var cpuHistory = CPUHistory(window: 60)
     /// 화면이 잠긴 시각 (당직 근무 인수인계용)
@@ -201,8 +204,15 @@ final class DutyController: ObservableObject {
     }
 
     func restoreLid() async {
-        let ok = await Task.detached { SystemProbes.restoreLidSleepWithWatchdog() }.value
+        let ok = await lidCommand { SystemProbes.restoreLidSleepWithWatchdog() }
         await run(engine.lidRestoreResult(ok))
+    }
+
+    private func lidCommand(_ body: @escaping @Sendable () -> Bool) async -> Bool {
+        lidCommandsInFlight += 1
+        lidCommandsStarted += 1
+        defer { lidCommandsInFlight -= 1 }
+        return await Task.detached(operation: body).value
     }
 
     // MARK: - 엔진이 시킨 일 실행
@@ -221,10 +231,10 @@ final class DutyController: ObservableObject {
             case .reacquire:
                 assertion.reacquire()
             case .enableLid:
-                let ok = await Task.detached { SystemProbes.setLidSleepDisabled(true) }.value
+                let ok = await lidCommand { SystemProbes.setLidSleepDisabled(true) }
                 await run(engine.lidEnableResult(ok, now: Date()))
             case .restoreLid:
-                let ok = await Task.detached { SystemProbes.restoreLidSleepWithWatchdog() }.value
+                let ok = await lidCommand { SystemProbes.restoreLidSleepWithWatchdog() }
                 await run(engine.lidRestoreResult(ok))
             case .notify(let title, let body):
                 notifier.send((title, body))
@@ -362,6 +372,8 @@ final class DutyController: ObservableObject {
 
     // MARK: - 근무 사이클 (5초마다)
 
+    private var claimsLid: Bool { engine.lidSleepDisabled || (engine.isOnDuty && engine.mode == .lid) }
+
     private func tick() async {
         guard !ticking, demoPose == nil else { return }
         ticking = true
@@ -371,14 +383,15 @@ final class DutyController: ObservableObject {
         let scanAgents = order != .off || Date().timeIntervalSince(lastScan) >= 30
         let customAgents = defaults.stringArray(forKey: Keys.customAgents) ?? []
         let kinds = AgentCatalog.builtIn + AgentCatalog.customKinds(customAgents)
-        let lidBefore = engine.lidSleepDisabled
+        let lidStarted = lidCommandsStarted
+        let checkLid = lidCommandsInFlight == 0 && claimsLid
         let (scanned, battery, assertions, lidNow) = await Task.detached {
             (scanAgents ? SystemProbes.processes(kinds: kinds) : nil, SystemProbes.battery(), PowerHolderProbe.assertions(),
-             lidBefore ? SystemProbes.lidSleepDisabledState() : nil)
+             checkLid ? SystemProbes.lidSleepDisabledState() : nil)
         }.value
-        // 밖에서 덮개 잠자기가 복구됐으면 덮개 근무를 주장하지 않는다 (확인 중 바뀐 상태는 건드리지 않음)
-        if lidBefore && engine.lidSleepDisabled && lidNow == false {
-            await run(engine.lidRestoreResult(true))
+        // 덮개 잠자기가 이미 복구됐으면 덮개 근무를 주장하지 않는다 (확인 중 시작된 켜기·복구가 있으면 건드리지 않음)
+        if checkLid && lidStarted == lidCommandsStarted && claimsLid && lidNow == false {
+            if engine.lidSleepDisabled { await run(engine.lidRestoreResult(true)) }
             if engine.isOnDuty && engine.mode == .lid { await run(engine.setMode(.system, now: Date())) }
         }
         otherHolders = PowerHolders.summarize(assertions, ownPID: getpid())
