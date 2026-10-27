@@ -12,8 +12,8 @@ Run this on a disposable local build. It changes the Mac-wide `disablesleep` set
    ```
 
 3. While the app remains open, select **Stay awake with lid closed** and approve the one enable prompt. Confirm `pmset -g` reports `SleepDisabled 1`.
-4. Keep the app running. At the deadline, confirm within roughly five seconds that `pmset -g` reports `SleepDisabled 0`, with no additional password prompt.
-5. Repeat with a longer temporary deadline, select **Off duty** manually, and confirm the same no-prompt restoration.
+4. Keep the app running. When the timed watch ends, confirm within roughly five seconds that `pmset -g` reports `SleepDisabled 0`, with no additional password prompt.
+5. Repeat with a longer temporary `dutyOrderUntil`, select **Off duty** manually, and confirm the same no-prompt restoration.
 6. Always finish with `pmset -g`. If it still reports `SleepDisabled 1`, use **Restore lid sleep** in the menu; if that cannot run, execute `sudo pmset -a disablesleep 0` yourself. Remove the temporary settings with:
 
    ```sh
