@@ -5,6 +5,8 @@
 
 ## 다음 버전
 
+- macOS 덮개 닫힘 근무: 처음 관리자 승인을 받을 때 띄운 root 당직 감시병이 앱 종료뿐 아니라 고정 근무 시간 종료와 수동 종료 신호도 감시해 `disablesleep 0`을 직접 실행한다. 덮개가 닫힌 채 근무가 끝나도 두 번째 관리자 암호 창이 뜨지 않는다. 정지 신호는 사용자 소유·world-writable 이 아닌 Application Support의 빈 플래그이며, 감시병이 할 수 있는 일은 잠자기 복구뿐이고 승인 때 고정한 기한을 연장할 수 없다.
+
 ## 0.9.0 — 2026-10-23
 
 - 리눅스 `.rpm`: 릴리스에 x86_64·aarch64 용 `bulchimbeon-<버전>-1.<아키텍처>.rpm` 을 더한다. `.deb` 와 같은 파일(`/usr/bin`, 켜지 않은 systemd 사용자 유닛, 트레이 자동 시작 항목, 문서·라이선스)이고, 같은 tarball 의 바이너리를 Ubuntu 저장소의 `rpmbuild` 로 다시 포장한다. `SHA256SUMS`·빌드 출처 증명에 들어간다 (`packaging/rpm`, `scripts/package-rpm.sh`)

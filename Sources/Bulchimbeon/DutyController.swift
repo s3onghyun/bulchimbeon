@@ -201,7 +201,7 @@ final class DutyController: ObservableObject {
     }
 
     func restoreLid() async {
-        let ok = await Task.detached { SystemProbes.setLidSleepDisabled(false) }.value
+        let ok = await Task.detached { SystemProbes.restoreLidSleepWithWatchdog() }.value
         await run(engine.lidRestoreResult(ok))
     }
 
@@ -221,10 +221,12 @@ final class DutyController: ObservableObject {
             case .reacquire:
                 assertion.reacquire()
             case .enableLid:
-                let ok = await Task.detached { SystemProbes.setLidSleepDisabled(true) }.value
+                let deadline: Date?
+                if case .timed(let until) = engine.order { deadline = until } else { deadline = nil }
+                let ok = await Task.detached { SystemProbes.setLidSleepDisabled(true, deadline: deadline) }.value
                 await run(engine.lidEnableResult(ok, now: Date()))
             case .restoreLid:
-                let ok = await Task.detached { SystemProbes.setLidSleepDisabled(false) }.value
+                let ok = await Task.detached { SystemProbes.restoreLidSleepWithWatchdog() }.value
                 await run(engine.lidRestoreResult(ok))
             case .notify(let title, let body):
                 notifier.send((title, body))
@@ -304,9 +306,7 @@ final class DutyController: ObservableObject {
     func shutdown() {
         assertion.release()
         guard engine.lidEngagedByUs else { return }
-        // 당직 감시병이 살아 있으면 종료 후 5초 안에 원복하므로 암호 창을 띄우지 않는다
-        if SystemProbes.lidWatchdogAlive() { return }
-        if SystemProbes.setLidSleepDisabled(false) {
+        if SystemProbes.restoreLidSleepWithWatchdog() {
             _ = engine.lidRestoreResult(true)
             persist()
         }
