@@ -15,6 +15,22 @@ A pixel-art private takes that shift for your Mac.
 
 ![Bulchimbeon demo](docs/media/demo.gif)
 
+## Start here
+
+Install: `brew install --cask s3onghyun/tap/bulchimbeon` — or [download the latest macOS zip](https://github.com/s3onghyun/bulchimbeon/releases) and move it to `/Applications`.
+
+**First launch:** the app is not notarized yet, so macOS blocks it once. See the [first-launch steps under Install](#install).
+
+**Supported agents:** Claude Code · Codex · Gemini CLI · Cursor Agent · Copilot CLI · Aider · OpenCode (and your own custom agents).
+
+### FAQ
+
+**Why not just use `caffeinate` or Amphetamine?** Those are great when you want a manual, fixed wake lock. Bulchimbeon starts and ends the lock around active AI-agent work, so it does not get left on overnight.
+
+**What does it inspect or send?** It uses no hooks and makes no network connections. It observes only your own local process metadata to decide whether a supported agent is working; it never stores or prints process command lines or environment variables.
+
+**Can it keep a closed laptop awake?** Yes, but turning on the lid-closed mode requires an administrator approval. It restores normal lid sleep when the watch ends or the app quits.
+
 | State | The private | When |
 |-------|-------------|------|
 | 💤 Off duty | Dozing in his helmet, zzz | Nothing to guard |

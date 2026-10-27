@@ -29,7 +29,7 @@ var PublicSettingsKeys = []string{KeyDutyMode, KeyBatteryFloor, KeyAgentGraceMin
 	KeyCustomAgents, KeyPatrolEnabled, KeyPatrolScale, KeyUniformTheme}
 
 // InternalSettingsKeys are app state on macOS and may change at any time.
-var InternalSettingsKeys = []string{"dutyOrder", "dutyOrderUntil", "lidEngagedByUs", KeySimulateHeat}
+var InternalSettingsKeys = []string{"dutyOrder", "dutyOrderUntil", "lidEngagedByUs", "hasSeenWelcome", KeySimulateHeat}
 
 var (
 	DutyModes     = []DutyMode{ModeDisplay, ModeSystem, ModeLid}

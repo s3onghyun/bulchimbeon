@@ -64,6 +64,7 @@ bulchimbeon config set agentGraceMinutes 10
 |----|------|
 | `dutyOrder`, `dutyOrderUntil` | 진행 중인 근무 명령 |
 | `lidEngagedByUs` | 덮개 잠자기를 이 앱이 껐는지 (원복용) |
+| `hasSeenWelcome` | 메뉴의 첫 실행 안내를 닫았는지 |
 | `simulateHeat` | 시험용 발열 흉내 (`advisory` · `alert` · `normal`) |
 
 ## 2. 실행 인자
