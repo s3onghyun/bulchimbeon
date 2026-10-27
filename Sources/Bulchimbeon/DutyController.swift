@@ -305,7 +305,10 @@ final class DutyController: ObservableObject {
         assertion.release()
         guard engine.lidEngagedByUs else { return }
         // 당직 감시병이 살아 있으면 정지 플래그와 앱 종료 중 먼저 본 쪽으로 5초 안에 원복하므로 기다리지 않는다
-        if SystemProbes.signalLidWatchdogStop() { return }
+        if SystemProbes.lidWatchdogAlive() {
+            SystemProbes.signalLidWatchdogStop()
+            return
+        }
         if SystemProbes.restoreLidSleepWithWatchdog() {
             _ = engine.lidRestoreResult(true)
             persist()
