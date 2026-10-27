@@ -158,9 +158,9 @@ public enum HeatPolicy {
     }
 }
 
-/// 덮개 모드 관리자 명령. 가변 값은 정수 PID 뿐이라 셸 인젝션 여지가 없다.
+/// 덮개 모드 관리자 명령. 가변 값은 정수 PID와 셸 인용한 사용자 플래그 경로뿐이다.
 ///
-/// 켤 때 "당직 감시병"을 함께 띄운다: 앱(PID)이 사라지면 5초 안에 `disablesleep 0` 으로 되돌리는
+/// 켤 때 "당직 감시병"을 함께 띄운다: 앱(PID)이 사라지거나 정지 플래그가 생기면 5초 안에 `disablesleep 0` 으로 되돌리는
 /// root 백그라운드 셸. 스크립트는 파일이 아닌 인라인 문자열 — 사용자 권한으로 수정 가능한 파일을
 /// root 로 실행하면 권한 상승 통로가 되기 때문.
 public enum LidCommands {
@@ -178,11 +178,15 @@ public enum LidCommands {
     /// 확인한 뒤에만 부모가 종료한다 (분리 전에 정리당하는 경쟁 상태 없음). 표준 입출력은 /dev/null.
     /// 시스템 기본 perl(SIP 보호 /usr/bin)만 쓴다 — 앱 바이너리를 root 로 실행하지 않는다
     /// (사용자 권한으로 수정 가능한 파일이라 권한 상승 통로가 된다).
-    public static func enable(pid: Int32, pmset: String = "/usr/bin/pmset") -> String {
-        let watch = ": \(marker(pid)); while /bin/kill -0 \(pid) 2>/dev/null; do /bin/sleep 5; done; \(pmset) -a disablesleep 0"
+    /// 정지 플래그는 감시병이 내용물을 읽지 않고 `stat`으로 존재만 확인한다. BSD `stat`은
+    /// `-L` 없이 lstat을 사용하므로 심볼릭 링크를 따라 다른 경로를 보지 않는다.
+    /// 근무 시간은 앱이 관리하고, 근무가 끝나면 앱이 플래그를 만든다. 같은 앱 PID로 다시 켜면 먼저
+    /// 기존 감시병을 종료하고 하나만 새로 띄워 중첩하지 않는다.
+    public static func enable(pid: Int32, stopSignal: String, pmset: String = "/usr/bin/pmset") -> String {
+        let watch = ": \(marker(pid)); while :; do if /usr/bin/stat -f %z \"$1\" >/dev/null 2>&1 || ! /bin/kill -0 \(pid) 2>/dev/null; then \(pmset) -a disablesleep 0; exit 0; fi; /bin/sleep 5; done"
         let detach = "pipe(my $r, my $w); my $p = fork(); die unless defined $p; "
             + "if ($p) { close $w; <$r>; exit 0 } close $r; POSIX::setsid(); close $w; exec @ARGV"
-        return "\(pmset) -a disablesleep 1 && /usr/bin/perl -MPOSIX -e '\(detach)' /bin/sh -c '\(watch)' </dev/null >/dev/null 2>&1"
+        return "\(pmset) -a disablesleep 1 && { /usr/bin/pkill -f '\(markerPattern(pid))' || true; /usr/bin/perl -MPOSIX -e '\(detach)' /bin/sh -c '\(watch)' '\(marker(pid))' \(shellQuote(stopSignal)) </dev/null >/dev/null 2>&1; }"
     }
 
     public static func disable(pid: Int32, pmset: String = "/usr/bin/pmset") -> String {
@@ -191,6 +195,10 @@ public enum LidCommands {
 
     /// 감시병이 살아 있는지 확인할 때 쓰는 `pgrep -f` 패턴
     public static func watchdogPattern(pid: Int32) -> String { markerPattern(pid) }
+
+    private static func shellQuote(_ string: String) -> String {
+        "'" + string.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
 }
 
 /// 프로세스별 CPU 사용률을 최근 `window` 초 평균으로 계산한다.

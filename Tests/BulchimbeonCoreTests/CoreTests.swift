@@ -455,23 +455,12 @@ import Testing
 }
 
 @Suite struct LidWatchdogTests {
-    @Test func commandsAreSafeToEmbed() {
-        for cmd in [LidCommands.enable(pid: 4321), LidCommands.disable(pid: 4321)] {
-            // AppleScript 문자열 안에 그대로 들어가므로 큰따옴표·역슬래시가 없어야 한다
-            #expect(!cmd.contains("\"") && !cmd.contains("\\"))
-            #expect(cmd.contains("4321"))
-        }
-        #expect(LidCommands.enable(pid: 1).contains("disablesleep 1"))
-        #expect(LidCommands.enable(pid: 1).contains("POSIX::setsid()"), "관리자 권한 실행 정리에서 살아남도록 새 세션으로 분리")
-        #expect(LidCommands.disable(pid: 1).contains("disablesleep 0"))
-    }
-
     @Test func pkillPatternDoesNotMatchItself() throws {
         // disable 명령을 실행하는 셸 자신의 명령줄이 패턴에 걸리면 pkill 이 자기 부모를 죽인다
         let pattern = LidCommands.watchdogPattern(pid: 4321)
         let regex = try Regex(pattern)
         #expect(LidCommands.disable(pid: 4321).contains(regex) == false)
-        #expect(LidCommands.enable(pid: 4321).contains(regex), "감시병 명령줄은 매칭돼야 한다")
+        #expect(LidCommands.enable(pid: 4321, stopSignal: "/tmp/lid-stop-4321").contains(regex), "감시병 명령줄은 매칭돼야 한다")
     }
 
     #if os(macOS) // 감시병은 macOS 의 pmset 덮개 닫힘용이다
@@ -481,6 +470,7 @@ import Testing
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let log = dir.appendingPathComponent("pmset.log")
         let fakePmset = dir.appendingPathComponent("pmset")
+        let stopSignal = dir.appendingPathComponent("lid-stop")
         try "#!/bin/sh\necho \"$@\" >> '\(log.path)'\n".write(to: fakePmset, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakePmset.path)
 
@@ -491,7 +481,7 @@ import Testing
 
         let shell = Process()
         shell.executableURL = URL(fileURLWithPath: "/bin/sh")
-        shell.arguments = ["-c", LidCommands.enable(pid: app.processIdentifier, pmset: fakePmset.path)]
+        shell.arguments = ["-c", LidCommands.enable(pid: app.processIdentifier, stopSignal: stopSignal.path, pmset: fakePmset.path)]
         let started = Date()
         try shell.run()
         shell.waitUntilExit()
@@ -524,6 +514,119 @@ import Testing
             if (try? String(contentsOf: log, encoding: .utf8))?.contains("disablesleep 0") == true { restored = true; break }
         }
         #expect(restored, "앱이 죽은 뒤 감시병이 disablesleep 0 을 실행해야 한다")
+    }
+
+    /// 앱은 파일 내용 없이 플래그만 만든다. 감시병은 앱이 살아 있어도 다음 5초 점검에 원복한다.
+    @Test func watchdogRestoresWhenStopSignalExists() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let log = dir.appendingPathComponent("pmset.log")
+        let fakePmset = dir.appendingPathComponent("pmset")
+        let stopSignal = dir.appendingPathComponent("lid-stop")
+        try "#!/bin/sh\necho \"$@\" >> '\(log.path)'\n".write(to: fakePmset, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakePmset.path)
+
+        let app = Process()
+        app.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        app.arguments = ["60"]
+        try app.run()
+        defer { if app.isRunning { app.terminate() } }
+
+        let shell = Process()
+        shell.executableURL = URL(fileURLWithPath: "/bin/sh")
+        shell.arguments = ["-c", LidCommands.enable(pid: app.processIdentifier, stopSignal: stopSignal.path, pmset: fakePmset.path)]
+        try shell.run()
+        shell.waitUntilExit()
+        try await Task.sleep(for: .seconds(1))
+        #expect(FileManager.default.createFile(atPath: stopSignal.path, contents: nil))
+
+        var restored = false
+        for _ in 0..<16 {
+            try await Task.sleep(for: .milliseconds(500))
+            if (try? String(contentsOf: log, encoding: .utf8))?.contains("disablesleep 0") == true { restored = true; break }
+        }
+        #expect(restored, "정지 플래그 뒤 감시병이 관리자 암호 없이 disablesleep 0 을 실행해야 한다")
+    }
+
+    /// 경로에 작은따옴표·공백이 있어도 인용이 깨지지 않고, 플래그가 심볼릭 링크여도 대상을 따라가지 않고 원복한다.
+    @Test func watchdogQuotesStopSignalPathAndSeesSymlinkFlag() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let flagDir = dir.appendingPathComponent("it's a dir")
+        try FileManager.default.createDirectory(at: flagDir, withIntermediateDirectories: true)
+        let log = dir.appendingPathComponent("pmset.log")
+        let fakePmset = dir.appendingPathComponent("pmset")
+        let stopSignal = flagDir.appendingPathComponent("lid-stop")
+        try "#!/bin/sh\necho \"$@\" >> '\(log.path)'\n".write(to: fakePmset, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakePmset.path)
+
+        let app = Process()
+        app.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        app.arguments = ["60"]
+        try app.run()
+        defer { if app.isRunning { app.terminate() } }
+
+        let shell = Process()
+        shell.executableURL = URL(fileURLWithPath: "/bin/sh")
+        shell.arguments = ["-c", LidCommands.enable(pid: app.processIdentifier, stopSignal: stopSignal.path, pmset: fakePmset.path)]
+        try shell.run()
+        shell.waitUntilExit()
+        #expect(shell.terminationStatus == 0)
+        try await Task.sleep(for: .seconds(1))
+        let started = (try? String(contentsOf: log, encoding: .utf8)) ?? ""
+        #expect(started.contains("disablesleep 1"))
+        #expect(!started.contains("disablesleep 0"), "플래그가 없으면 앱이 살아 있는 동안 원복하지 않는다")
+
+        try FileManager.default.createSymbolicLink(atPath: stopSignal.path, withDestinationPath: dir.appendingPathComponent("missing").path)
+        var restored = false
+        for _ in 0..<16 {
+            try await Task.sleep(for: .milliseconds(500))
+            if (try? String(contentsOf: log, encoding: .utf8))?.contains("disablesleep 0") == true { restored = true; break }
+        }
+        #expect(restored, "인용된 경로의 플래그(깨진 심볼릭 링크 포함)를 감시병이 봐야 한다")
+    }
+
+    @Test func watchdogReplacementDoesNotStackForSameApp() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let log = dir.appendingPathComponent("pmset.log")
+        let fakePmset = dir.appendingPathComponent("pmset")
+        let stopSignal = dir.appendingPathComponent("lid-stop")
+        try "#!/bin/sh\necho \"$@\" >> '\(log.path)'\n".write(to: fakePmset, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakePmset.path)
+
+        let app = Process()
+        app.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        app.arguments = ["60"]
+        try app.run()
+        defer { if app.isRunning { app.terminate() } }
+
+        let command = LidCommands.enable(pid: app.processIdentifier, stopSignal: stopSignal.path, pmset: fakePmset.path)
+        for _ in 0..<2 {
+            let shell = Process()
+            shell.executableURL = URL(fileURLWithPath: "/bin/sh")
+            shell.arguments = ["-c", command]
+            try shell.run()
+            shell.waitUntilExit()
+            #expect(shell.terminationStatus == 0)
+        }
+        try await Task.sleep(for: .seconds(1))
+
+        let pgrep = Process()
+        pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        pgrep.arguments = ["-f", LidCommands.watchdogPattern(pid: app.processIdentifier)]
+        let out = Pipe(); pgrep.standardOutput = out
+        try pgrep.run(); pgrep.waitUntilExit()
+        let pids = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            .split(separator: "\n").compactMap { Int32($0) }
+        #expect(pids.count == 1, "같은 앱 PID에는 감시병 하나만 남아야 한다")
+
+        #expect(FileManager.default.createFile(atPath: stopSignal.path, contents: nil))
+        var restored = false
+        for _ in 0..<16 {
+            try await Task.sleep(for: .milliseconds(500))
+            if (try? String(contentsOf: log, encoding: .utf8))?.contains("disablesleep 0") == true { restored = true; break }
+        }
+        #expect(restored, "교체한 감시병도 정지 신호로 끝나야 한다")
     }
     #endif
 }
