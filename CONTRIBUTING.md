@@ -169,6 +169,11 @@ git tag vX.Y.Z && git push origin vX.Y.Z   # CI builds universal, signs, attests
 # Fedora COPR, once set up: copr-cli buildscm ... --commit vX.Y.Z (packaging/rpm/README.md)
 ```
 
+The release workflow does not touch the Homebrew tap or the AUR. After tagging, both steps are required:
+
+- [ ] `./scripts/bump-cask.sh X.Y.Z` (tap cask and Linux formula; otherwise `brew upgrade` stays on the old version)
+- [ ] `./scripts/bump-aur.sh X.Y.Z`, then land `packaging/aur/bulchimbeon-bin/` in a small PR
+
 ### Be kind
 
 Be respectful and patient with everyone, whatever language they write in. Harassment isn't tolerated. The maintainer
@@ -329,6 +334,11 @@ git tag vX.Y.Z && git push origin vX.Y.Z   # CI 가 universal 빌드·서명·�
 ./scripts/bump-aur.sh X.Y.Z                # 같은 검증 후 AUR 용 packaging/aur 갱신 (packaging/aur/README.md)
 # Fedora COPR (설정한 뒤): copr-cli buildscm ... --commit vX.Y.Z (packaging/rpm/README.md)
 ```
+
+릴리스 워크플로는 Homebrew tap 과 AUR 을 건드리지 않습니다. 태그를 올린 뒤 두 단계는 꼭 해야 합니다:
+
+- [ ] `./scripts/bump-cask.sh X.Y.Z` (tap 의 cask 와 Linux formula. 빠뜨리면 `brew upgrade` 가 옛 버전에 머뭅니다)
+- [ ] `./scripts/bump-aur.sh X.Y.Z` 후 `packaging/aur/bulchimbeon-bin/` 을 작은 PR 로 반영
 
 ### 서로 존중해주세요
 
