@@ -118,6 +118,7 @@ public struct DutyEngine: Sendable {
 
     public mutating func startTimed(seconds: TimeInterval?, label: String, now: Date) -> [DutyEffect] {
         order = .timed(until: seconds.map { now.addingTimeInterval($0) })
+        shiftMode = nil
         var effects = engage(now: now)
         let notice = Lines.reportForDuty()
         effects.append(.notify(title: notice.title, body: notice.body))
@@ -130,7 +131,11 @@ public struct DutyEngine: Sendable {
         watchStartedAt = now
         order = .agentWatch
         quote = .standby
-        return [.log(L10n.t("에이전트 근무 대기 시작", "Started waiting for agents", "开始等待代理"), .other)]
+        let before = effectiveMode
+        shiftMode = nil
+        var effects = isOnDuty && effectiveMode != before ? engage(now: now) : []
+        effects.append(.log(L10n.t("에이전트 근무 대기 시작", "Started waiting for agents", "开始等待代理"), .other))
+        return effects
     }
 
     public mutating func stop(now: Date) -> [DutyEffect] {

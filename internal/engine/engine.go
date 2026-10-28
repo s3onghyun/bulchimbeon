@@ -260,6 +260,7 @@ func (e *Engine) StartTimed(seconds *time.Duration, label string, now time.Time)
 		order.Until = &until
 	}
 	e.order = order
+	e.shiftMode = ""
 	effects := e.engage(now)
 	effects = append(effects, notify(ReportForDuty(e.Lang)))
 	e.say(SpeechReporting(e.Lang), now, 4*time.Second)
@@ -273,7 +274,13 @@ func (e *Engine) StartAgentWatch(now time.Time) []Effect {
 	e.watchStartedAt = now
 	e.order = DutyOrder{Kind: OrderAgentWatch}
 	e.quote = QuoteStandby
-	return []Effect{logEffect(e.t("에이전트 근무 대기 시작", "Started waiting for agents", "开始等待代理"), LogOther)}
+	before := e.EffectiveMode()
+	e.shiftMode = ""
+	var effects []Effect
+	if e.onDuty && e.EffectiveMode() != before {
+		effects = e.engage(now)
+	}
+	return append(effects, logEffect(e.t("에이전트 근무 대기 시작", "Started waiting for agents", "开始等待代理"), LogOther))
 }
 
 // Stop ends any watch.

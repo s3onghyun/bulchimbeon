@@ -291,6 +291,35 @@ import Testing
         #expect(engine.effectiveMode == .lid)
     }
 
+    @Test func newTimedWatchAfterAgentWatchFallbackAsksForLid() {
+        var engine = DutyEngine(mode: .lid, lidSleepDisabled: false, now: t0)
+        _ = engine.resume(.agentWatch, now: t0)
+        #expect(engine.effectiveMode == .system)
+        let effects = engine.startTimed(seconds: nil, label: "무기한", now: at(10))
+        #expect(effects.first == .enableLid && engine.effectiveMode == .lid, "새 근무는 새 교대: 다시 덮개 승인")
+    }
+
+    @Test func newTimedWatchReplacingHeatDowngradeAsksForLid() {
+        var engine = DutyEngine(mode: .lid, now: t0)
+        _ = engine.startTimed(seconds: nil, label: "무기한", now: t0)
+        _ = engine.lidEnableResult(true, now: t0)
+        var alert = idle(10); alert.heat = .alert
+        _ = engine.tick(alert)
+        _ = engine.lidRestoreResult(true)
+        _ = engine.tick(idle(20))
+        _ = engine.tick(idle(141))
+        #expect(engine.effectiveMode == .system && engine.isOnDuty)
+        let effects = engine.startTimed(seconds: 600, label: "10분", now: at(200))
+        #expect(effects.first == .enableLid && engine.effectiveMode == .lid)
+    }
+
+    @Test func agentWatchStartedDuringFallbackReengagesAsLid() {
+        var engine = DutyEngine(mode: .lid, lidSleepDisabled: false, now: t0)
+        _ = engine.resume(.timed(until: nil), now: t0)
+        let effects = engine.startAgentWatch(now: at(10))
+        #expect(effects.first == .enableLid && engine.effectiveMode == .lid, "시스템 assertion 을 든 채 덮개라고 표시하지 않는다")
+    }
+
     @Test func resumeExpiredStaysOff() {
         var engine = DutyEngine(now: t0)
         _ = engine.resume(.expired, now: t0)
