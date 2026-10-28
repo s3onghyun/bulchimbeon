@@ -137,7 +137,8 @@ func TestFixtureEngineScenarios(t *testing.T) {
 
 			expected := map[string]any{
 				"isOnDuty": false, "order": "off", "orderUntil": nil, "resting": false, "mode": string(cfg.Mode),
-				"heat": "normal", "quote": "off", "dutyStartedAt": nil, "watchDetail": nil,
+				"effectiveMode": string(cfg.Mode),
+				"heat":          "normal", "quote": "off", "dutyStartedAt": nil, "watchDetail": nil,
 				"lidEngagedByUs": cfg.LidEngagedByUs, "lidSleepDisabled": cfg.LidSleepDisabled,
 			}
 
@@ -178,6 +179,8 @@ func TestFixtureEngineScenarios(t *testing.T) {
 					effects = e.LidEnableResult(st.OK, now)
 				case "lidRestoreResult":
 					effects = e.LidRestoreResult(st.OK)
+				case "lidSleepRestoredExternally":
+					effects = e.LidSleepRestoredExternally(now)
 				case "tick":
 					heat := HeatNormal
 					if st.Heat != "" {
@@ -218,7 +221,7 @@ func TestFixtureEngineScenarios(t *testing.T) {
 				}
 				state := map[string]any{
 					"isOnDuty": e.OnDuty(), "order": e.Order().Kind.String(), "orderUntil": rel(e.Order().Until),
-					"resting": e.Resting(), "mode": string(e.Mode), "heat": e.Heat().String(), "quote": e.Quote().String(),
+					"resting": e.Resting(), "mode": string(e.Mode), "effectiveMode": string(e.EffectiveMode()), "heat": e.Heat().String(), "quote": e.Quote().String(),
 					"dutyStartedAt": rel(e.DutyStartedAt()), "watchDetail": detail,
 					"lidEngagedByUs": e.LidEngagedByUs(), "lidSleepDisabled": e.LidSleepDisabled(),
 				}

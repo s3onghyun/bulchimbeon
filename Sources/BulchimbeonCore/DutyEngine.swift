@@ -55,6 +55,7 @@ public struct DutyEngine: Sendable {
     public enum QuoteKind: Sendable { case onDuty, standby, off }
 
     // MARK: 설정
+    /// 사용자가 메뉴에서 고른 근무 방식 (저장·메뉴 체크 표시). 대체 근무가 이 값을 바꾸지 않는다.
     public var mode: DutyMode
     public var batteryFloor: Int        // 0 = 끄기
     public var countIdleSessions: Bool  // true = 열려만 있어도 근무 (교대 안 함)
@@ -71,6 +72,11 @@ public struct DutyEngine: Sendable {
     public private(set) var lastAgentSummary = ""
     public private(set) var lidSleepDisabled: Bool
     public private(set) var lidEngagedByUs: Bool
+    /// 이번 근무만 덮개 대신 쓰는 방식 (재시작·암호 거부·과열 대체). 근무가 끝나면 nil
+    public private(set) var shiftMode: DutyMode?
+
+    /// 지금 실제로 서는 근무 방식
+    public var effectiveMode: DutyMode { shiftMode ?? mode }
 
     private var saluteUntil: Date?
     private var speech: (text: String, until: Date)?
@@ -116,7 +122,7 @@ public struct DutyEngine: Sendable {
         let notice = Lines.reportForDuty()
         effects.append(.notify(title: notice.title, body: notice.body))
         say(Lines.Speech.reporting(), now: now)
-        effects.append(.log(L10n.t("근무 투입 — \(label), \(mode.title)", "On duty — \(label), \(mode.title)", "开始值班 — \(label)，\(mode.title)"), .onDuty))
+        effects.append(.log(L10n.t("근무 투입 — \(label), \(effectiveMode.title)", "On duty — \(label), \(effectiveMode.title)", "开始值班 — \(label)，\(effectiveMode.title)"), .onDuty))
         return effects
     }
 
@@ -131,11 +137,13 @@ public struct DutyEngine: Sendable {
         standDown(notice: nil, log: L10n.t("근무 종료 (수동)", "Off duty (manual)", "结束值班（手动）"))
     }
 
+    /// 사용자가 고른 방식. 대체 근무 중이면 대체를 끝내고 고른 방식으로 선다.
     public mutating func setMode(_ newMode: DutyMode, now: Date) -> [DutyEffect] {
-        guard newMode != mode else { return [] }
-        let leavingLid = mode == .lid
+        let before = effectiveMode
         mode = newMode
-        guard isOnDuty else { return [] }
+        shiftMode = nil
+        guard newMode != before, isOnDuty else { return [] }
+        let leavingLid = before == .lid
         var effects: [DutyEffect] = leavingLid && lidEngagedByUs ? [.restoreLid] : []
         effects += engage(now: now)
         effects.append(.log(L10n.t("근무 방식 변경 — \(newMode.title)", "Watch mode changed — \(newMode.title)", "值班模式已更改 — \(newMode.title)"), .other))
@@ -155,8 +163,8 @@ public struct DutyEngine: Sendable {
         }
         var effects: [DutyEffect] = []
         // 로그인 직후 예고 없는 관리자 암호 창은 피싱처럼 보인다 → 덮개 근무는 시스템 근무로 복귀
-        if mode == .lid && !lidSleepDisabled {
-            mode = .system
+        if effectiveMode == .lid && !lidSleepDisabled {
+            shiftMode = .system
             let notice = Lines.lidResumeFallback()
             effects += [.notify(title: notice.title, body: notice.body),
                         .log(L10n.t("덮개 근무 → 시스템 근무로 복귀 (관리자 재승인 필요)",
@@ -190,7 +198,7 @@ public struct DutyEngine: Sendable {
             lidSleepDisabled = true
             return [.acquire(.lid)]
         }
-        mode = .system
+        if order != .off { shiftMode = .system } // 암호 창이 떠 있는 사이 근무를 마쳤으면 다음 근무는 다시 덮개
         let notice = Lines.lidFallback()
         return [.notify(title: notice.title, body: notice.body),
                 .log(L10n.t("덮개 근무 승인 거부 — 시스템 근무로 대체", "Lid-closed watch denied — switched to system watch", "合盖值班未获授权 — 已切换为系统值班"), .other),
@@ -202,6 +210,16 @@ public struct DutyEngine: Sendable {
         lidEngagedByUs = false
         lidSleepDisabled = false
         return [.log(L10n.t("덮개 잠자기 복구 완료", "Lid sleep restored", "已恢复合盖休眠"), .other)]
+    }
+
+    /// 덮개 근무 중 덮개 잠자기가 밖에서 복구됐다 (당직 감시병 등) → 이번 근무만 시스템 근무로
+    public mutating func lidSleepRestoredExternally(now: Date) -> [DutyEffect] {
+        guard isOnDuty, effectiveMode == .lid else { return [] }
+        shiftMode = .system
+        var effects = engage(now: now)
+        effects.append(.log(L10n.t("근무 방식 변경 — \(DutyMode.system.title)", "Watch mode changed — \(DutyMode.system.title)",
+                                   "值班模式已更改 — \(DutyMode.system.title)"), .other))
+        return effects
     }
 
     // MARK: - 점검 (5초마다)
@@ -239,8 +257,8 @@ public struct DutyEngine: Sendable {
             say(Lines.Speech.rest(), now: now, seconds: 8)
         case .resume:
             resting = false
-            let lidDowngraded = mode == .lid
-            if lidDowngraded { mode = .system } // 과열 직후엔 덮개 근무로 돌아가지 않는다
+            let lidDowngraded = effectiveMode == .lid
+            if lidDowngraded { shiftMode = .system } // 과열 직후엔 이번 근무 동안 덮개 근무로 돌아가지 않는다
             let notice = Lines.heatResume(lidDowngraded: lidDowngraded)
             effects += [.notify(title: notice.title, body: notice.body),
                         .log(L10n.t("전투휴식 종료 — 근무 복귀", "Combat rest over — back on watch", "降温休息结束 — 恢复值班"), .onDuty)]
@@ -324,11 +342,11 @@ public struct DutyEngine: Sendable {
         if !isOnDuty { dutyStartedAt = now }
         isOnDuty = true
         quote = .onDuty
-        if mode == .lid && !lidSleepDisabled { // 결과에 따라 lidEnableResult 가 acquire
+        if effectiveMode == .lid && !lidSleepDisabled { // 결과에 따라 lidEnableResult 가 acquire
             awaitingLid = true
             return [.enableLid]
         }
-        return [.acquire(mode == .lid ? .lid : mode)]
+        return [.acquire(effectiveMode)]
     }
 
     private mutating func disengage() -> [DutyEffect] {
@@ -342,6 +360,7 @@ public struct DutyEngine: Sendable {
         resting = false
         order = .off
         quote = .off
+        shiftMode = nil
         if let notice { effects.append(.notify(title: notice.title, body: notice.body)) }
         effects.append(.log(log, .standDown))
         return effects

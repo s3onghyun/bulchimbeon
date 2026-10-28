@@ -130,7 +130,7 @@ import Testing
         _ = engine.tick(alert)
         _ = engine.tick(idle(20))
         let back = engine.tick(idle(141))
-        #expect(back.contains(.acquire(.system)) && engine.mode == .system, "과열 직후엔 덮개 근무로 돌아가지 않는다")
+        #expect(back.contains(.acquire(.system)) && engine.effectiveMode == .system, "과열 직후엔 덮개 근무로 돌아가지 않는다")
     }
 
     @Test func heatAlertBlocksAgentEngage() {
@@ -193,7 +193,7 @@ import Testing
         var engine = DutyEngine(mode: .lid, now: t0)
         _ = engine.startTimed(seconds: nil, label: "무기한", now: t0)
         let denied = engine.lidEnableResult(false, now: t0)
-        #expect(denied.last == .acquire(.system) && engine.mode == .system && !engine.lidEngagedByUs)
+        #expect(denied.last == .acquire(.system) && engine.effectiveMode == .system && !engine.lidEngagedByUs)
     }
 
     // MARK: 재시작 복귀
@@ -209,7 +209,86 @@ import Testing
         var engine = DutyEngine(mode: .lid, lidSleepDisabled: false, now: t0)
         let effects = engine.resume(.timed(until: nil), now: t0)
         #expect(!effects.contains(.enableLid), "로그인 직후 예고 없는 관리자 암호 창 금지")
-        #expect(effects.contains(.acquire(.system)) && engine.mode == .system)
+        #expect(effects.contains(.acquire(.system)) && engine.effectiveMode == .system)
+    }
+
+    // MARK: 덮개 → 시스템 대체는 이번 근무만
+
+    /// 실측 (2026-10-28): 덮개 근무 중 brew 업그레이드로 앱이 재시작돼 시스템 근무로 대체됐고,
+    /// 근무를 마친 뒤에도 메뉴에 caffeinate -i 가 체크돼 있었다
+    @Test func resumeLidFallbackKeepsLidPreference() {
+        var engine = DutyEngine(mode: .lid, lidSleepDisabled: false, now: t0)
+        _ = engine.resume(.timed(until: nil), now: t0)
+        #expect(engine.effectiveMode == .system && engine.mode == .lid, "메뉴 체크는 덮개, 이번 근무는 시스템")
+        _ = engine.stop(now: at(60))
+        #expect(engine.mode == .lid && engine.effectiveMode == .lid, "근무가 끝나면 고른 덮개 근무로 돌아온다")
+        #expect(engine.startTimed(seconds: nil, label: "무기한", now: at(70)).first == .enableLid, "다음 근무는 다시 덮개 근무")
+    }
+
+    @Test func lidDeniedKeepsLidPreference() {
+        var engine = DutyEngine(mode: .lid, now: t0)
+        _ = engine.startTimed(seconds: 600, label: "10분", now: t0)
+        _ = engine.lidEnableResult(false, now: t0)
+        #expect(engine.effectiveMode == .system && engine.mode == .lid)
+        _ = engine.tick(idle(601))
+        #expect(engine.order == .off)
+        #expect(engine.mode == .lid && engine.effectiveMode == .lid, "암호 창을 취소해도 다음 근무는 다시 덮개 근무")
+    }
+
+    @Test func lidDeniedAfterStandDownLeavesNextShiftOnLid() {
+        var engine = DutyEngine(mode: .lid, now: t0)
+        _ = engine.startTimed(seconds: nil, label: "무기한", now: t0)
+        _ = engine.stop(now: at(5)) // 암호 창이 떠 있는 사이 근무 종료
+        _ = engine.lidEnableResult(false, now: at(10))
+        #expect(engine.effectiveMode == .lid)
+    }
+
+    @Test func heatResumeKeepsLidPreference() {
+        var engine = DutyEngine(mode: .lid, lidSleepDisabled: true, now: t0)
+        _ = engine.startTimed(seconds: nil, label: "무기한", now: t0)
+        var alert = idle(10); alert.heat = .alert
+        _ = engine.tick(alert)
+        _ = engine.tick(idle(20))
+        _ = engine.tick(idle(141))
+        #expect(engine.effectiveMode == .system && engine.mode == .lid)
+        _ = engine.stop(now: at(200))
+        #expect(engine.mode == .lid && engine.effectiveMode == .lid, "과열 대체도 이번 근무만")
+    }
+
+    @Test func lidRestoredExternallyFallsBackForThisShiftOnly() {
+        var engine = DutyEngine(mode: .lid, lidSleepDisabled: true, now: t0)
+        _ = engine.startTimed(seconds: nil, label: "무기한", now: t0)
+        _ = engine.lidRestoreResult(true) // 당직 감시병이 먼저 원복
+        let fallback = engine.lidSleepRestoredExternally(now: at(5))
+        #expect(fallback.first == .acquire(.system) && engine.effectiveMode == .system && engine.mode == .lid)
+        #expect(engine.lidSleepRestoredExternally(now: at(10)).isEmpty, "이미 시스템 근무면 아무 일 없음")
+        _ = engine.stop(now: at(20))
+        #expect(engine.effectiveMode == .lid)
+    }
+
+    @Test func normalLidShiftKeepsPreference() {
+        var engine = DutyEngine(mode: .lid, now: t0)
+        _ = engine.startTimed(seconds: 600, label: "10분", now: t0)
+        _ = engine.lidEnableResult(true, now: t0)
+        #expect(engine.effectiveMode == .lid)
+        _ = engine.tick(idle(601))
+        _ = engine.lidRestoreResult(true)
+        #expect(engine.order == .off && engine.mode == .lid && engine.effectiveMode == .lid)
+    }
+
+    @Test func userSwitchToSystemChangesPreference() {
+        var engine = DutyEngine(mode: .lid, lidSleepDisabled: false, now: t0)
+        _ = engine.resume(.timed(until: nil), now: t0) // 대체 근무 중
+        #expect(engine.setMode(.system, now: at(10)).isEmpty, "이미 시스템 근무로 서 있으니 다시 걸지 않는다")
+        _ = engine.stop(now: at(20))
+        #expect(engine.mode == .system && engine.effectiveMode == .system, "직접 고른 방식은 남는다")
+    }
+
+    @Test func choosingLidAgainEndsFallback() {
+        var engine = DutyEngine(mode: .lid, lidSleepDisabled: false, now: t0)
+        _ = engine.resume(.timed(until: nil), now: t0)
+        #expect(engine.setMode(.lid, now: at(10)).first == .enableLid, "메뉴에서 덮개를 다시 고르면 이번 근무도 덮개로")
+        #expect(engine.effectiveMode == .lid)
     }
 
     @Test func resumeExpiredStaysOff() {
