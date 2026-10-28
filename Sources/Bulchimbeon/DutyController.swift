@@ -42,7 +42,10 @@ final class DutyController: ObservableObject {
     /// 마지막으로 고른 근무 시간 (메뉴 체크 표시용)
     private(set) var pickedDuration: TimeInterval?
     var isOnDuty: Bool { engine.isOnDuty }
+    /// 사용자가 고른 근무 방식 (메뉴 체크 표시)
     var mode: DutyMode { engine.mode }
+    /// 이번 근무가 고른 방식 대신 시스템 근무로 서 있는가 (메뉴 안내용)
+    var modeFallback: Bool { engine.effectiveMode != engine.mode }
     var resting: Bool { engine.resting }
     var heat: HeatLevel { engine.heat }
     var watchDetail: String? { engine.watchDetail }
@@ -178,7 +181,7 @@ final class DutyController: ObservableObject {
     var logFileURL: URL? { DutyLog.defaultFileURL }
 
     /// 근무 중이 아닌데 덮개 플래그가 켜져 있으면 복구 버튼을 보여준다.
-    var showsLidRecovery: Bool { lidSleepDisabled && !(isOnDuty && mode == .lid) }
+    var showsLidRecovery: Bool { lidSleepDisabled && !(isOnDuty && engine.effectiveMode == .lid) }
 
     var launchAtLogin: Bool { SMAppService.mainApp.status == .enabled }
 
@@ -372,7 +375,7 @@ final class DutyController: ObservableObject {
 
     // MARK: - 근무 사이클 (5초마다)
 
-    private var claimsLid: Bool { engine.lidSleepDisabled || (engine.isOnDuty && engine.mode == .lid) }
+    private var claimsLid: Bool { engine.lidSleepDisabled || (engine.isOnDuty && engine.effectiveMode == .lid) }
 
     private func tick() async {
         guard !ticking, demoPose == nil else { return }
@@ -392,7 +395,7 @@ final class DutyController: ObservableObject {
         // 덮개 잠자기가 이미 복구됐으면 덮개 근무를 주장하지 않는다 (확인 중 시작된 켜기·복구가 있으면 건드리지 않음)
         if checkLid && lidStarted == lidCommandsStarted && claimsLid && lidNow == false {
             if engine.lidSleepDisabled { await run(engine.lidRestoreResult(true)) }
-            if engine.isOnDuty && engine.mode == .lid { await run(engine.setMode(.system, now: Date())) }
+            await run(engine.lidSleepRestoredExternally(now: Date()))
         }
         otherHolders = PowerHolders.summarize(assertions, ownPID: getpid())
         now = Date()

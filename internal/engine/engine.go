@@ -146,13 +146,16 @@ type speech struct {
 // fake clock can drive it scenario by scenario; every hand-over bug seen in real use was
 // a state transition over time (issue #2).
 type Engine struct {
-	// Settings. The shell may change them between ticks.
+	// Settings. The shell may change them between ticks. Mode is the user's pick
+	// (stored, checked in the menu); fallbacks never change it.
 	Lang              Lang
 	Mode              DutyMode
 	BatteryFloor      int
 	CountIdleSessions bool
 	GraceMinutes      int
 
+	// shiftMode replaces lid mode for this watch only (restart, denied prompt, heat); "" when off.
+	shiftMode        DutyMode
 	order            DutyOrder
 	onDuty           bool
 	dutyStartedAt    *time.Time
@@ -197,6 +200,14 @@ func (e *Engine) WatchDetail() *string      { return e.watchDetail }
 func (e *Engine) LastAgentSummary() string  { return e.lastAgentSummary }
 func (e *Engine) LidSleepDisabled() bool    { return e.lidSleepDisabled }
 func (e *Engine) LidEngagedByUs() bool      { return e.lidEngagedByUs }
+
+// EffectiveMode is the mode this watch actually keeps.
+func (e *Engine) EffectiveMode() DutyMode {
+	if e.shiftMode != "" {
+		return e.shiftMode
+	}
+	return e.Mode
+}
 
 // Pose is the sprite pose at a moment.
 func (e *Engine) Pose(now time.Time) Pose {
@@ -249,10 +260,11 @@ func (e *Engine) StartTimed(seconds *time.Duration, label string, now time.Time)
 		order.Until = &until
 	}
 	e.order = order
+	e.shiftMode = ""
 	effects := e.engage(now)
 	effects = append(effects, notify(ReportForDuty(e.Lang)))
 	e.say(SpeechReporting(e.Lang), now, 4*time.Second)
-	title := e.Mode.Title(e.Lang)
+	title := e.EffectiveMode().Title(e.Lang)
 	effects = append(effects, logEffect(e.t("근무 투입 — "+label+", "+title, "On duty — "+label+", "+title, "开始值班 — "+label+"，"+title), LogOnDuty))
 	return effects
 }
@@ -262,7 +274,13 @@ func (e *Engine) StartAgentWatch(now time.Time) []Effect {
 	e.watchStartedAt = now
 	e.order = DutyOrder{Kind: OrderAgentWatch}
 	e.quote = QuoteStandby
-	return []Effect{logEffect(e.t("에이전트 근무 대기 시작", "Started waiting for agents", "开始等待代理"), LogOther)}
+	before := e.EffectiveMode()
+	e.shiftMode = ""
+	var effects []Effect
+	if e.onDuty && e.EffectiveMode() != before {
+		effects = e.engage(now)
+	}
+	return append(effects, logEffect(e.t("에이전트 근무 대기 시작", "Started waiting for agents", "开始等待代理"), LogOther))
 }
 
 // Stop ends any watch.
@@ -270,16 +288,15 @@ func (e *Engine) Stop(now time.Time) []Effect {
 	return e.standDown(nil, e.t("근무 종료 (수동)", "Off duty (manual)", "结束值班（手动）"))
 }
 
-// SetMode changes the watch mode, re-acquiring if on duty.
+// SetMode changes the watch mode the user picked, ending any fallback and re-acquiring if on duty.
 func (e *Engine) SetMode(newMode DutyMode, now time.Time) []Effect {
-	if newMode == e.Mode {
-		return nil
-	}
-	leavingLid := e.Mode == ModeLid
+	before := e.EffectiveMode()
 	e.Mode = newMode
-	if !e.onDuty {
+	e.shiftMode = ""
+	if newMode == before || !e.onDuty {
 		return nil
 	}
+	leavingLid := before == ModeLid
 	var effects []Effect
 	if leavingLid && e.lidEngagedByUs {
 		effects = append(effects, Effect{Type: EffectRestoreLid})
@@ -301,8 +318,8 @@ func (e *Engine) Resume(action ResumeAction, now time.Time) []Effect {
 	}
 	var effects []Effect
 	// An unannounced admin prompt right after login looks like phishing → lid becomes system.
-	if e.Mode == ModeLid && !e.lidSleepDisabled {
-		e.Mode = ModeSystem
+	if e.EffectiveMode() == ModeLid && !e.lidSleepDisabled {
+		e.shiftMode = ModeSystem
 		effects = append(effects, notify(LidResumeFallback(e.Lang)),
 			logEffect(e.t("덮개 근무 → 시스템 근무로 복귀 (관리자 재승인 필요)",
 				"Lid-closed watch → resumed as system watch (admin approval needed)", "合盖值班 → 恢复系统值班（需要管理员授权）"), LogOther))
@@ -335,7 +352,9 @@ func (e *Engine) LidEnableResult(ok bool, now time.Time) []Effect {
 		e.lidSleepDisabled = true
 		return []Effect{{Type: EffectAcquire, Mode: ModeLid}}
 	}
-	e.Mode = ModeSystem
+	if e.order.Kind != OrderOff { // a watch ended while the prompt was open: the next one asks again
+		e.shiftMode = ModeSystem
+	}
 	return []Effect{notify(LidFallback(e.Lang)),
 		logEffect(e.t("덮개 근무 승인 거부 — 시스템 근무로 대체", "Lid-closed watch denied — switched to system watch", "合盖值班未获授权 — 已切换为系统值班"), LogOther),
 		{Type: EffectAcquire, Mode: ModeSystem}}
@@ -349,6 +368,18 @@ func (e *Engine) LidRestoreResult(ok bool) []Effect {
 	e.lidEngagedByUs = false
 	e.lidSleepDisabled = false
 	return []Effect{logEffect(e.t("덮개 잠자기 복구 완료", "Lid sleep restored", "已恢复合盖休眠"), LogOther)}
+}
+
+// LidSleepRestoredExternally reports that lid sleep came back on during a lid-closed watch
+// (the macOS root watchdog, for one): this watch only continues as a system watch.
+func (e *Engine) LidSleepRestoredExternally(now time.Time) []Effect {
+	if !e.onDuty || e.EffectiveMode() != ModeLid {
+		return nil
+	}
+	e.shiftMode = ModeSystem
+	effects := e.engage(now)
+	title := ModeSystem.Title(e.Lang)
+	return append(effects, logEffect(e.t("근무 방식 변경 — "+title, "Watch mode changed — "+title, "值班模式已更改 — "+title), LogOther))
 }
 
 // MARK: tick (every 5 seconds)
@@ -388,9 +419,9 @@ func (e *Engine) Tick(o Observation) []Effect {
 		e.say(SpeechRest(e.Lang), now, 8*time.Second)
 	case HeatActionResume:
 		e.resting = false
-		lidDowngraded := e.Mode == ModeLid
+		lidDowngraded := e.EffectiveMode() == ModeLid
 		if lidDowngraded {
-			e.Mode = ModeSystem // no lid-closed watch right after overheating
+			e.shiftMode = ModeSystem // no lid-closed watch for the rest of this watch after overheating
 		}
 		effects = append(effects, notify(HeatResume(lidDowngraded, e.Lang)),
 			logEffect(e.t("전투휴식 종료 — 근무 복귀", "Combat rest over — back on watch", "降温休息结束 — 恢复值班"), LogOnDuty))
@@ -488,11 +519,11 @@ func (e *Engine) engage(now time.Time) []Effect {
 	}
 	e.onDuty = true
 	e.quote = QuoteOnDuty
-	if e.Mode == ModeLid && !e.lidSleepDisabled { // LidEnableResult acquires
+	if e.EffectiveMode() == ModeLid && !e.lidSleepDisabled { // LidEnableResult acquires
 		e.awaitingLid = true
 		return []Effect{{Type: EffectEnableLid}}
 	}
-	return []Effect{{Type: EffectAcquire, Mode: e.Mode}}
+	return []Effect{{Type: EffectAcquire, Mode: e.EffectiveMode()}}
 }
 
 func (e *Engine) disengage() []Effect {
@@ -509,6 +540,7 @@ func (e *Engine) standDown(n *Notice, log string) []Effect {
 	e.resting = false
 	e.order = DutyOrder{}
 	e.quote = QuoteOff
+	e.shiftMode = ""
 	if n != nil {
 		effects = append(effects, notify(*n))
 	}

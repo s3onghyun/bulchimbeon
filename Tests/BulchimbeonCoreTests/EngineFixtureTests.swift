@@ -228,7 +228,7 @@ import Testing
                                 now: Date(timeIntervalSince1970: t0))
         var expected: [String: JSONValue] = [
             "isOnDuty": .bool(false), "order": .string("off"), "orderUntil": .null, "resting": .bool(false),
-            "mode": .string(mode.rawValue), "heat": .string("normal"), "quote": .string("off"), "dutyStartedAt": .null,
+            "mode": .string(mode.rawValue), "effectiveMode": .string(mode.rawValue), "heat": .string("normal"), "quote": .string("off"), "dutyStartedAt": .null,
             "watchDetail": .null, "lidEngagedByUs": .bool(config["lidEngagedByUs"].bool ?? false),
             "lidSleepDisabled": .bool(config["lidSleepDisabled"].bool ?? false),
         ]
@@ -255,6 +255,7 @@ import Testing
                 effects = engine.resume(action, now: now)
             case "lidEnableResult": effects = engine.lidEnableResult(step["ok"].bool ?? false, now: now)
             case "lidRestoreResult": effects = engine.lidRestoreResult(step["ok"].bool ?? false)
+            case "lidSleepRestoredExternally": effects = engine.lidSleepRestoredExternally(now: now)
             case "tick":
                 let battery = step["battery"].isNull ? nil
                     : BatteryStatus(percent: step["battery"]["percent"].int ?? 0, onBattery: step["battery"]["onBattery"].bool ?? false)
@@ -274,6 +275,7 @@ import Testing
             for (key, value) in step["state"].object { expected[key] = pick(value) }
             var state: [String: JSONValue] = [
                 "isOnDuty": .bool(engine.isOnDuty), "resting": .bool(engine.resting), "mode": .string(engine.mode.rawValue),
+                "effectiveMode": .string(engine.effectiveMode.rawValue),
                 "heat": .string(Self.heatName(engine.heat)), "quote": .string(Self.quoteName(engine.quote)),
                 "dutyStartedAt": relative(engine.dutyStartedAt), "watchDetail": engine.watchDetail.map(JSONValue.string) ?? .null,
                 "lidEngagedByUs": .bool(engine.lidEngagedByUs), "lidSleepDisabled": .bool(engine.lidSleepDisabled),

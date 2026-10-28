@@ -82,7 +82,7 @@ Bulchimbeon stays awake **only while an agent is working** and hands the Mac bac
 | ⚠️ Abandoned-post check | If the sleep block disappears for any reason, it is re-engaged immediately |
 | 🕵️ Watchdog | In lid-closed mode, restores normal sleep within 5 s when the app quits or the watch ends (including a timed watch running out) — no second password prompt needed; re-enabling replaces rather than stacks it |
 | 📋 Night-watch handover | Come back after 10+ minutes away and get a report of what happened while you were gone |
-| 🔁 Survives restarts | Remaining watch time carries over app restarts, updates and reboots (for security, a lid-closed watch comes back as a system watch; turn lid mode back on from the menu to re-approve it) |
+| 🔁 Survives restarts | Remaining watch time carries over app restarts, updates and reboots (for security, a lid-closed watch comes back as a system watch for that watch only; lid mode stays selected in the menu and asks for approval again on the next watch) |
 | 🖥️ Who else is holding the Mac awake | The menu shows other apps blocking sleep, e.g. "Vivaldi (video)" |
 | 🌐 Korean / English / Simplified Chinese | Follows the system language by default; pick one from **언어 / Language / 语言** in the menu |
 | 📒 Duty log | `~/Library/Application Support/Bulchimbeon/duty-log.txt` |
