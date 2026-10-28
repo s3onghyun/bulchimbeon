@@ -3,7 +3,7 @@
 # Updated by scripts/bump-aur.sh after it verifies the release's checksums and build provenance;
 # see packaging/aur/README.md.
 pkgname=bulchimbeon-bin
-pkgver=0.9.0
+pkgver=0.10.0
 pkgrel=1
 pkgdesc='Keep the machine awake while AI coding agents work'
 arch=('x86_64' 'aarch64')
@@ -19,8 +19,8 @@ backup=('etc/xdg/autostart/bulchimbeon-tray.desktop')
 options=('!strip' '!debug')
 source_x86_64=("$url/releases/download/v$pkgver/bulchimbeon_${pkgver}_linux_amd64.tar.gz")
 source_aarch64=("$url/releases/download/v$pkgver/bulchimbeon_${pkgver}_linux_arm64.tar.gz")
-sha256sums_x86_64=('1113469e1da21eb58944d9a5384a84fec84602d31fef365613077e229f7fae0d')
-sha256sums_aarch64=('348840890b84c4be92c5ddd9326c99ea503054bdad5b5c07819c9356fe7f69fe')
+sha256sums_x86_64=('3b6e95968989983c0a02f560aa8281dd0704358265179c6b264f5a6a3190448c')
+sha256sums_aarch64=('0c96ed2710237ff589b638f571c3639d249907f162067ca9288f0fc933db51d9')
 
 package() {
   local goarch=amd64
