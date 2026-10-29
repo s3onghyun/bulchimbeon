@@ -173,6 +173,8 @@ git tag vX.Y.Z && git push origin vX.Y.Z   # CI builds universal, signs, attests
 The release workflow does not touch the Homebrew tap or the AUR. After tagging, both steps are required:
 
 - [ ] `./scripts/bump-cask.sh X.Y.Z` (tap cask and Linux formula; otherwise `brew upgrade` stays on the old version)
+- [ ] Keep `uninstall quit: "io.github.s3onghyun.bulchimbeon"` in the tap's `Casks/bulchimbeon.rb`: the in-app Homebrew
+      update relies on `brew upgrade --cask` quitting the running app so the reopen starts the new version
 - [ ] `./scripts/bump-aur.sh X.Y.Z`, then land `packaging/aur/bulchimbeon-bin/` in a small PR
 - [ ] Critical fix? Put `<!-- bulchimbeon: critical -->` on its own line in `docs/release-notes/vX.Y.Z.md` (the release
       body), so the app's update menu item says "(recommended: important fix)". To keep urging users of a known-bad
@@ -344,6 +346,8 @@ git tag vX.Y.Z && git push origin vX.Y.Z   # CI 가 universal 빌드·서명·�
 릴리스 워크플로는 Homebrew tap 과 AUR 을 건드리지 않습니다. 태그를 올린 뒤 두 단계는 꼭 해야 합니다:
 
 - [ ] `./scripts/bump-cask.sh X.Y.Z` (tap 의 cask 와 Linux formula. 빠뜨리면 `brew upgrade` 가 옛 버전에 머뭅니다)
+- [ ] tap 의 `Casks/bulchimbeon.rb` 에 `uninstall quit: "io.github.s3onghyun.bulchimbeon"` 을 그대로 둡니다: 앱 안의 Homebrew
+      업데이트는 `brew upgrade --cask` 가 돌고 있는 앱을 끝내야 다시 열 때 새 버전이 뜹니다
 - [ ] `./scripts/bump-aur.sh X.Y.Z` 후 `packaging/aur/bulchimbeon-bin/` 을 작은 PR 로 반영
 - [ ] 중요 수정이면 `docs/release-notes/vX.Y.Z.md` (릴리스 본문) 에 `<!-- bulchimbeon: critical -->` 을 한 줄로 넣어, 앱의 업데이트
       메뉴에 "(권장: 중요 수정)" 이 붙게 합니다. 뒤의 일반 릴리스에서도 문제 버전 사용자에게 계속 권하려면

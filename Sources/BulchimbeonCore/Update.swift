@@ -247,9 +247,19 @@ public enum UpdateInstaller {
     }
 
     /// 터미널에서 열 `.command` 스크립트. 바깥 문자열은 들어가지 않는다: brew 경로는 알려진 두 곳 중 하나만 받고,
-    /// 문구는 앱 상수를 작은따옴표로 감싼다. 끝나면 앱을 다시 열고, 스크립트 파일은 스스로 지운다.
-    public static func homebrewScript(brew: String, lang: L10n.Language = L10n.language) -> String? {
+    /// PID 와 버전은 앱이 아는 값, 문구는 앱 상수를 작은따옴표로 감싼다. 스크립트 파일은 스스로 지운다.
+    ///
+    /// 앱은 스스로 끝내지 않는다. tap 의 cask (`Casks/bulchimbeon.rb`) 가 `uninstall quit:` 을 선언하므로
+    /// `brew upgrade --cask` 가 돌고 있는 앱을 끝낸 뒤 바꾸고, 그래서 끝에 `open -b` 가 새 버전을 연다.
+    /// 그래도 혹시 남아 있으면 (`pid` 가 15초 안에 끝나지 않으면) 옛 프로세스를 앞으로 가져오는 대신 직접 다시 열어 달라고 한다.
+    /// brew 가 남긴 버전이 지금 버전 그대로면 tap 이 아직 갱신 전이다.
+    public static func homebrewScript(brew: String, pid: Int32, running: AppVersion, lang: L10n.Language = L10n.language) -> String? {
         guard homebrewPrefixes.contains(where: { brew == "\($0)/bin/brew" }) else { return nil }
+        return homebrewScript(brew: brew, open: "/usr/bin/open", pid: pid, running: running, waitSeconds: 15, lang: lang)
+    }
+
+    static func homebrewScript(brew: String, open: String, pid: Int32, running: AppVersion, waitSeconds: Int,
+                               lang: L10n.Language) -> String {
         let t = { (ko: String, en: String, zh: String) in "echo " + shellQuote(L10n.t(ko, en, zh, lang)) }
         let b = shellQuote(brew)
         return """
@@ -263,15 +273,24 @@ public enum UpdateInstaller {
         \(b) update && \(b) upgrade --cask \(caskName)
         code=$?
         echo
-        if [ "$code" -eq 0 ]; then
-        \(t("완료. 불침번을 다시 엽니다. 이 창은 닫아도 됩니다.", "Done. Reopening Bulchimbeon; you can close this window.", "完成。正在重新打开 Bulchimbeon，可以关闭此窗口。"))
-        \(t("Homebrew 가 이미 최신이라고 하면 tap 이 아직 갱신 전입니다. 잠시 뒤 다시 해 주세요.", "If Homebrew says it is already up to date, the tap has not caught up yet; try again later.", "如果 Homebrew 提示已是最新，说明 tap 尚未更新，请稍后再试。"))
-        \(t("macOS 가 새 버전을 막으면: 시스템 설정 → 개인정보 보호 및 보안 → 그래도 열기", "If macOS blocks the new version: System Settings → Privacy & Security → Open Anyway", "如果 macOS 阻止新版本：系统设置 → 隐私与安全性 → 仍要打开"))
-        /usr/bin/open -b \(bundleIdentifier)
-        else
+        if [ "$code" -ne 0 ]; then
         \(t("업데이트 실패. 위 출력을 확인하거나 릴리스 페이지에서 직접 받으세요:", "Update failed. Check the output above, or download it from the release page:", "更新失败。请查看上面的输出，或从发行页面下载："))
         echo \(shellQuote(ReleaseURLs.latestPage.absoluteString))
+        exit "$code"
         fi
+        if [ "$(\(b) list --cask --versions \(caskName))" = \(shellQuote("\(caskName) \(running)")) ]; then
+        \(t("Homebrew 에는 아직 지금 버전이 최신입니다 (tap 이 갱신 전). 잠시 뒤 다시 해 주세요.", "Homebrew still has this version as the newest (the tap has not caught up yet); try again later.", "Homebrew 中当前版本仍是最新（tap 尚未更新），请稍后再试。"))
+        exit 0
+        fi
+        waited=0
+        while kill -0 \(pid) 2>/dev/null && [ "$waited" -lt \(waitSeconds) ]; do sleep 1; waited=$((waited + 1)); done
+        if kill -0 \(pid) 2>/dev/null; then
+        \(t("새 버전을 설치했지만 예전 불침번이 아직 실행 중입니다. 불침번을 종료한 뒤 다시 열어 주세요.", "The new version is installed, but the old Bulchimbeon is still running. Quit Bulchimbeon and open it again.", "新版本已安装，但旧的 Bulchimbeon 仍在运行。请退出 Bulchimbeon 后重新打开。"))
+        exit 0
+        fi
+        \(t("완료. 불침번을 다시 엽니다. 이 창은 닫아도 됩니다.", "Done. Reopening Bulchimbeon; you can close this window.", "完成。正在重新打开 Bulchimbeon，可以关闭此窗口。"))
+        \(t("macOS 가 새 버전을 막으면: 시스템 설정 → 개인정보 보호 및 보안 → 그래도 열기", "If macOS blocks the new version: System Settings → Privacy & Security → Open Anyway", "如果 macOS 阻止新版本：系统设置 → 隐私与安全性 → 仍要打开"))
+        \(shellQuote(open)) -b \(bundleIdentifier)
 
         """
     }

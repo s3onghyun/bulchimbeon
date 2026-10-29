@@ -113,7 +113,9 @@ final class UpdateController: ObservableObject {
 
     /// Homebrew 설치: 앱이 스스로 바꾸지 않고, 상수로 된 `.command` 스크립트를 터미널로 연다 (숨은 셸 없음).
     private func openHomebrewUpgrade(brew: String) {
-        guard let script = UpdateInstaller.homebrewScript(brew: brew) else { return fail(.terminal) }
+        guard let current,
+              let script = UpdateInstaller.homebrewScript(brew: brew, pid: ProcessInfo.processInfo.processIdentifier, running: current)
+        else { return fail(.terminal) }
         let fm = FileManager.default
         let dir = fm.temporaryDirectory.appendingPathComponent("Bulchimbeon-update-\(UUID().uuidString)", isDirectory: true)
         let file = dir.appendingPathComponent("Bulchimbeon-update.command")

@@ -115,10 +115,10 @@ import Testing
 
     @Test func homebrewScriptIsConstantAndVisible() throws {
         for lang in L10n.Language.allCases {
-            let script = try #require(UpdateInstaller.homebrewScript(brew: "/opt/homebrew/bin/brew", lang: lang))
+            let script = try #require(UpdateInstaller.homebrewScript(brew: "/opt/homebrew/bin/brew", pid: 4242, running: v0102, lang: lang))
             #expect(script.hasPrefix("#!/bin/sh\n"))
             #expect(script.contains("'/opt/homebrew/bin/brew' update && '/opt/homebrew/bin/brew' upgrade --cask bulchimbeon"))
-            #expect(script.contains("/usr/bin/open -b io.github.s3onghyun.bulchimbeon"))
+            #expect(script.contains("'/usr/bin/open' -b io.github.s3onghyun.bulchimbeon"))
             #expect(script.contains("rm -f -- \"$0\""))
             // 문구는 작은따옴표로 감싸 셸이 해석하지 않는다
             for line in script.split(separator: "\n") where line.hasPrefix("echo ") {
@@ -126,13 +126,13 @@ import Testing
             }
         }
         // brew 경로는 알려진 접두어만
-        #expect(UpdateInstaller.homebrewScript(brew: "/tmp/brew", lang: .en) == nil)
-        #expect(UpdateInstaller.homebrewScript(brew: "/opt/homebrew/bin/brew; rm -rf ~", lang: .en) == nil)
+        #expect(UpdateInstaller.homebrewScript(brew: "/tmp/brew", pid: 4242, running: v0102, lang: .en) == nil)
+        #expect(UpdateInstaller.homebrewScript(brew: "/opt/homebrew/bin/brew; rm -rf ~", pid: 4242, running: v0102, lang: .en) == nil)
     }
 
     @Test func homebrewScriptIsValidShell() throws {
         for lang in L10n.Language.allCases {
-            let script = try #require(UpdateInstaller.homebrewScript(brew: "/usr/local/bin/brew", lang: lang))
+            let script = try #require(UpdateInstaller.homebrewScript(brew: "/usr/local/bin/brew", pid: 4242, running: v0102, lang: lang))
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
             process.arguments = ["-n", "-c", script] // 문법만 확인하고 실행하지 않는다
@@ -140,6 +140,106 @@ import Testing
             process.waitUntilExit()
             #expect(process.terminationStatus == 0, "\(lang)")
         }
+    }
+
+    /// 스크립트를 가짜 brew·open 으로 실제로 돌려 본다. brew 는 `upgrade` 결과와 `list --cask --versions` 출력을 흉내 낸다.
+    private struct ScriptRun {
+        var output: String
+        var status: Int32
+        var opened: Bool
+    }
+
+    private func runHomebrewScript(upgradeStatus: Int32, installed: String, pid: Int32, waitSeconds: Int = 1) throws -> ScriptRun {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("bulchimbeon-script-\(UUID().uuidString)", isDirectory: true)
+        let tools = root.appendingPathComponent("tools", isDirectory: true)
+        let scriptDir = root.appendingPathComponent("script", isDirectory: true)
+        try fm.createDirectory(at: tools, withIntermediateDirectories: true)
+        try fm.createDirectory(at: scriptDir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: root) }
+        let marker = root.appendingPathComponent("opened")
+        let brew = tools.appendingPathComponent("brew")
+        let open = tools.appendingPathComponent("open")
+        let brewBody = """
+        #!/bin/sh
+        case "$1" in
+        update) exit 0 ;;
+        upgrade) exit \(upgradeStatus) ;;
+        list) echo 'bulchimbeon \(installed)' ;;
+        esac
+
+        """
+        try Data(brewBody.utf8).write(to: brew)
+        try Data("#!/bin/sh\necho \"$@\" > '\(marker.path)'\n".utf8).write(to: open)
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: brew.path)
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: open.path)
+
+        let script = UpdateInstaller.homebrewScript(brew: brew.path, open: open.path, pid: pid, running: v0102,
+                                                    waitSeconds: waitSeconds, lang: .en)
+        let file = scriptDir.appendingPathComponent("Bulchimbeon-update.command")
+        try Data(script.utf8).write(to: file)
+
+        let process = Process()
+        let pipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = [file.path]
+        process.standardOutput = pipe
+        try process.run()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        #expect(!fm.fileExists(atPath: file.path)) // 스스로 지운다
+        let opened = (try? String(contentsOf: marker, encoding: .utf8)) ?? ""
+        if !opened.isEmpty { #expect(opened == "-b io.github.s3onghyun.bulchimbeon\n") }
+        return ScriptRun(output: String(decoding: data, as: UTF8.self), status: process.terminationStatus, opened: !opened.isEmpty)
+    }
+
+    private func exitedPID() throws -> Int32 {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", "exit 0"]
+        try process.run()
+        process.waitUntilExit()
+        return process.processIdentifier
+    }
+
+    @Test func homebrewScriptReopensOnceTheOldAppHasQuit() throws {
+        let run = try runHomebrewScript(upgradeStatus: 0, installed: "0.10.3", pid: try exitedPID())
+        #expect(run.status == 0)
+        #expect(run.opened)
+        #expect(run.output.contains("Done. Reopening Bulchimbeon"))
+        #expect(!run.output.contains("still running"))
+        #expect(!run.output.contains("has not caught up"))
+    }
+
+    @Test func homebrewScriptAsksToReopenWhenTheOldAppIsStillRunning() throws {
+        let alive = Process()
+        alive.executableURL = URL(fileURLWithPath: "/bin/sh")
+        alive.arguments = ["-c", "sleep 30"]
+        try alive.run()
+        defer { alive.terminate(); alive.waitUntilExit() }
+        let run = try runHomebrewScript(upgradeStatus: 0, installed: "0.10.3", pid: alive.processIdentifier)
+        #expect(run.status == 0)
+        #expect(!run.opened) // 옛 프로세스를 앞으로 가져오지 않는다
+        #expect(run.output.contains("the old Bulchimbeon is still running. Quit Bulchimbeon and open it again."))
+        #expect(!run.output.contains("has not caught up"))
+        #expect(!run.output.contains("Reopening"))
+    }
+
+    @Test func homebrewScriptBlamesTheTapOnlyWhenBrewKeptThisVersion() throws {
+        let run = try runHomebrewScript(upgradeStatus: 0, installed: "0.10.2", pid: try exitedPID())
+        #expect(run.status == 0)
+        #expect(!run.opened)
+        #expect(run.output.contains("the tap has not caught up yet"))
+        #expect(!run.output.contains("Reopening"))
+    }
+
+    @Test func homebrewScriptReportsAFailedUpgrade() throws {
+        let run = try runHomebrewScript(upgradeStatus: 1, installed: "0.10.2", pid: try exitedPID())
+        #expect(run.status == 1)
+        #expect(!run.opened)
+        #expect(run.output.contains("Update failed."))
+        #expect(run.output.contains("https://github.com/s3onghyun/bulchimbeon/releases/latest"))
+        #expect(!run.output.contains("has not caught up"))
     }
 
     @Test func shellQuoting() {
