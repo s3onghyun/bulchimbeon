@@ -23,11 +23,15 @@
 | `patrolEnabled` | 불리언 | `true` · `false` | `true` | 🚶 순찰 모드 |
 | `patrolScale` | 정수 | `2` · `3` | `2` | 이등병 크기 |
 | `uniformTheme` | 문자열 | `default` · `navy` · `arctic` · `desert` (테마 id) | `default` | 🧥 군복 |
+| `checkForUpdates` | 불리언 | `true` · `false` | `true` | 새 버전 확인 (하루 한 번) |
 
 ```bash
 defaults write io.github.s3onghyun.bulchimbeon customAgents -array goose amp
 defaults write io.github.s3onghyun.bulchimbeon agentGraceMinutes -int 10
+defaults write io.github.s3onghyun.bulchimbeon checkForUpdates -bool false   # 업데이트 확인 끄기
 ```
+
+`checkForUpdates` 가 켜져 있으면 하루 한 번까지 GitHub 에 최신 릴리스만 묻는다 (README "업데이트"). 끄면 묻지 않고, 이미 알던 새 버전도 메뉴에서 감춘다.
 
 앱 언어는 macOS 표준인 앱 도메인 `AppleLanguages` 를 쓴다 (메뉴 **언어 / Language**).
 
@@ -42,7 +46,7 @@ defaults write io.github.s3onghyun.bulchimbeon agentGraceMinutes -int 10
 |------|------|
 | 위치 | `$XDG_CONFIG_HOME/bulchimbeon/settings.json` (기본 `~/.config/bulchimbeon/settings.json`) |
 | 바꾸기 | `bulchimbeon config set <키> <값>...` · `config get <키>` · `config unset <키>` · `config list` |
-| 적용되는 키 | `batteryFloor`, `agentGraceMinutes`, `agentWatchCountsIdle`, `customAgents`. 데몬이 5초마다 다시 읽는다 |
+| 적용되는 키 | `batteryFloor`, `agentGraceMinutes`, `agentWatchCountsIdle`, `customAgents`, `checkForUpdates`. 데몬이 5초마다 다시 읽는다 |
 | `uniformTheme` | 트레이 아이콘(`bulchimbeon tray`)의 군복. 트레이의 🧥 군복 메뉴도 이 키를 쓰고, 트레이가 1초마다 다시 읽는다 |
 | `dutyMode` | 저장은 되지만 리눅스 v0.1 은 항상 `system` 으로 근무한다 |
 | `patrolEnabled`, `patrolScale` | macOS 전용. `config set` 이 거부한다 |
@@ -66,6 +70,7 @@ bulchimbeon config set agentGraceMinutes 10
 | `lidEngagedByUs` | 덮개 잠자기를 이 앱이 껐는지 (원복용) |
 | `hasSeenWelcome` | 메뉴의 첫 실행 안내를 닫았는지 |
 | `simulateHeat` | 시험용 발열 흉내 (`advisory` · `alert` · `normal`) |
+| `updateLastCheck`, `updateLatestVersion`, `updateCriticalBelow` | 마지막 업데이트 확인 시각과 그때 알게 된 최신 버전·중요 수정 범위 (하루 한 번 묻기, 재시작 후 표시) |
 
 ## 2. 실행 인자
 
@@ -116,7 +121,8 @@ bulchimbeon config set agentGraceMinutes 10
 - 감지 기준의 세부 값 (CPU 문턱, 평균 구간, 확인 주기). 실측으로 더 나아지면 바꾼다
 - 메뉴 구성과 문구, 이등병 대사·스프라이트
 - 번들 ID 외의 내부 구조, Core 모듈의 Swift API, Go 패키지(`internal/`)의 API
-- 리눅스 데몬의 상태 파일 `$XDG_STATE_HOME/bulchimbeon/state.json` (`status` 용 내부 파일)
+- 리눅스 데몬의 상태 파일 `$XDG_STATE_HOME/bulchimbeon/state.json` (`status` 용 내부 파일)과 업데이트 확인 기록 `update.json`
+- 업데이트 확인의 요청 주소·주기·메뉴 문구, 릴리스 노트의 중요 수정 표시 형식 (`testdata/engine/update.json`)
 
 ## 5. 운영체제가 달라도 엔진 동작은 같다
 

@@ -9,6 +9,7 @@ struct BulchimbeonApp: App {
     @StateObject private var animator = SpriteAnimator()
     @StateObject private var patrol = PatrolController.shared
     @StateObject private var uniform = UniformSetting.shared
+    @StateObject private var updater = UpdateController.shared
 
     init() {
         // Bulchimbeon.app/Contents/MacOS/Bulchimbeon --diagnose → 진단 출력 후 종료 (UI 없음)
@@ -21,7 +22,7 @@ struct BulchimbeonApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            DutyMenu(duty: duty, patrol: patrol, uniform: uniform)
+            DutyMenu(duty: duty, patrol: patrol, uniform: uniform, updater: updater)
         } label: {
             MenuBarLabel(duty: duty, animator: animator, uniform: uniform)
         }
@@ -74,6 +75,7 @@ struct DutyMenu: View {
     @ObservedObject var duty: DutyController
     @ObservedObject var patrol: PatrolController
     @ObservedObject var uniform: UniformSetting
+    @ObservedObject var updater: UpdateController
     @AppStorage(SettingsKey.hasSeenWelcome.rawValue) private var hasSeenWelcome = false
 
     private static let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
@@ -94,6 +96,16 @@ struct DutyMenu: View {
             Text(detail)
         }
         Text("“\(duty.quote)”")
+
+        if let offer = updater.offer {
+            Divider()
+            Button(offer.menuTitle()) { Task { await updater.install() } }
+                .disabled(updater.phase.isBusy)
+            Button(UpdateOffer.releaseNotesTitle()) { updater.openReleaseNotes() }
+            if let line = updater.phase.menuLine() {
+                Text(line)
+            }
+        }
 
         Divider()
 
@@ -189,6 +201,7 @@ struct DutyMenu: View {
             get: { duty.launchAtLogin },
             set: { duty.setLaunchAtLogin($0) }
         ))
+        Toggle(L10n.t("새 버전 확인 (하루 한 번)", "Check for updates (once a day)", "检查更新（每天一次）"), isOn: $updater.enabled)
         Button(L10n.t("불침번 v\(Self.version) · GitHub", "Bulchimbeon v\(Self.version) · GitHub", "Bulchimbeon v\(Self.version) · GitHub")) {
             NSWorkspace.shared.open(Self.repoURL)
         }

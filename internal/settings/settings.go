@@ -39,18 +39,20 @@ type Settings struct {
 	UniformTheme         string   `json:"uniformTheme"`
 	Language             string   `json:"language"`
 	XfceKeepAwake        bool     `json:"xfceKeepAwake"`
+	CheckForUpdates      bool     `json:"checkForUpdates"`
 }
 
 // Defaults are the documented defaults.
 func Defaults() Settings {
 	return Settings{DutyMode: string(engine.ModeSystem), BatteryFloor: engine.DefaultBatteryFloor,
 		AgentGraceMinutes: engine.DefaultGraceMinutes, CustomAgents: []string{}, UniformTheme: engine.DefaultUniformTheme,
-		Language: "system"}
+		Language: "system", CheckForUpdates: engine.DefaultCheckForUpdates}
 }
 
 // Keys that `config set` accepts, in display order.
 var Keys = []string{engine.KeyDutyMode, engine.KeyBatteryFloor, engine.KeyAgentGraceMinutes,
-	engine.KeyAgentWatchCountsIdle, engine.KeyCustomAgents, engine.KeyUniformTheme, KeyLanguage, KeyXfceKeepAwake}
+	engine.KeyAgentWatchCountsIdle, engine.KeyCustomAgents, engine.KeyUniformTheme, KeyLanguage, KeyXfceKeepAwake,
+	engine.KeyCheckForUpdates}
 
 // macOSOnly are public keys with no meaning outside the macOS app.
 var macOSOnly = []string{engine.KeyPatrolEnabled, engine.KeyPatrolScale}
@@ -126,6 +128,12 @@ func apply(s *Settings, key string, value json.RawMessage) error {
 			return errors.New("expected true or false")
 		}
 		s.XfceKeepAwake = v
+	case engine.KeyCheckForUpdates:
+		var v bool
+		if json.Unmarshal(value, &v) != nil {
+			return errors.New("expected true or false")
+		}
+		s.CheckForUpdates = v
 	case engine.KeyPatrolEnabled, engine.KeyPatrolScale:
 		// macOS only; kept in the file, ignored here
 	default:
@@ -177,7 +185,7 @@ func Parse(key string, values []string) (json.RawMessage, error) {
 			return nil, fmt.Errorf("%s must be a number", key)
 		}
 		raw, _ = json.Marshal(n)
-	case engine.KeyAgentWatchCountsIdle, KeyXfceKeepAwake:
+	case engine.KeyAgentWatchCountsIdle, KeyXfceKeepAwake, engine.KeyCheckForUpdates:
 		b, err := strconv.ParseBool(v)
 		if err != nil || (v != "true" && v != "false") {
 			return nil, fmt.Errorf("%s must be true or false", key)

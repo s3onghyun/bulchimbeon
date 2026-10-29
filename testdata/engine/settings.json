@@ -1,6 +1,6 @@
 {
-  "publicKeys": ["dutyMode", "batteryFloor", "agentGraceMinutes", "agentWatchCountsIdle", "customAgents", "patrolEnabled", "patrolScale", "uniformTheme"],
-  "internalKeys": ["dutyOrder", "dutyOrderUntil", "lidEngagedByUs", "hasSeenWelcome", "simulateHeat"],
+  "publicKeys": ["dutyMode", "batteryFloor", "agentGraceMinutes", "agentWatchCountsIdle", "customAgents", "patrolEnabled", "patrolScale", "uniformTheme", "checkForUpdates"],
+  "internalKeys": ["dutyOrder", "dutyOrderUntil", "lidEngagedByUs", "hasSeenWelcome", "simulateHeat", "updateLastCheck", "updateLatestVersion", "updateCriticalBelow"],
   "dutyModes": ["display", "system", "lid"],
   "batteryFloors": [10, 20, 30, 0],
   "defaultBatteryFloor": 20,
@@ -9,6 +9,7 @@
   "patrolScales": [2, 3],
   "defaultPatrolScale": 2,
   "defaultUniformTheme": "default",
+  "defaultCheckForUpdates": true,
   "maxCustomAgents": 16,
   "launchArguments": ["--agent-watch", "--diagnose"],
   "engineDefaults": {"mode": "system", "batteryFloor": 20, "countIdleSessions": false, "graceMinutes": 5}

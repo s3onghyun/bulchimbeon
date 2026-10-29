@@ -17,6 +17,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/s3onghyun/bulchimbeon/internal/platform"
 	"github.com/s3onghyun/bulchimbeon/internal/settings"
 	"github.com/s3onghyun/bulchimbeon/internal/tray"
+	"github.com/s3onghyun/bulchimbeon/internal/update"
 )
 
 // version is set by the release build (-ldflags "-X main.version=…").
@@ -200,8 +202,16 @@ func runCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	daemon.Run(ctx, daemon.Config{Platform: plat, Paths: p, Lang: f.override(), Out: stdout, PID: os.Getpid()})
+	daemon.Run(ctx, daemon.Config{Platform: plat, Paths: p, Lang: f.override(), Out: stdout, PID: os.Getpid(),
+		Update: update.NewChecker(p.Update, version, update.HTTPFetcher(update.Timeout)), Install: installMethod(plat)})
 	return exitOK
+}
+
+func installMethod(plat platform.Platform) string {
+	if plat.InstallMethod == nil {
+		return update.InstallManual
+	}
+	return plat.InstallMethod()
 }
 
 func statusCmd(args []string, stdout, stderr io.Writer) int {
@@ -297,6 +307,9 @@ func doctorCmd(args []string, stdout, stderr io.Writer) int {
 	ok := plat.Doctor(stdout, lang, s.XfceKeepAwake)
 	fmt.Fprintln(stdout, "  - "+engine.T(lang, "설정: ", "settings: ", "设置：")+daemon.Tilde(p.Settings, home))
 	fmt.Fprintln(stdout, "  - "+engine.T(lang, "근무일지: ", "duty log: ", "值班日志：")+daemon.Tilde(p.Log, home))
+	for _, line := range update.DoctorLines(update.Load(p.Update), s.CheckForUpdates, version, installMethod(plat), runtime.GOARCH, lang) {
+		fmt.Fprintln(stdout, "  - "+line)
+	}
 	if !ok {
 		return exitFail
 	}
@@ -366,6 +379,8 @@ func show(s settings.Settings, key string) string {
 		return s.Language
 	case settings.KeyXfceKeepAwake:
 		return fmt.Sprint(s.XfceKeepAwake)
+	case engine.KeyCheckForUpdates:
+		return fmt.Sprint(s.CheckForUpdates)
 	}
 	return ""
 }

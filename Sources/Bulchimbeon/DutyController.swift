@@ -296,11 +296,13 @@ final class DutyController: ObservableObject {
         relaunch()
     }
 
-    /// 1초 뒤 같은 앱을 다시 연다. 앱 경로는 셸 문자열에 넣지 않고 인자($0)로 넘긴다.
-    private func relaunch() {
+    /// 이 프로세스가 끝나기를 (최대 30초) 기다렸다가 같은 경로의 앱을 다시 연다 (언어 변경, 업데이트 설치).
+    /// 앱 경로와 PID 는 셸 문자열에 넣지 않고 인자($0, $1)로 넘긴다.
+    func relaunch() {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", "sleep 1; exec /usr/bin/open \"$0\"", Bundle.main.bundlePath]
+        process.arguments = ["-c", "i=0; while kill -0 \"$1\" 2>/dev/null && [ $i -lt 150 ]; do sleep 0.2; i=$((i+1)); done; exec /usr/bin/open \"$0\"",
+                             Bundle.main.bundlePath, String(getpid())]
         process.environment = ["PATH": "/usr/bin:/bin"]
         try? process.run()
         NSApp.terminate(nil)

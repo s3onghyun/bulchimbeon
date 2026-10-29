@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/s3onghyun/bulchimbeon/internal/engine"
 	"github.com/s3onghyun/bulchimbeon/internal/platform"
 	"github.com/s3onghyun/bulchimbeon/internal/settings"
+	"github.com/s3onghyun/bulchimbeon/internal/update"
 )
 
 // fake platform -------------------------------------------------------------
@@ -409,7 +411,7 @@ func TestDefaultPaths(t *testing.T) {
 	get := func(k string) string { return env[k] }
 	p := DefaultPaths(get, "/home/me")
 	if p.Settings != "/home/me/.config/bulchimbeon/settings.json" || p.State != "/home/me/.local/state/bulchimbeon/state.json" ||
-		p.Log != "/home/me/.local/state/bulchimbeon/duty-log.txt" {
+		p.Log != "/home/me/.local/state/bulchimbeon/duty-log.txt" || p.Update != "/home/me/.local/state/bulchimbeon/update.json" {
 		t.Errorf("defaults = %+v", p)
 	}
 	env["XDG_CONFIG_HOME"], env["XDG_STATE_HOME"] = "/cfg", "relative/ignored"
@@ -440,5 +442,57 @@ func TestStatusLabelsAlignInAllLanguages(t *testing.T) {
 		if w != labelWidth {
 			t.Errorf("%q padded to %d cells, want %d", label, w, labelWidth)
 		}
+	}
+}
+
+// The daemon checks once a day in the background, never blocks its tick, and only notifies:
+// the offer reaches state.json, `status` (so the tray) and the journal, with this install's command.
+func TestUpdateOfferReachesStatus(t *testing.T) {
+	r := newRig(t)
+	calls := 0
+	fetch := func(context.Context, string, map[string]string) ([]byte, error) {
+		calls++
+		return []byte(`{"tag_name": "v0.11.0", "body": "<!-- bulchimbeon: critical -->"}`), nil
+	}
+	checker := update.NewChecker(filepath.Join(filepath.Dir(r.paths.State), "update.json"), "0.10.1", fetch)
+	r.d.cfg.Update, r.d.cfg.Install, r.d.cfg.Arch = checker, update.InstallDeb, "amd64"
+
+	r.run(Interval)
+	checker.Wait()
+	r.run(Interval)
+	st := r.state()
+	if st.Update == nil || *st.Update != (UpdateOffer{Version: "0.11.0", Critical: true, Install: update.InstallDeb, Arch: "amd64"}) {
+		t.Fatalf("state update = %+v", st.Update)
+	}
+	text, _ := RenderStatus(StatusInput{State: st, Lang: engine.EN, Now: r.now})
+	for _, want := range []string{"Update:    new version 0.11.0 (recommended: important fix)\n",
+		"Run: sudo apt install ./bulchimbeon_0.11.0_amd64.deb (download it from the release page)\n",
+		"Release notes: https://github.com/s3onghyun/bulchimbeon/releases/tag/v0.11.0\n"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("status lacks %q:\n%s", want, text)
+		}
+	}
+	if !strings.Contains(r.out.String(), "update: new version 0.11.0 (recommended: important fix) · Run: sudo apt install") {
+		t.Errorf("journal = %s", r.out)
+	}
+	r.run(time.Hour)
+	checker.Wait()
+	if calls != 1 {
+		t.Errorf("asked %d times within the hour", calls)
+	}
+	if n := strings.Count(r.out.String(), "update: "); n != 1 {
+		t.Errorf("journal mentions the update %d times", n)
+	}
+
+	// turned off: the offer disappears and nothing is asked
+	if err := settings.Set(r.paths.Settings, "checkForUpdates", []string{"false"}); err != nil {
+		t.Fatal(err)
+	}
+	r.run(Interval)
+	if st := r.state(); st.Update != nil {
+		t.Errorf("offer while off = %+v", st.Update)
+	}
+	if text, _ := RenderStatus(StatusInput{State: r.state(), Lang: engine.EN, Now: r.now}); strings.Contains(text, "Update:") {
+		t.Errorf("status while off:\n%s", text)
 	}
 }

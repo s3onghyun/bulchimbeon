@@ -23,7 +23,7 @@
 
 **그냥 `caffeinate`나 Amphetamine을 쓰면 안 되나?** 수동으로 일정 시간 맥을 깨워둘 때는 좋은 도구다. 불침번은 AI 에이전트가 실제로 일하는 동안에만 잠자기 방지를 켜고 끄므로, 밤새 켜진 채로 남지 않는다.
 
-**무엇을 살피거나 보내나?** hook을 쓰지 않고 네트워크 연결도 하지 않는다. 지원 에이전트가 일하는지 판단하려고 내 계정의 로컬 프로세스 메타데이터만 살피며, 프로세스 명령줄이나 환경 변수는 저장하거나 출력하지 않는다.
+**무엇을 살피거나 보내나?** hook을 쓰지 않는다. 네트워크 요청은 하루 한 번의 [업데이트 확인](#업데이트)뿐이고, 앱 버전 말고는 아무것도 보내지 않으며 끌 수 있다. 지원 에이전트가 일하는지 판단하려고 내 계정의 로컬 프로세스 메타데이터만 살피며, 프로세스 명령줄이나 환경 변수는 저장하거나 출력하지 않는다.
 
 **덮개를 닫아도 깨어 있게 할 수 있나?** 가능하지만 덮개 닫고 근무를 켤 때 관리자 승인이 필요하다. 근무가 끝나거나 앱을 종료하면 원래 덮개 잠자기 설정으로 되돌린다.
 
@@ -124,6 +124,33 @@ brew update && brew upgrade --cask bulchimbeon
 ```bash
 gh attestation verify Bulchimbeon-<버전>.zip --repo s3onghyun/bulchimbeon
 shasum -a 256 -c Bulchimbeon-<버전>.zip.sha256
+```
+
+## 업데이트
+
+앱(과 리눅스 데몬)은 하루 한 번 GitHub 에 새 릴리스가 나왔는지 묻는다. 나왔으면 메뉴에 **새 버전 X.Y.Z — 업데이트** 와
+**릴리스 노트 보기** 가 보이고, 심각한 버그를 고친 릴리스에는 **(권장: 중요 수정)** 이 붙는다.
+업데이트를 누르고 확인하기 전에는 아무것도 내려받거나 설치하지 않는다.
+
+- **Homebrew 로 설치했으면:** 터미널이 열려 `brew update && brew upgrade --cask bulchimbeon` 을 눈앞에서 실행하고,
+  끝나면 앱을 다시 연다.
+- **zip 으로 설치했으면:** 그 릴리스의 `Bulchimbeon-X.Y.Z.zip` 과 `.sha256` 을 받아 체크섬을 맞춰 보고, 새 앱의 코드 서명이
+  올바른지, 지금 앱과 서명 식별자·팀이 같은지, hardened runtime 인지, 권한 바로 그 버전인지 확인한다. 그다음에만 앱을 바꾸고
+  다시 시작하며, 하던 근무는 이어진다. 어느 단계든 실패하면 설치된 앱은 그대로 두고 릴리스 페이지를 안내한다.
+  앱은 `/Applications` 처럼 쓸 수 있는 폴더에 있어야 한다.
+- **리눅스:** 알림만 한다. `bulchimbeon status`, 트레이 메뉴, `bulchimbeon doctor` 가 설치한 방법에 맞는 명령
+  (`brew upgrade bulchimbeon-linux`, `sudo apt install ./….deb`, `sudo dnf install ./….rpm`, `yay -Syu bulchimbeon-bin`,
+  또는 tarball)과 함께 보여주고, 데몬은 저널에도 한 줄 남긴다.
+
+**개인정보.** 확인은 HTTPS `GET https://api.github.com/repos/s3onghyun/bulchimbeon/releases/latest` 한 번이고, 하루에 한 번까지다.
+머리글은 `User-Agent: Bulchimbeon/<버전>`, `Accept`, 고정값 `Accept-Language: en` 뿐이다. 설정·근무일지·에이전트 이름·식별자·쿠키는
+보내지 않고 텔레메트리도 없다. 모든 웹 요청처럼 GitHub 은 IP 주소를 본다. 불침번이 하는 네트워크 통신은 이것 하나다.
+
+끄려면 메뉴의 **새 버전 확인 (하루 한 번)** 을 끄거나:
+
+```bash
+defaults write io.github.s3onghyun.bulchimbeon checkForUpdates -bool false   # macOS
+bulchimbeon config set checkForUpdates false                                  # 리눅스
 ```
 
 ## 개발
@@ -359,7 +386,8 @@ systemd 257 이상에서는 logind `block` 잠금이 이를 막지만, 내가 �
 
 관리자 권한 `pmset` 실행과 프로세스 명령줄 읽기를 다루는 앱이라 위협 모델을 따로 정리했다 → [SECURITY.md](SECURITY.md)
 
-- 네트워크 통신 없음, 서드파티 의존성 0개
+- 네트워크 통신은 하루 한 번의 [업데이트 확인](#업데이트)뿐 (앱 버전만 보냄, 끌 수 있음), 서드파티 의존성 0개
+- 업데이트는 누른 뒤에만 설치: Homebrew 설치는 보이는 터미널에서 `brew` 로, zip 설치는 체크섬·코드 서명 확인을 통과해야만 교체
 - 셸 인젝션 불가 구조, 절대 경로 실행, 최소 환경변수
 - root 당직 감시병에는 기한이 없다 — 근무 시간은 앱이 관리한다. 사용자 소유·world-writable 이 아닌 빈 정지 플래그는 `pmset -a disablesleep 0`만 실행하게 하며, 감시병은 플래그 내용을 읽거나 다른 곳을 따라가거나 root로 쓰지 않는다
 - 프로세스 인자 원문은 저장·기록하지 않음, AI 대화 기록은 읽지 않음

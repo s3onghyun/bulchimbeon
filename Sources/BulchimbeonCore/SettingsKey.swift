@@ -14,6 +14,8 @@ public enum SettingsKey: String, CaseIterable, Sendable {
     case patrolEnabled
     case patrolScale
     case uniformTheme
+    /// 하루 한 번 GitHub 에서 새 버전을 확인 (기본 켜짐)
+    case checkForUpdates
 
     // 내부 상태 — 재시작 복귀용, 손대지 않는다
     case dutyOrder
@@ -23,13 +25,18 @@ public enum SettingsKey: String, CaseIterable, Sendable {
     case hasSeenWelcome
     /// 시험용. `advisory|alert|normal` 로 발열 단계를 흉내 낸다
     case simulateHeat
+    /// 마지막으로 새 버전을 물어본 시각 (Unix 초), 그때 알려진 최신 버전과 중요 수정 범위 — 하루 한 번 묻기와 재시작 후 표시용
+    case updateLastCheck
+    case updateLatestVersion
+    case updateCriticalBelow
 
     public var isPublic: Bool {
         switch self {
         case .dutyMode, .batteryFloor, .agentGraceMinutes, .agentWatchCountsIdle,
-             .customAgents, .patrolEnabled, .patrolScale, .uniformTheme:
+             .customAgents, .patrolEnabled, .patrolScale, .uniformTheme, .checkForUpdates:
             true
-        case .dutyOrder, .dutyOrderUntil, .lidEngagedByUs, .hasSeenWelcome, .simulateHeat:
+        case .dutyOrder, .dutyOrderUntil, .lidEngagedByUs, .hasSeenWelcome, .simulateHeat,
+             .updateLastCheck, .updateLatestVersion, .updateCriticalBelow:
             false
         }
     }
@@ -45,6 +52,7 @@ public enum SettingsValues {
     public static let defaultPatrolScale = 2
     /// `uniformTheme` 값은 `UniformTheme.all` 의 id. 모르는 값이면 기본.
     public static let defaultUniformTheme = UniformTheme.default.id
+    public static let defaultCheckForUpdates = true
 }
 
 /// 공개 실행 인자. 나머지(`--demo`, `--demo-scale`)는 홍보 녹화용이라 약속하지 않는다.

@@ -406,6 +406,7 @@ func TestFixtureSettings(t *testing.T) {
 		PatrolScales        []int    `json:"patrolScales"`
 		DefaultPatrolScale  int      `json:"defaultPatrolScale"`
 		DefaultUniformTheme string   `json:"defaultUniformTheme"`
+		DefaultCheckUpdates bool     `json:"defaultCheckForUpdates"`
 		MaxCustomAgents     int      `json:"maxCustomAgents"`
 		LaunchArguments     []string `json:"launchArguments"`
 		EngineDefaults      struct {
@@ -422,10 +423,10 @@ func TestFixtureSettings(t *testing.T) {
 	}
 	d := DefaultConfig()
 	got := []any{PublicSettingsKeys, InternalSettingsKeys, modes, BatteryFloors, DefaultBatteryFloor, GraceMinutes,
-		DefaultGraceMinutes, PatrolScales, DefaultPatrolScale, DefaultUniformTheme, MaxCustomAgents, LaunchArguments,
+		DefaultGraceMinutes, PatrolScales, DefaultPatrolScale, DefaultUniformTheme, DefaultCheckForUpdates, MaxCustomAgents, LaunchArguments,
 		string(d.Mode), d.BatteryFloor, d.CountIdleSessions, d.GraceMinutes}
 	want := []any{f.PublicKeys, f.InternalKeys, f.DutyModes, f.BatteryFloors, f.DefaultBatteryFloor, f.GraceMinutes,
-		f.DefaultGraceMinutes, f.PatrolScales, f.DefaultPatrolScale, f.DefaultUniformTheme, f.MaxCustomAgents, f.LaunchArguments,
+		f.DefaultGraceMinutes, f.PatrolScales, f.DefaultPatrolScale, f.DefaultUniformTheme, f.DefaultCheckUpdates, f.MaxCustomAgents, f.LaunchArguments,
 		f.EngineDefaults.Mode, f.EngineDefaults.BatteryFloor, f.EngineDefaults.CountIdleSessions, f.EngineDefaults.GraceMinutes}
 	for i := range got {
 		if !reflect.DeepEqual(got[i], want[i]) {

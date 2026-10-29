@@ -77,6 +77,23 @@ launch arguments, and the engine's default settings. See `docs/compatibility.md`
 
 `{lines: [{name, at, text, line}]}`: writing `text` at `at` to an empty duty log must produce exactly `line`.
 
+### `update.json`: the update check
+
+Run by `UpdateFixtureTests` (Swift) and `fixture_update_test.go`. No network: a response is given as `json` (or as raw
+`text`), and the fetch itself is faked in `internal/update`.
+
+| Key | Case shape | Checks |
+|-----|-----------|--------|
+| `checkIntervalSeconds`, `maxResponseBytes`, `latestReleaseAPI` | | at most one request a day, the response size cap, the only URL asked |
+| `versions` | `{name, input, expect}` | version parsing (SemVer 2.0, `v` prefix, build metadata dropped, git-describe builds as their tag); `expect` is the normalized text or `null` |
+| `compare` | `{a, b, expect: -1 \| 0 \| 1}` | SemVer precedence, checked both ways |
+| `releases` | `{name, json \| text, expect: {version, criticalBelow} \| null}` | reading a `releases/latest` response, and the `<!-- bulchimbeon: critical [below X.Y.Z] -->` marker in its body |
+| `due` | `{name, enabled, current, now, last \| null, expect}` | whether to ask now (times in seconds) |
+| `offers` | `{name, enabled, current, latest \| null, expect: {version, critical} \| null}` | what the menu offers |
+| `texts`, `releaseNotesTitle` | `{version, critical, menuTitle, summary}`, each text as `{ko, en, zh}` | the menu item, the `status` summary and the release-notes link title |
+| `urls` | `{version, releasePage, macZip, macChecksum}` | addresses built from the version, never taken from the response |
+| `requestHeaders` | `{current, expect}` | the only headers sent |
+
 ### `lines.json`: the private's lines
 
 `detect` cases check language detection from a preference list. Each `lines` case is

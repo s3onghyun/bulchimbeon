@@ -11,6 +11,7 @@ import (
 
 	"github.com/s3onghyun/bulchimbeon/internal/engine"
 	"github.com/s3onghyun/bulchimbeon/internal/platform"
+	"github.com/s3onghyun/bulchimbeon/internal/update"
 )
 
 // staleAfter: a state file older than this means the daemon is stuck or gone.
@@ -40,7 +41,7 @@ type StatusReport struct {
 // StatusLine is one line under the headline. Label is empty on continuation lines and on the
 // hints shown when the daemon is not running.
 type StatusLine struct {
-	Key   string // start, leftovers, lock, why, agents, handover, power, others, private, log, logTail, settings, error
+	Key   string // start, leftovers, update, updateHow, lock, why, agents, handover, power, others, private, log, logTail, settings, error
 	Label string
 	Text  string
 }
@@ -92,6 +93,15 @@ func Status(in StatusInput) StatusReport {
 		r.Headline = t("💤 불침번 — 근무 없음", "💤 Bulchimbeon — off duty", "💤 Bulchimbeon — 休息中")
 	}
 
+	if u := st.Update; u != nil {
+		if v, ok := engine.ParseVersion(u.Version); ok {
+			offer := engine.Offer{Version: v, Critical: u.Critical}
+			line("update", t("업데이트", "Update:", "更新："), offer.Summary(in.Lang))
+			for _, how := range update.Instructions(offer, u.Install, u.Arch, in.Lang) {
+				line("updateHow", "", how)
+			}
+		}
+	}
 	line("lock", t("잠금", "Lock:", "休眠锁："), lockLine(in, t))
 	if why := whyLine(st, t); why != "" {
 		line("why", t("이유", "Why:", "原因："), why)

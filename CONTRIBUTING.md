@@ -67,6 +67,7 @@ CI runs these in the `go (linux)` job.
 | `testdata/engine/` | Golden fixtures that the Swift tests and the Go tests both run ([format](testdata/engine/README.md)) | Required |
 | `internal/engine/` | The Go port of the Core engine for the Linux daemon | **Required**: must pass `testdata/engine` |
 | `internal/platform/`, `internal/daemon/`, `cmd/bulchimbeon/` | Linux backend (`/proc`, logind, sysfs, the desktop's suspend inhibitor), the daemon loop and the `bulchimbeon` command; a Windows stub | Unit tests with recorded fixtures |
+| `internal/update/` | The Linux daemon's once-a-day update check (notify only); what to ask and offer is decided in `internal/engine` (`testdata/engine/update.json`) | A fake fetcher, no network |
 | `internal/sprites/`, `internal/tray/`, `internal/dbus/` | The Linux tray icon: sprites drawn from `testdata/engine/sprites.json`, the StatusNotifierItem and its menu, a small standard-library D-Bus client | Pixel-for-pixel against the fixture; a fake bus; a real `dbus-daemon` when installed |
 | `docs/` | Design notes (`design.md`), the [compatibility promise](docs/compatibility.md), media | |
 
@@ -82,7 +83,7 @@ These match the checklist in the PR template.
 |------|-----|
 | `make test` passes | CI runs the same tests |
 | New logic (especially agent detection and duty decisions) lives in `BulchimbeonCore`, with tests | The app target can't be unit-tested |
-| **No network access** of any kind, including telemetry and update checks | "No network" is a promise this app makes |
+| **No network access** apart from the one update check (`UpdateCheck` in Core, opt-out `checkForUpdates`): no telemetry, no other requests, nothing sent beyond its fixed headers | Privacy is a promise this app makes; the check's privacy statement is in the README |
 | **No third-party dependencies** | Keeps supply-chain risk at zero |
 | Never store or print other processes' command lines or environment variables | They may contain other tools' API keys |
 | Never put outside strings into the admin (`pmset`) command | Prevents shell injection |
@@ -172,7 +173,13 @@ git tag vX.Y.Z && git push origin vX.Y.Z   # CI builds universal, signs, attests
 The release workflow does not touch the Homebrew tap or the AUR. After tagging, both steps are required:
 
 - [ ] `./scripts/bump-cask.sh X.Y.Z` (tap cask and Linux formula; otherwise `brew upgrade` stays on the old version)
+- [ ] Keep `uninstall quit: "io.github.s3onghyun.bulchimbeon"` in the tap's `Casks/bulchimbeon.rb`: the in-app Homebrew
+      update relies on `brew upgrade --cask` quitting the running app so the reopen starts the new version
 - [ ] `./scripts/bump-aur.sh X.Y.Z`, then land `packaging/aur/bulchimbeon-bin/` in a small PR
+- [ ] Critical fix? Put `<!-- bulchimbeon: critical -->` on its own line in `docs/release-notes/vX.Y.Z.md` (the release
+      body), so the app's update menu item says "(recommended: important fix)". To keep urging users of a known-bad
+      version from a later, ordinary release, use `<!-- bulchimbeon: critical below X.Y.Z -->` (versions older than
+      X.Y.Z). It is an HTML comment, invisible on the release page; the format is pinned in `testdata/engine/update.json`
 
 ### Be kind
 
@@ -240,6 +247,7 @@ CI 는 이것을 `go (linux)` 잡에서 돌립니다.
 | `testdata/engine/` | Swift 테스트와 Go 테스트가 함께 돌리는 골든 픽스처 ([형식](testdata/engine/README.md)) | 필수 |
 | `internal/engine/` | 리눅스 데몬용 Go 엔진 (Core 엔진을 옮긴 것) | **필수**: `testdata/engine` 통과 |
 | `internal/platform/`, `internal/daemon/`, `cmd/bulchimbeon/` | 리눅스 백엔드(`/proc`·logind·sysfs·데스크톱 절전 억제), 데몬 루프, `bulchimbeon` 명령, Windows 자리 | 기록된 픽스처로 단위 테스트 |
+| `internal/update/` | 리눅스 데몬의 하루 한 번 업데이트 확인 (알림만). 무엇을 묻고 권할지는 `internal/engine` 이 정함 (`testdata/engine/update.json`) | 가짜 fetcher, 네트워크 없음 |
 | `internal/sprites/`, `internal/tray/`, `internal/dbus/` | 리눅스 트레이 아이콘: `testdata/engine/sprites.json` 으로 그리는 스프라이트, StatusNotifierItem 과 메뉴, 표준 라이브러리로 만든 작은 D-Bus 클라이언트 | 픽스처와 픽셀 단위 비교, 가짜 버스, 설치돼 있으면 실제 `dbus-daemon` |
 | `docs/` | 설계서(`design.md`), [호환성 약속](docs/compatibility.md), 미디어 | |
 
@@ -255,7 +263,7 @@ PR 템플릿의 체크리스트와 같습니다.
 |------|------|
 | `make test` 통과 | CI 가 같은 테스트를 돌립니다 |
 | 새 로직(특히 에이전트 감지·근무 판단)은 `BulchimbeonCore` 에 두고 테스트 추가 | 앱 타깃은 단위 테스트를 할 수 없습니다 |
-| **네트워크 통신 금지** (텔레메트리·업데이트 확인 포함) | "통신 없음"이 이 앱의 약속입니다 |
+| **네트워크 통신 금지** — 업데이트 확인 하나만 예외 (Core 의 `UpdateCheck`, 끄는 설정 `checkForUpdates`). 텔레메트리·다른 요청 없음, 정해진 머리글 외에는 보내지 않음 | 개인정보 보호가 이 앱의 약속입니다. 확인의 개인정보 안내는 README 에 있습니다 |
 | **서드파티 의존성 추가 금지** | 공급망 리스크 0 유지 |
 | 프로세스 명령줄·환경변수를 저장·출력하지 않기 | 다른 프로세스의 API 키가 들어 있을 수 있음 |
 | 관리자 권한 명령(`pmset`)에 외부 문자열을 넣지 않기 | 셸 인젝션 방지 |
@@ -338,7 +346,13 @@ git tag vX.Y.Z && git push origin vX.Y.Z   # CI 가 universal 빌드·서명·�
 릴리스 워크플로는 Homebrew tap 과 AUR 을 건드리지 않습니다. 태그를 올린 뒤 두 단계는 꼭 해야 합니다:
 
 - [ ] `./scripts/bump-cask.sh X.Y.Z` (tap 의 cask 와 Linux formula. 빠뜨리면 `brew upgrade` 가 옛 버전에 머뭅니다)
+- [ ] tap 의 `Casks/bulchimbeon.rb` 에 `uninstall quit: "io.github.s3onghyun.bulchimbeon"` 을 그대로 둡니다: 앱 안의 Homebrew
+      업데이트는 `brew upgrade --cask` 가 돌고 있는 앱을 끝내야 다시 열 때 새 버전이 뜹니다
 - [ ] `./scripts/bump-aur.sh X.Y.Z` 후 `packaging/aur/bulchimbeon-bin/` 을 작은 PR 로 반영
+- [ ] 중요 수정이면 `docs/release-notes/vX.Y.Z.md` (릴리스 본문) 에 `<!-- bulchimbeon: critical -->` 을 한 줄로 넣어, 앱의 업데이트
+      메뉴에 "(권장: 중요 수정)" 이 붙게 합니다. 뒤의 일반 릴리스에서도 문제 버전 사용자에게 계속 권하려면
+      `<!-- bulchimbeon: critical below X.Y.Z -->` (X.Y.Z 보다 낮은 버전). HTML 주석이라 릴리스 페이지에는 보이지 않고, 형식은
+      `testdata/engine/update.json` 으로 고정돼 있습니다
 
 ### 서로 존중해주세요
 
