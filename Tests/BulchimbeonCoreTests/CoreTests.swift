@@ -454,13 +454,119 @@ import Testing
     }
 }
 
+/// osascript 결과 해석. 0.10.0~0.10.1 은 0 이 아닌 종료를 모두 "승인 거부"로 기록했다.
+@Suite struct LidApprovalTests {
+    @Test func separatesCancelFromFailure() {
+        #expect(LidApproval.outcome(exitStatus: 0, signaled: false, stderr: "") == .approved)
+        #expect(LidApproval.outcome(exitStatus: 1, signaled: false, stderr: "0:312: execution error: User canceled. (-128)\n") == .cancelled)
+        #expect(LidApproval.outcome(exitStatus: 15, signaled: true, stderr: "") == .failed(.interrupted(signal: 15)),
+                "관리자 명령의 pkill 이 osascript 를 죽인 경우 (0.10.0~0.10.1)")
+        #expect(LidApproval.outcome(exitStatus: 1, signaled: false, stderr: "0:312: execution error: pmset: failed (1)\n") == .failed(.error(code: 1)))
+        #expect(LidApproval.outcome(exitStatus: 1, signaled: false, stderr: "") == .failed(.error(code: nil)))
+    }
+
+    /// 결과를 전할 osascript 만 끊기고 명령은 끝까지 돌았으면 덮개 잠자기는 꺼져 있고 감시병이 산다.
+    /// 앱이 이를 모르면 근무를 마쳐도 `disablesleep 1` 이 남는다 (0.10.0~0.10.1 의 "거부" 뒤 상태).
+    @Test func reconcileClaimsACommandThatRanToTheEnd() {
+        let cut = LidApproval.Outcome.failed(.interrupted(signal: 15))
+        #expect(LidApproval.reconcile(cut, sleepDisabled: true, watchdogAlive: true) == .approved)
+        #expect(LidApproval.reconcile(.failed(.error(code: 1)), sleepDisabled: true, watchdogAlive: true) == .approved)
+        #expect(LidApproval.reconcile(cut, sleepDisabled: false, watchdogAlive: true) == cut)
+        #expect(LidApproval.reconcile(cut, sleepDisabled: nil, watchdogAlive: true) == cut, "pmset 을 못 읽으면 판단하지 않는다")
+        #expect(LidApproval.reconcile(cut, sleepDisabled: true, watchdogAlive: false) == cut, "감시병이 없으면 소유를 주장하지 않는다")
+        #expect(LidApproval.reconcile(.cancelled, sleepDisabled: true, watchdogAlive: true) == .cancelled, "취소면 명령이 돌지 않았다")
+        #expect(LidApproval.reconcile(.failed(.stopSignal), sleepDisabled: true, watchdogAlive: true) == .failed(.stopSignal))
+    }
+
+    @Test func scriptQuotesCommandAndPrompt() {
+        #expect(LidApproval.script(command: #"a "b" \c"#, prompt: "p \"q\"")
+                == #"do shell script "a \"b\" \\c" with prompt "p \"q\"" with administrator privileges"#)
+    }
+
+    @Test func failureTitlesNameTheCause() {
+        #expect(LidApproval.Failure.interrupted(signal: 15).title(.ko) == "승인 창이 신호 15로 끊김")
+        #expect(LidApproval.Failure.interrupted(signal: 15).title(.en) == "approval cut off by signal 15")
+        #expect(LidApproval.Failure.error(code: -60005).title(.ko) == "관리자 명령 오류 -60005")
+        #expect(LidApproval.Failure.error(code: nil).title(.en) == "admin command error")
+        #expect(LidApproval.Failure.stopSignal.title(.ko) == "정지 플래그 폴더를 쓸 수 없음")
+        #expect(LidApproval.Failure.launch.title(.en) == "couldn't run osascript")
+    }
+}
+
 @Suite struct LidWatchdogTests {
-    @Test func pkillPatternDoesNotMatchItself() throws {
-        // disable 명령을 실행하는 셸 자신의 명령줄이 패턴에 걸리면 pkill 이 자기 부모를 죽인다
-        let pattern = LidCommands.watchdogPattern(pid: 4321)
-        let regex = try Regex(pattern)
+    /// 관리자 명령 원문은 osascript 인자(`-e "do shell script …"`)에도 그대로 들어간다. macOS 10.15+ 는 그 명령을
+    /// launchd 의 authtrampoline 아래에서 돌려 osascript 가 pkill 의 조상이 아니므로, 원문이 패턴에 걸리면 pkill 이 osascript 를 죽인다.
+    @Test func adminCommandTextsDoNotMatchWatchdogPattern() throws {
+        let regex = try Regex(LidCommands.watchdogPattern(pid: 4321))
         #expect(LidCommands.disable(pid: 4321).contains(regex) == false)
-        #expect(LidCommands.enable(pid: 4321, stopSignal: "/tmp/lid-stop-4321").contains(regex), "감시병 명령줄은 매칭돼야 한다")
+        #expect(LidCommands.enable(pid: 4321, stopSignal: "/tmp/lid-stop-4321").contains(regex) == false)
+        let script = LidApproval.script(command: LidCommands.enable(pid: 4321, stopSignal: "/tmp/lid-stop-4321"), prompt: "불침번")
+        #expect(script.contains(regex) == false, "osascript 인자 전체도 패턴에 걸리면 안 된다")
+    }
+
+    private static let watchdogTools = ["/bin/sh", "/bin/sleep", "/bin/kill", "/usr/bin/perl", "/usr/bin/pkill", "/usr/bin/pgrep", "/usr/bin/stat"]
+        .allSatisfy { FileManager.default.isExecutableFile(atPath: $0) }
+
+    /// 실측 (2026-10-28, 0.10.0~0.10.1): 덮개 승인이 매번 "거부"로 기록됐다. 암호를 넣은 뒤 관리자 명령의 pkill 이
+    /// 그 명령을 인자로 든 osascript 를 죽였기 때문이다. osascript 대역(인자에 AppleScript 원문)과
+    /// 다른 프로세스 트리에서 도는 권한 셸 대역으로 재현한다. 리눅스에서도 돈다 (감시병의 정지 플래그 확인만 BSD `stat` 전용).
+    @Test(.enabled(if: watchdogTools)) func enableLeavesTheApprovingOsascriptAlive() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let log = dir.appendingPathComponent("pmset.log")
+        let fakePmset = dir.appendingPathComponent("pmset")
+        try "#!/bin/sh\necho \"$@\" >> '\(log.path)'\n".write(to: fakePmset, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakePmset.path)
+
+        // 리눅스 Foundation 은 자식의 SIGTERM 을 막아 둔 채 띄운다 → 가짜 앱은 SIGKILL 로 끝낸다
+        let app = Process()
+        app.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        app.arguments = ["60"]
+        try app.run()
+        defer { if app.isRunning { kill(app.processIdentifier, SIGKILL) } }
+
+        let command = LidCommands.enable(pid: app.processIdentifier, stopSignal: dir.appendingPathComponent("lid-stop").path,
+                                         pmset: fakePmset.path)
+        let script = LidApproval.script(command: command, prompt: "test")
+        // `osascript -e <script>` 처럼 인자에 원문을 든 채 기다리는 대역 (perl 은 자식 없이 자기 인자를 그대로 둔다).
+        // 막힌 신호를 풀어 osascript 처럼 SIGTERM 에 죽게 한다.
+        let osascript = Process()
+        osascript.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
+        osascript.arguments = ["-MPOSIX", "-e", "sigprocmask(SIG_SETMASK, POSIX::SigSet->new); sleep 30", "osascript", "-e", script]
+        try osascript.run()
+        defer { if osascript.isRunning { kill(osascript.processIdentifier, SIGKILL) } }
+        try await Task.sleep(for: .milliseconds(200))
+
+        // authtrampoline 이 띄운 권한 셸 대역: 표준 입출력 말고는 물려받은 fd 가 없다.
+        // (리눅스 Foundation 은 자식 종료를 물려준 소켓으로 알아채, 감시병이 그 fd 를 쥐면 waitUntilExit 가 끝나지 않는다)
+        let shell = Process()
+        shell.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
+        shell.arguments = ["-MPOSIX", "-e", "POSIX::close($_) for 3..1023; exec @ARGV", "/bin/sh", "-c", command]
+        try shell.run()
+        shell.waitUntilExit()
+        try await Task.sleep(for: .milliseconds(300))
+        let approverAlive = osascript.isRunning
+        #expect(approverAlive, "관리자 명령이 자기를 띄운 osascript 를 죽이면 앱은 승인 실패로 본다")
+        #expect(shell.terminationStatus == 0)
+
+        let pgrep = Process()
+        pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        pgrep.arguments = ["-f", LidCommands.watchdogPattern(pid: app.processIdentifier)]
+        let out = Pipe(); pgrep.standardOutput = out
+        try pgrep.run(); pgrep.waitUntilExit()
+        let pids = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            .split(separator: "\n").compactMap { Int32($0) }
+        #expect(pids.count == 1, "감시병은 실행 중 인자로 표식을 들어 pgrep·pkill 이 찾을 수 있어야 한다")
+
+        kill(app.processIdentifier, SIGKILL)
+        app.waitUntilExit()
+        var restored = false
+        for _ in 0..<16 {
+            try await Task.sleep(for: .milliseconds(500))
+            if (try? String(contentsOf: log, encoding: .utf8))?.contains("disablesleep 0") == true { restored = true; break }
+        }
+        #expect(restored, "앱이 죽으면 감시병이 원복해야 한다")
     }
 
     #if os(macOS) // 감시병은 macOS 의 pmset 덮개 닫힘용이다

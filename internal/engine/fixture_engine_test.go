@@ -25,12 +25,13 @@ type scenarioFile struct {
 }
 
 type scenarioStep struct {
-	Op      string   `json:"op"`
-	At      float64  `json:"at"`
-	Seconds *float64 `json:"seconds"`
-	Label   string   `json:"label"`
-	Mode    string   `json:"mode"`
-	OK      bool     `json:"ok"`
+	Op      string          `json:"op"`
+	At      float64         `json:"at"`
+	Seconds *float64        `json:"seconds"`
+	Label   string          `json:"label"`
+	Mode    string          `json:"mode"`
+	OK      bool            `json:"ok"`
+	Failure *lidFailureJSON `json:"failure"`
 	Resume  struct {
 		Action string   `json:"action"`
 		Until  *float64 `json:"until"`
@@ -47,6 +48,17 @@ type scenarioStep struct {
 		Pose   *string         `json:"pose"`
 		Speech json.RawMessage `json:"speech"`
 	} `json:"checks"`
+}
+
+// lidFailureJSON is `{cause, signal?, code?}` (a failed lid approval).
+type lidFailureJSON struct {
+	Cause  string `json:"cause"`
+	Signal int    `json:"signal"`
+	Code   *int   `json:"code"`
+}
+
+func (f lidFailureJSON) failure() LidFailure {
+	return LidFailure{Cause: LidFailureCause(f.Cause), Signal: f.Signal, Code: f.Code}
 }
 
 type effectJSON struct {
@@ -139,7 +151,7 @@ func TestFixtureEngineScenarios(t *testing.T) {
 				"isOnDuty": false, "order": "off", "orderUntil": nil, "resting": false, "mode": string(cfg.Mode),
 				"effectiveMode": string(cfg.Mode),
 				"heat":          "normal", "quote": "off", "dutyStartedAt": nil, "watchDetail": nil,
-				"lidEngagedByUs": cfg.LidEngagedByUs, "lidSleepDisabled": cfg.LidSleepDisabled,
+				"lidEngagedByUs": cfg.LidEngagedByUs, "lidSleepDisabled": cfg.LidSleepDisabled, "shiftReason": nil,
 			}
 
 			for i, st := range sc.Steps {
@@ -176,7 +188,13 @@ func TestFixtureEngineScenarios(t *testing.T) {
 					}
 					effects = e.Resume(a, now)
 				case "lidEnableResult":
-					effects = e.LidEnableResult(st.OK, now)
+					outcome := LidOutcome{Kind: LidCancelled}
+					if st.OK {
+						outcome.Kind = LidApproved
+					} else if st.Failure != nil {
+						outcome = LidOutcome{Kind: LidFailed, Failure: st.Failure.failure()}
+					}
+					effects = e.LidEnableResult(outcome, now)
 				case "lidRestoreResult":
 					effects = e.LidRestoreResult(st.OK)
 				case "lidSleepRestoredExternally":
@@ -224,6 +242,10 @@ func TestFixtureEngineScenarios(t *testing.T) {
 					"resting": e.Resting(), "mode": string(e.Mode), "effectiveMode": string(e.EffectiveMode()), "heat": e.Heat().String(), "quote": e.Quote().String(),
 					"dutyStartedAt": rel(e.DutyStartedAt()), "watchDetail": detail,
 					"lidEngagedByUs": e.LidEngagedByUs(), "lidSleepDisabled": e.LidSleepDisabled(),
+					"shiftReason": nil,
+				}
+				if r := e.ShiftReason(); r != "" {
+					state["shiftReason"] = string(r)
 				}
 				if !reflect.DeepEqual(normalize(state), normalize(expected)) {
 					t.Errorf("%s: state\n got  %v\n want %v", label, state, expected)

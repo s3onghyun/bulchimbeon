@@ -230,7 +230,7 @@ import Testing
             "isOnDuty": .bool(false), "order": .string("off"), "orderUntil": .null, "resting": .bool(false),
             "mode": .string(mode.rawValue), "effectiveMode": .string(mode.rawValue), "heat": .string("normal"), "quote": .string("off"), "dutyStartedAt": .null,
             "watchDetail": .null, "lidEngagedByUs": .bool(config["lidEngagedByUs"].bool ?? false),
-            "lidSleepDisabled": .bool(config["lidSleepDisabled"].bool ?? false),
+            "lidSleepDisabled": .bool(config["lidSleepDisabled"].bool ?? false), "shiftReason": .null,
         ]
 
         for (i, step) in scenario["steps"].array.enumerated() {
@@ -253,7 +253,10 @@ import Testing
                 default: action = .none
                 }
                 effects = engine.resume(action, now: now)
-            case "lidEnableResult": effects = engine.lidEnableResult(step["ok"].bool ?? false, now: now)
+            case "lidEnableResult":
+                let outcome: LidApproval.Outcome = step["ok"].bool == true ? .approved
+                    : step.has("failure") ? .failed(Self.lidFailure(step["failure"])) : .cancelled
+                effects = engine.lidEnableResult(outcome, now: now)
             case "lidRestoreResult": effects = engine.lidRestoreResult(step["ok"].bool ?? false)
             case "lidSleepRestoredExternally": effects = engine.lidSleepRestoredExternally(now: now)
             case "tick":
@@ -279,6 +282,7 @@ import Testing
                 "heat": .string(Self.heatName(engine.heat)), "quote": .string(Self.quoteName(engine.quote)),
                 "dutyStartedAt": relative(engine.dutyStartedAt), "watchDetail": engine.watchDetail.map(JSONValue.string) ?? .null,
                 "lidEngagedByUs": .bool(engine.lidEngagedByUs), "lidSleepDisabled": .bool(engine.lidSleepDisabled),
+                "shiftReason": engine.shiftReason.map { .string($0.rawValue) } ?? .null,
             ]
             switch engine.order {
             case .off: state["order"] = .string("off"); state["orderUntil"] = .null
@@ -359,6 +363,7 @@ import Testing
         case "timeUp": return notice(Lines.timeUp(l))
         case "batteryRetreat": return notice(Lines.batteryRetreat(args[0].int ?? 0, l))
         case "lidFallback": return notice(Lines.lidFallback(l))
+        case "lidApprovalFailed": return notice(Lines.lidApprovalFailed(lidFailure(args[0]), l))
         case "lidResumeFallback": return notice(Lines.lidResumeFallback(l))
         case "lidLeftOn": return notice(Lines.lidLeftOn(l))
         case "heatAdvisory": return notice(Lines.heatAdvisory(l))
@@ -402,6 +407,16 @@ import Testing
         case .argv0: "argv0"
         case .installPath: "installPath"
         case .script: "script"
+        }
+    }
+
+    /// `{cause: stopSignal | launch | interrupted (signal) | error (code?)}`
+    static func lidFailure(_ v: JSONValue) -> LidApproval.Failure {
+        switch v["cause"].string {
+        case "stopSignal": .stopSignal
+        case "launch": .launch
+        case "interrupted": .interrupted(signal: Int32(v["signal"].int ?? 0))
+        default: .error(code: v["code"].int)
         }
     }
 

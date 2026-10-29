@@ -129,8 +129,8 @@ struct DutyMenu: View {
         )) {
             ForEach(DutyMode.allCases) { Text($0.title).tag($0) }
         }
-        if duty.modeFallback {
-            Text(L10n.t("이번 근무는 시스템 근무로 대체됨", "This watch is running as a system watch instead", "本次值班已改为系统值班"))
+        if let shiftLine = duty.shiftLine {
+            Text(shiftLine)
         }
         Toggle(L10n.t("🚶 순찰 모드 (화면 위 이등병)", "🚶 Patrol mode (soldier on screen)", "🚶 巡逻模式（屏幕上的小士兵）"), isOn: $patrol.enabled)
         if patrol.enabled {
