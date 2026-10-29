@@ -238,7 +238,7 @@ func (d *Daemon) run(effects []engine.Effect, now time.Time) {
 			d.reportLock()
 		case engine.EffectEnableLid:
 			// lid mode exists on macOS only; the engine falls back to a system watch
-			d.run(d.engine.LidEnableResult(false, now), now)
+			d.run(d.engine.LidEnableResult(engine.LidOutcome{Kind: engine.LidCancelled}, now), now)
 		case engine.EffectRestoreLid:
 			// nothing to restore: lid sleep is never changed outside macOS
 		case engine.EffectNotify:

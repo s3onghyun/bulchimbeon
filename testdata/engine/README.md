@@ -93,10 +93,10 @@ Each step runs one operation at time `at`, then checks the result:
 
 | Field | Meaning |
 |-------|---------|
-| `op` | `startTimed` (`seconds` \| null, `label`), `startAgentWatch`, `stop`, `setMode` (`mode`), `resume` (`resume: {action, until?}`), `lidEnableResult` (`ok`), `lidRestoreResult` (`ok`), `lidSleepRestoredExternally`, or `tick` |
+| `op` | `startTimed` (`seconds` \| null, `label`), `startAgentWatch`, `stop`, `setMode` (`mode`), `resume` (`resume: {action, until?}`), `lidEnableResult` (`ok`; when false, an optional `failure: {cause: stopSignal \| launch \| interrupted \| error, signal?, code?}` makes it a failed approval instead of a cancelled one), `lidRestoreResult` (`ok`), `lidSleepRestoredExternally`, or `tick` |
 | tick inputs | `open` and `busy` (`{id: n}`), `battery` (`{percent, onBattery}`), `heat` (default `normal`), `assertionHeld` (default `true`) |
 | `effects` | the exact effect list, in order: `{type: acquire, mode}`, `release`, `reacquire`, `enableLid`, `restoreLid`, `{type: notify, line, args?}` (a `lines.json` function; `args` may be `{ko, en}`), `{type: log, kind, ko, en}` |
-| `state` | fields that change at this step. Runners keep the full expected state and compare all of it after every step: `isOnDuty`, `order` (`off`, `timed`, `agentWatch`), `orderUntil`, `resting`, `mode` (the user's pick), `effectiveMode` (what this watch keeps after a lid fallback), `heat`, `quote`, `dutyStartedAt`, `watchDetail` (`{ko, en}` or null), `lidEngagedByUs`, `lidSleepDisabled` |
+| `state` | fields that change at this step. Runners keep the full expected state and compare all of it after every step: `isOnDuty`, `order` (`off`, `timed`, `agentWatch`), `orderUntil`, `resting`, `mode` (the user's pick), `effectiveMode` (what this watch keeps after a lid fallback), `shiftReason` (why: `restarted`, `approvalCancelled`, `approvalFailed`, `heat`, `lidRestoredExternally`, or null), `heat`, `quote`, `dutyStartedAt`, `watchDetail` (`{ko, en}` or null), `lidEngagedByUs`, `lidSleepDisabled` |
 | `checks` | `{at, pose}` and `{at, speech: lines.json speech function \| null}`, evaluated after the step |
 
 ### `sprites.json`: the private's sprites

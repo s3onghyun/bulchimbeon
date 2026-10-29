@@ -88,6 +88,14 @@ func LidFallback(lang Lang) Notice {
 		"Can't guard with the lid closed 🙅", "No admin approval, so I switched to system watch. Keep the lid open!", "无法合盖值班 🙅", "未获管理员授权，已切换为系统值班。请保持屏幕盖打开！")
 }
 
+// LidApprovalFailed: the approval failed (not a cancel) — the cause, what this watch keeps, how to retry.
+func LidApprovalFailed(f LidFailure, lang Lang) Notice {
+	cause, hint := f.Title(lang), f.Hint(lang)
+	return notice(lang, "덮개 근무 실패 ⚠️", "원인: "+cause+". 이번 근무는 화면은 꺼지고 맥만 깨어 있습니다. "+hint,
+		"Lid-closed watch failed ⚠️", "Cause: "+cause+". This watch lets the display sleep; only the Mac stays awake. "+hint,
+		"合盖值班失败 ⚠️", "原因："+cause+"。本次值班屏幕会关闭，仅 Mac 保持唤醒。"+hint)
+}
+
 func LidResumeFallback(lang Lang) Notice {
 	return notice(lang, "근무 복귀! 🪖", "덮개 근무는 관리자 승인이 다시 필요해 시스템 근무로 복귀했습니다. 필요하면 메뉴에서 다시 켜주십시오.",
 		"Back on watch! 🪖", "Lid-closed watch needs admin approval again, so I resumed as system watch. Turn it back on from the menu if needed.", "恢复值班！🪖", "合盖值班需要重新获得管理员授权，已恢复为系统值班。如有需要，请从菜单重新开启。")

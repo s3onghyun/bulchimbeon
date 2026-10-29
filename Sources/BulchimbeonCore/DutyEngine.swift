@@ -11,6 +11,34 @@ public enum DutyMode: String, CaseIterable, Identifiable, Sendable {
         case .lid: L10n.t("덮개 닫아도 깨어 있음 (관리자 권한)", "Stay awake with lid closed (admin)", "合盖后保持唤醒（需要管理员权限）")
         }
     }
+
+    /// 이 방식이 실제로 지키는 것 (화면이 꺼지는지까지 분명히)
+    public func effect(_ lang: L10n.Language = L10n.language) -> String {
+        switch self {
+        case .display: L10n.t("화면도 맥도 깨어 있음", "display and Mac stay awake", "屏幕和 Mac 都保持唤醒", lang)
+        case .system: L10n.t("화면은 꺼짐 · 맥만 깨어 있음", "display sleeps · only the Mac stays awake", "屏幕会关闭 · 仅 Mac 保持唤醒", lang)
+        case .lid: L10n.t("덮개 닫아도 맥 깨어 있음 · 화면은 꺼짐", "Mac stays awake with the lid closed · display sleeps", "合盖也保持 Mac 唤醒 · 屏幕会关闭", lang)
+        }
+    }
+}
+
+/// 이번 근무가 고른 방식 대신 시스템 근무로 서는 까닭
+public enum ShiftReason: String, Sendable {
+    case restarted              // 앱 재시작 뒤 (관리자 재승인 필요)
+    case approvalCancelled      // 관리자 암호 창 취소
+    case approvalFailed         // 관리자 승인 장치 실패
+    case heat                   // 과열 뒤 복귀
+    case lidRestoredExternally  // 덮개 잠자기가 밖에서 복구됨
+
+    public func title(_ lang: L10n.Language = L10n.language) -> String {
+        switch self {
+        case .restarted: L10n.t("앱 재시작 — 덮개 재승인 필요", "app restarted — lid needs approval again", "应用已重启 — 合盖需重新授权", lang)
+        case .approvalCancelled: L10n.t("덮개 승인 취소", "lid approval cancelled", "已取消合盖授权", lang)
+        case .approvalFailed: L10n.t("덮개 근무 실패", "lid-closed watch failed", "合盖值班失败", lang)
+        case .heat: L10n.t("과열 뒤 안전 복귀", "back from heat rest", "过热后安全恢复", lang)
+        case .lidRestoredExternally: L10n.t("덮개 잠자기가 밖에서 복구됨", "lid sleep restored outside the app", "合盖休眠已在应用外恢复", lang)
+        }
+    }
 }
 
 public enum DutyOrder: Equatable, Sendable {
@@ -74,6 +102,8 @@ public struct DutyEngine: Sendable {
     public private(set) var lidEngagedByUs: Bool
     /// 이번 근무만 덮개 대신 쓰는 방식 (재시작·암호 거부·과열 대체). 근무가 끝나면 nil
     public private(set) var shiftMode: DutyMode?
+    /// 대체한 까닭 (메뉴 안내용). `shiftMode` 와 함께 정해지고 함께 지워진다
+    public private(set) var shiftReason: ShiftReason?
 
     /// 지금 실제로 서는 근무 방식
     public var effectiveMode: DutyMode { shiftMode ?? mode }
@@ -114,11 +144,18 @@ public struct DutyEngine: Sendable {
 
     private var floor: Int? { batteryFloor > 0 ? batteryFloor : nil }
 
+    /// 대체 근무 중이면 메뉴에 보일 한 줄: 이번 근무가 실제로 지키는 것과 그 까닭
+    public func shiftLine(_ lang: L10n.Language = L10n.language) -> String? {
+        guard shiftMode != nil, let shiftReason else { return nil }
+        let effect = effectiveMode.effect(lang), reason = shiftReason.title(lang)
+        return L10n.t("이번 근무: \(effect) (\(reason))", "This watch: \(effect) (\(reason))", "本次值班：\(effect)（\(reason)）", lang)
+    }
+
     // MARK: - 명령
 
     public mutating func startTimed(seconds: TimeInterval?, label: String, now: Date) -> [DutyEffect] {
         order = .timed(until: seconds.map { now.addingTimeInterval($0) })
-        shiftMode = nil
+        endFallback()
         var effects = engage(now: now)
         let notice = Lines.reportForDuty()
         effects.append(.notify(title: notice.title, body: notice.body))
@@ -132,7 +169,7 @@ public struct DutyEngine: Sendable {
         order = .agentWatch
         quote = .standby
         let before = effectiveMode
-        shiftMode = nil
+        endFallback()
         var effects = isOnDuty && effectiveMode != before ? engage(now: now) : []
         effects.append(.log(L10n.t("에이전트 근무 대기 시작", "Started waiting for agents", "开始等待代理"), .other))
         return effects
@@ -144,14 +181,17 @@ public struct DutyEngine: Sendable {
 
     /// 사용자가 고른 방식. 대체 근무 중이면 대체를 끝내고 고른 방식으로 선다.
     public mutating func setMode(_ newMode: DutyMode, now: Date) -> [DutyEffect] {
-        let before = effectiveMode
+        let before = effectiveMode, picked = mode
         mode = newMode
-        shiftMode = nil
-        guard newMode != before, isOnDuty else { return [] }
+        endFallback()
+        guard isOnDuty else { return [] }
+        let changed = DutyEffect.log(L10n.t("근무 방식 변경 — \(newMode.title)", "Watch mode changed — \(newMode.title)", "值班模式已更改 — \(newMode.title)"), .other)
+        // 대체 근무와 같은 방식을 고르면 다시 걸 것은 없지만, 저장되는 방식이 바뀌므로 일지에 남긴다
+        guard newMode != before else { return newMode != picked ? [changed] : [] }
         let leavingLid = before == .lid
         var effects: [DutyEffect] = leavingLid && lidEngagedByUs ? [.restoreLid] : []
         effects += engage(now: now)
-        effects.append(.log(L10n.t("근무 방식 변경 — \(newMode.title)", "Watch mode changed — \(newMode.title)", "值班模式已更改 — \(newMode.title)"), .other))
+        effects.append(changed)
         return effects
     }
 
@@ -169,7 +209,7 @@ public struct DutyEngine: Sendable {
         var effects: [DutyEffect] = []
         // 로그인 직후 예고 없는 관리자 암호 창은 피싱처럼 보인다 → 덮개 근무는 시스템 근무로 복귀
         if effectiveMode == .lid && !lidSleepDisabled {
-            shiftMode = .system
+            fallBack(.restarted)
             let notice = Lines.lidResumeFallback()
             effects += [.notify(title: notice.title, body: notice.body),
                         .log(L10n.t("덮개 근무 → 시스템 근무로 복귀 (관리자 재승인 필요)",
@@ -196,18 +236,28 @@ public struct DutyEngine: Sendable {
 
     // MARK: - 비동기 결과
 
-    public mutating func lidEnableResult(_ ok: Bool, now: Date) -> [DutyEffect] {
+    /// 관리자 승인 결과. 취소는 "거부", 승인 장치의 실패는 원인과 함께 따로 알린다.
+    public mutating func lidEnableResult(_ outcome: LidApproval.Outcome, now: Date) -> [DutyEffect] {
         awaitingLid = false
-        if ok {
+        let notice: Lines.Notice, log: String, reason: ShiftReason
+        switch outcome {
+        case .approved:
             lidEngagedByUs = true
             lidSleepDisabled = true
             return [.acquire(.lid)]
+        case .cancelled:
+            notice = Lines.lidFallback()
+            log = L10n.t("덮개 근무 승인 거부 — 시스템 근무로 대체", "Lid-closed watch denied — switched to system watch", "合盖值班未获授权 — 已切换为系统值班")
+            reason = .approvalCancelled
+        case .failed(let failure):
+            notice = Lines.lidApprovalFailed(failure)
+            log = L10n.t("덮개 근무 승인 실패 (\(failure.title(.ko))) — 시스템 근무로 대체",
+                         "Lid-closed watch failed (\(failure.title(.en))) — switched to system watch",
+                         "合盖值班失败（\(failure.title(.zh))）— 已切换为系统值班")
+            reason = .approvalFailed
         }
-        if order != .off { shiftMode = .system } // 암호 창이 떠 있는 사이 근무를 마쳤으면 다음 근무는 다시 덮개
-        let notice = Lines.lidFallback()
-        return [.notify(title: notice.title, body: notice.body),
-                .log(L10n.t("덮개 근무 승인 거부 — 시스템 근무로 대체", "Lid-closed watch denied — switched to system watch", "合盖值班未获授权 — 已切换为系统值班"), .other),
-                .acquire(.system)]
+        if order != .off { fallBack(reason) } // 암호 창이 떠 있는 사이 근무를 마쳤으면 다음 근무는 다시 덮개
+        return [.notify(title: notice.title, body: notice.body), .log(log, .other), .acquire(.system)]
     }
 
     public mutating func lidRestoreResult(_ ok: Bool) -> [DutyEffect] {
@@ -220,7 +270,7 @@ public struct DutyEngine: Sendable {
     /// 덮개 근무 중 덮개 잠자기가 밖에서 복구됐다 (당직 감시병 등) → 이번 근무만 시스템 근무로
     public mutating func lidSleepRestoredExternally(now: Date) -> [DutyEffect] {
         guard isOnDuty, effectiveMode == .lid else { return [] }
-        shiftMode = .system
+        fallBack(.lidRestoredExternally)
         var effects = engage(now: now)
         effects.append(.log(L10n.t("근무 방식 변경 — \(DutyMode.system.title)", "Watch mode changed — \(DutyMode.system.title)",
                                    "值班模式已更改 — \(DutyMode.system.title)"), .other))
@@ -263,7 +313,7 @@ public struct DutyEngine: Sendable {
         case .resume:
             resting = false
             let lidDowngraded = effectiveMode == .lid
-            if lidDowngraded { shiftMode = .system } // 과열 직후엔 이번 근무 동안 덮개 근무로 돌아가지 않는다
+            if lidDowngraded { fallBack(.heat) } // 과열 직후엔 이번 근무 동안 덮개 근무로 돌아가지 않는다
             let notice = Lines.heatResume(lidDowngraded: lidDowngraded)
             effects += [.notify(title: notice.title, body: notice.body),
                         .log(L10n.t("전투휴식 종료 — 근무 복귀", "Combat rest over — back on watch", "降温休息结束 — 恢复值班"), .onDuty)]
@@ -365,10 +415,20 @@ public struct DutyEngine: Sendable {
         resting = false
         order = .off
         quote = .off
-        shiftMode = nil
+        endFallback()
         if let notice { effects.append(.notify(title: notice.title, body: notice.body)) }
         effects.append(.log(log, .standDown))
         return effects
+    }
+
+    private mutating func fallBack(_ reason: ShiftReason) {
+        shiftMode = .system
+        shiftReason = reason
+    }
+
+    private mutating func endFallback() {
+        shiftMode = nil
+        shiftReason = nil
     }
 
     private mutating func say(_ text: String, now: Date, seconds: TimeInterval = 4) {

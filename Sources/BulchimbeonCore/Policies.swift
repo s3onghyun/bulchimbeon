@@ -164,10 +164,13 @@ public enum HeatPolicy {
 /// root 백그라운드 셸. 스크립트는 파일이 아닌 인라인 문자열 — 사용자 권한으로 수정 가능한 파일을
 /// root 로 실행하면 권한 상승 통로가 되기 때문.
 public enum LidCommands {
-    static func marker(_ pid: Int32) -> String { "bulchimbeon-watchdog-\(pid)" }
-
-    /// 자기 자신(이 명령을 실행하는 셸)과 매칭되지 않도록 `[g]` 정규식 트릭을 쓴다.
+    /// 감시병 표식 `bulchimbeon-watchdog-<pid>` 를 찾는 패턴. 자기 자신(이 명령을 실행하는 셸)과 매칭되지 않도록 `[g]` 정규식 트릭을 쓴다.
     static func markerPattern(_ pid: Int32) -> String { "bulchimbeon-watchdo[g]-\(pid)" }
+
+    /// 명령 원문에 쓰는 표식 셸 단어. 셸이 이어 붙여 감시병 인자로는 `bulchimbeon-watchdog-<pid>` 가 되지만, 원문에는 그 글자가 없다.
+    /// 원문은 osascript 인자에도 들어가는데, macOS 10.15+ 는 관리자 명령을 launchd 의 authtrampoline 아래에서 돌려
+    /// osascript 가 pkill 의 조상이 아니다. 원문에 표식이 있으면 켤 때의 pkill 이 승인 중인 osascript 를 죽인다 (0.10.0~0.10.1).
+    static func markerWord(_ pid: Int32) -> String { "'bulchimbeon-watchdo''g-\(pid)'" }
 
     /// 실측(이슈 #4, 실제 관리자 권한):
     /// 1. `do shell script ... with administrator privileges` 는 끝날 때 같은 프로세스 그룹을 정리해서
@@ -182,11 +185,12 @@ public enum LidCommands {
     /// `-L` 없이 lstat을 사용하므로 심볼릭 링크를 따라 다른 경로를 보지 않는다.
     /// 근무 시간은 앱이 관리하고, 근무가 끝나면 앱이 플래그를 만든다. 같은 앱 PID로 다시 켜면 먼저
     /// 기존 감시병을 종료하고 하나만 새로 띄워 중첩하지 않는다.
+    /// 감시병의 표식은 `$0`(실행 중 인자)에만 있고 명령 원문에는 없다 (`markerWord`).
     public static func enable(pid: Int32, stopSignal: String, pmset: String = "/usr/bin/pmset") -> String {
-        let watch = ": \(marker(pid)); while :; do if /usr/bin/stat -f %z \"$1\" >/dev/null 2>&1 || ! /bin/kill -0 \(pid) 2>/dev/null; then \(pmset) -a disablesleep 0; exit 0; fi; /bin/sleep 5; done"
+        let watch = "while :; do if /usr/bin/stat -f %z \"$1\" >/dev/null 2>&1 || ! /bin/kill -0 \(pid) 2>/dev/null; then \(pmset) -a disablesleep 0; exit 0; fi; /bin/sleep 5; done"
         let detach = "pipe(my $r, my $w); my $p = fork(); die unless defined $p; "
             + "if ($p) { close $w; <$r>; exit 0 } close $r; POSIX::setsid(); close $w; exec @ARGV"
-        return "\(pmset) -a disablesleep 1 && { /usr/bin/pkill -f '\(markerPattern(pid))' || true; /usr/bin/perl -MPOSIX -e '\(detach)' /bin/sh -c '\(watch)' '\(marker(pid))' \(shellQuote(stopSignal)) </dev/null >/dev/null 2>&1; }"
+        return "\(pmset) -a disablesleep 1 && { /usr/bin/pkill -f '\(markerPattern(pid))' || true; /usr/bin/perl -MPOSIX -e '\(detach)' /bin/sh -c '\(watch)' \(markerWord(pid)) \(shellQuote(stopSignal)) </dev/null >/dev/null 2>&1; }"
     }
 
     public static func disable(pid: Int32, pmset: String = "/usr/bin/pmset") -> String {

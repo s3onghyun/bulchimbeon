@@ -34,40 +34,48 @@ enum SystemProbes {
         lidSleepDisabledState() ?? false
     }
 
-    /// `pmset -a disablesleep` 변경. 관리자 암호 프롬프트가 뜬다. 취소하면 false.
+    /// `pmset -a disablesleep 1` + 당직 감시병(LidCommands.enable). 관리자 암호 프롬프트가 뜬다.
+    /// 취소와 승인 장치의 실패를 가려 돌려준다 (LidApproval).
     ///
     /// 보안: 명령에 들어가는 가변 값은 이 앱의 PID(정수)와 셸 인용한 정지 플래그 경로뿐이다.
-    /// 켤 때는 "당직 감시병"(LidCommands.enable)을 함께 띄워, 앱이 강제 종료되거나 근무 종료 플래그가 생기면
-    /// 5초 안에 원복된다. 정지 플래그는 안전한 방향(`disablesleep 0`)으로만 쓸 수 있다.
-    /// 프롬프트에 실행할 명령을 그대로 보여줘, 사용자가 무엇에 암호를 주는지 알 수 있게 한다.
-    static func setLidSleepDisabled(_ disabled: Bool) -> Bool {
-        let pid = getpid()
-        let stopSignal: URL?
-        if disabled {
-            guard let url = lidStopSignalURL() else { return false }
-            try? FileManager.default.removeItem(at: url) // PID 재사용 전의 낡은 정지 신호
-            stopSignal = url
-        } else {
-            stopSignal = nil
-        }
-        let command = disabled
-            ? LidCommands.enable(pid: pid, stopSignal: stopSignal!.path)
-            : LidCommands.disable(pid: pid)
-        let shown = "/usr/bin/pmset -a disablesleep \(disabled ? 1 : 0)"
-            + (disabled ? L10n.t(" (+ 앱 종료·근무 종료 시 자동 원복 감시)", " (+ watchdog restores on app exit or duty end)", "（应用退出或值班结束时自动恢复）") : "")
-        let prompt = L10n.t("불침번이 덮개 잠자기 설정을 바꾸려 합니다.\n실행 명령: ",
-                            "Bulchimbeon wants to change the lid sleep setting.\nCommand: ", "Bulchimbeon 将更改合盖休眠设置。\n执行命令：") + shown
-        let script = "do shell script \"\(appleScriptEscaped(command))\" with prompt \"\(appleScriptEscaped(prompt))\" with administrator privileges"
-        return run("/usr/bin/osascript", ["-e", script]) != nil
+    /// 감시병은 앱이 강제 종료되거나 근무 종료 플래그가 생기면 5초 안에 원복한다. 정지 플래그는 안전한 방향(`disablesleep 0`)으로만 쓸 수 있다.
+    static func enableLidSleep() -> LidApproval.Outcome {
+        guard let stopSignal = lidStopSignalURL() else { return .failed(.stopSignal) }
+        try? FileManager.default.removeItem(at: stopSignal) // PID 재사용 전의 낡은 정지 신호
+        let outcome = runAdmin(LidCommands.enable(pid: getpid(), stopSignal: stopSignal.path), disablesSleep: true)
+        guard case .failed = outcome else { return outcome }
+        // 결과만 끊기고 명령은 끝까지 돌았으면(덮개 잠자기 꺼짐 + 감시병 있음) 승인으로 보고 이 앱이 원복을 맡는다
+        return LidApproval.reconcile(outcome, sleepDisabled: lidSleepDisabledState(), watchdogAlive: lidWatchdogAlive())
     }
 
     /// 정상 근무 종료에는 이미 root로 떠 있는 감시병에 빈 플래그만 만들어 알린다.
     /// 감시병이 없거나 7초 안에 `pmset -g`가 복구를 확인하지 못하면 기존 관리자 승인 경로를 쓴다.
     static func restoreLidSleepWithWatchdog() -> Bool {
         if requestLidSleepRestore() { return true }
-        let restored = setLidSleepDisabled(false)
+        let restored = runAdmin(LidCommands.disable(pid: getpid()), disablesSleep: false) == .approved
         if restored && lidSleepDisabledState() == false { clearLidStopSignal() }
         return restored
+    }
+
+    /// 관리자 권한으로 명령을 돌린다. 프롬프트에 실행할 명령을 그대로 보여줘, 사용자가 무엇에 암호를 주는지 알 수 있게 한다.
+    /// stderr 는 오류 번호만 읽고 버린다 (LidApproval.outcome).
+    private static func runAdmin(_ command: String, disablesSleep: Bool) -> LidApproval.Outcome {
+        let shown = "/usr/bin/pmset -a disablesleep \(disablesSleep ? 1 : 0)"
+            + (disablesSleep ? L10n.t(" (+ 앱 종료·근무 종료 시 자동 원복 감시)", " (+ watchdog restores on app exit or duty end)", "（应用退出或值班结束时自动恢复）") : "")
+        let prompt = L10n.t("불침번이 덮개 잠자기 설정을 바꾸려 합니다.\n실행 명령: ",
+                            "Bulchimbeon wants to change the lid sleep setting.\nCommand: ", "Bulchimbeon 将更改合盖休眠设置。\n执行命令：") + shown
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", LidApproval.script(command: command, prompt: prompt)]
+        process.environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LANG": "C"]
+        let errors = Pipe()
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = errors
+        do { try process.run() } catch { return .failed(.launch) }
+        let data = errors.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return LidApproval.outcome(exitStatus: process.terminationStatus, signaled: process.terminationReason == .uncaughtSignal,
+                                   stderr: String(decoding: data.prefix(4096), as: UTF8.self))
     }
 
     /// 이 앱의 당직 감시병(root)이 살아 있는지
@@ -117,10 +125,6 @@ enum SystemProbes {
     private static func clearLidStopSignal() {
         guard let signal = lidStopSignalURL() else { return }
         try? FileManager.default.removeItem(at: signal)
-    }
-
-    private static func appleScriptEscaped(_ string: String) -> String {
-        string.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
     }
 
     /// nil은 `pmset -g` 자체를 확인하지 못한 경우라, 감시병 정지 신호를 지우지 않는다.

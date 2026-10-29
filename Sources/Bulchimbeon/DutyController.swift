@@ -44,8 +44,8 @@ final class DutyController: ObservableObject {
     var isOnDuty: Bool { engine.isOnDuty }
     /// 사용자가 고른 근무 방식 (메뉴 체크 표시)
     var mode: DutyMode { engine.mode }
-    /// 이번 근무가 고른 방식 대신 시스템 근무로 서 있는가 (메뉴 안내용)
-    var modeFallback: Bool { engine.effectiveMode != engine.mode }
+    /// 대체 근무 중이면 이번 근무가 실제로 지키는 것과 까닭 (메뉴 안내용)
+    var shiftLine: String? { engine.shiftLine() }
     var resting: Bool { engine.resting }
     var heat: HeatLevel { engine.heat }
     var watchDetail: String? { engine.watchDetail }
@@ -148,12 +148,14 @@ final class DutyController: ObservableObject {
         if resting {
             return L10n.t("전투휴식 중 (폭염 경보) — 식으면 복귀", "Combat rest (heat warning) — resumes when cool", "降温休息中（过热警报）— 降温后恢复")
         }
+        // 근무 중이면 이번 근무가 실제로 지키는 것(화면이 꺼지는지)까지 보인다
+        let effect = engine.effectiveMode.effect()
         if isOnDuty, let remainingText {
-            return L10n.t("근무 중 · \(remainingText) 남음", "On duty · \(remainingText) left", "值班中 · 剩余 \(remainingText)")
+            return L10n.t("근무 중 · \(remainingText) 남음 · \(effect)", "On duty · \(remainingText) left · \(effect)", "值班中 · 剩余 \(remainingText) · \(effect)")
         }
         if isOnDuty, let started = engine.dutyStartedAt {
             let elapsed = DutyClock.format(now.timeIntervalSince(started))
-            return L10n.t("근무 중 · \(elapsed) 경과", "On duty · \(elapsed)", "值班中 · 已过 \(elapsed)")
+            return L10n.t("근무 중 · \(elapsed) 경과 · \(effect)", "On duty · \(elapsed) · \(effect)", "值班中 · 已过 \(elapsed) · \(effect)")
         }
         return order == .agentWatch ? L10n.t("에이전트 근무 대기 중", "Waiting for agents", "等待代理中") : L10n.t("취침 중", "Off duty", "休息中")
     }
@@ -211,7 +213,7 @@ final class DutyController: ObservableObject {
         await run(engine.lidRestoreResult(ok))
     }
 
-    private func lidCommand(_ body: @escaping @Sendable () -> Bool) async -> Bool {
+    private func lidCommand<T: Sendable>(_ body: @escaping @Sendable () -> T) async -> T {
         lidCommandsInFlight += 1
         lidCommandsStarted += 1
         defer { lidCommandsInFlight -= 1 }
@@ -234,8 +236,8 @@ final class DutyController: ObservableObject {
             case .reacquire:
                 assertion.reacquire()
             case .enableLid:
-                let ok = await lidCommand { SystemProbes.setLidSleepDisabled(true) }
-                await run(engine.lidEnableResult(ok, now: Date()))
+                let outcome = await lidCommand { SystemProbes.enableLidSleep() }
+                await run(engine.lidEnableResult(outcome, now: Date()))
             case .restoreLid:
                 let ok = await lidCommand { SystemProbes.restoreLidSleepWithWatchdog() }
                 await run(engine.lidRestoreResult(ok))

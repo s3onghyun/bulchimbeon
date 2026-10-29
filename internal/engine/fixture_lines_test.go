@@ -63,6 +63,12 @@ func lineValue(fn string, args json.RawMessage, lang Lang) (any, error) {
 		return n(BatteryRetreat(num(0), lang)), nil
 	case "lidFallback":
 		return n(LidFallback(lang)), nil
+	case "lidApprovalFailed":
+		var f []lidFailureJSON
+		if err := json.Unmarshal(args, &f); err != nil || len(f) != 1 {
+			return nil, fmt.Errorf("lidApprovalFailed args: %s", args)
+		}
+		return n(LidApprovalFailed(f[0].failure(), lang)), nil
 	case "lidResumeFallback":
 		return n(LidResumeFallback(lang)), nil
 	case "lidLeftOn":
