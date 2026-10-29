@@ -24,6 +24,9 @@
 | 공급망 | 의존성 탈취, CI Action 변조 | 서드파티 의존성 0개. CI Action 은 커밋 SHA 고정, `permissions: contents: read`, Dependabot 으로 갱신 |
 | 알림 (공증 전 대체 경로) | 알림 문구로 AppleScript 인젝션 | `osascript` 에 문구를 스크립트 문자열로 넣지 않고 argv 로 전달 (따옴표·역슬래시가 문자 그대로 표시되는 것 실측), 길이 제한 |
 | 배포 | 변조된 zip | CI 에서만 릴리스 빌드, SHA-256 체크섬 + Sigstore 빌드 출처 증명 (`gh attestation verify`) |
+| 업데이트 확인 (네트워크) | 사용자 정보 유출·추적, 조작된 응답 | 하루 한 번까지 `https://api.github.com/repos/s3onghyun/bulchimbeon/releases/latest` 에 GET 하나 (실패해도 그날의 한 번). 머리글은 `User-Agent: Bulchimbeon/<버전>`·`Accept`·고정값 `Accept-Language: en` 뿐 (시스템 언어 미전송), 쿠키·캐시·자격 증명 없는 ephemeral 세션. 설정·근무일지·에이전트·식별자는 보내지 않는다. `checkForUpdates` 로 끈다. 응답은 1 MiB 이하만 읽고 초안·프리릴리스·버전이 아닌 태그는 무시. 다운로드·릴리스 노트 주소는 응답의 URL 이 아니라 확인된 버전(숫자·점·영숫자)으로 앱이 만든다 |
+| 업데이트 설치 (zip 설치본) | 변조·손상된 zip, 다른 앱으로 바꿔치기, 다운그레이드, 반쯤 바뀐 앱 | 메뉴에서 누르고 확인해야만 시작 (백그라운드 다운로드·자동 설치 없음). HTTPS 만, zip 64 MiB 상한. 같은 릴리스의 `.sha256` 과 SHA-256 이 맞아야 하고, `/usr/bin/ditto` (절대 경로·최소 환경·셸 없음) 로 같은 볼륨의 임시 폴더에 푼 뒤 Security 프레임워크로 엄격 서명 검증(중첩 코드·모든 아키텍처), 서명 식별자·팀 ID 가 실행 중인 앱과 같음, hardened runtime, `CFBundleIdentifier`·버전이 권한 버전과 같음을 모두 확인해야만 `replaceItemAt` 으로 한 번에 바꾼다. 하나라도 실패하면 설치본은 그대로. 권한 상승은 하지 않는다 (쓸 수 없는 폴더·App Translocation 이면 거절하고 릴리스 페이지 안내). 새 번들에는 예전 번들의 확장 속성을 옮겨 붙이지 않는다. **한계:** 지금은 ad-hoc 서명이라 팀 ID 가 없어 체크섬·서명은 무결성만 보장하고, 출처는 GitHub 계정·릴리스를 믿는다 (zip 을 직접 받는 것과 같은 수준). 빌드 출처 증명은 앱이 검증하지 않으므로 필요하면 `gh attestation verify` 로 확인한다. 공증 뒤에는 팀 ID 비교가 출처 확인이 된다 |
+| 업데이트 설치 (Homebrew) | 숨은 셸, 셸 인젝션, brew 기록과 어긋남 | 앱이 스스로 바꾸지 않고 brew 에 맡긴다 (cask 는 `auto_updates` 를 선언하지 않음). 상수로 된 `.command` 스크립트(사용자 임시 폴더, 0700)를 터미널로 열어 모든 과정이 보이고, 끝나면 스스로 지운다. brew 경로는 Caskroom 기록이 있는 `/opt/homebrew/bin/brew`·`/usr/local/bin/brew` 중 하나만, 문구는 앱 상수를 작은따옴표로 감싼다. 바깥 문자열은 들어가지 않는다 |
 
 ## 리눅스 데몬 (`bulchimbeon`)
 
@@ -39,6 +42,7 @@
 | 설정·상태 파일 | 심볼릭 링크로 다른 파일 덮어쓰기, 반쯤 쓴 파일 | 파일 0600·디렉토리 0700, 임시 파일에 쓴 뒤 `rename`. 근무일지는 macOS 와 같이 `O_NOFOLLOW`·줄바꿈 제거·1MB 회전. 허용 값 밖의 설정은 기본값으로 |
 | 트레이 아이콘 (`bulchimbeon tray`, 세션 D-Bus) | 세션 버스로 들어온 호출로 정보 유출·설정 변조, 조작된 메시지로 크래시, 의존성 공급망 | 데몬과 따로 도는 프로세스이고, 데몬은 트레이 코드를 링크하지 않으며 세션 버스는 위의 잠금에만 씀 (테스트로 확인). 같은 사용자의 세션 버스에만 붙음 (unix 소켓, EXTERNAL 인증, TCP 주소 거부). 보여주는 것은 `bulchimbeon status` 와 같은 줄뿐이라 프로세스 인자·환경변수 없음. 메뉴로 바꿀 수 있는 것은 `uniformTheme` 하나이고, 알려진 테마 id 만 설정 저장소를 거쳐 기록. 받은 메시지는 크기 상한(32 MiB)·서명·패딩을 검사하고 unix fd 전달은 거부. D-Bus 클라이언트는 표준 라이브러리로 직접 구현 (서드파티 의존성 0개 유지) |
 | 트레이 아이콘 파일 | 다른 사용자가 바꿔치기, 반쯤 쓴 파일 | `$XDG_RUNTIME_DIR/bulchimbeon/tray-icons` (사용자 전용 런타임 디렉토리 안, 디렉토리 0700·파일 0600, 임시 파일에 쓴 뒤 `rename`). 런타임 디렉토리가 없으면 만들지 않고 픽스맵만 씀 |
+| 업데이트 확인 (`bulchimbeon run`) | 정보 유출, 데몬 멈춤, 원치 않는 설치 | macOS 와 같은 요청·머리글·주기. 표준 라이브러리 `net/http` (HTTPS 만, 쿠키 없음, https 가 아닌 리디렉트 거부, 15초 제한, 1 MiB 상한). 별도 고루틴이라 5초 점검을 막지 않는다. 알림만 한다: 아무것도 받거나 설치·실행하지 않고 패키지 관리자 명령은 `status`·`doctor`·트레이·저널에 출력만. 설치 방법은 파일로만 판단 (`/var/lib/dpkg/info`, pacman 로컬 DB, rpm DB 디렉토리, Homebrew Cellar 경로), 패키지 관리자를 실행하지 않음. 기록은 `$XDG_STATE_HOME/bulchimbeon/update.json` (0600, 임시 파일 뒤 `rename`). `checkForUpdates false` 로 끈다 |
 | 배포 (tar.gz, .deb, .rpm, AUR·COPR 레시피) | 변조된 파일, 공급망 | CI 에서만 빌드 (`go build -trimpath`, `dpkg-deb`, Ubuntu 저장소의 `rpmbuild` 로 tarball 의 바이너리를 다시 포장, 서드파티 패키징 도구 없음, 재현 가능한 빌드), `SHA256SUMS` + 빌드 출처 증명, Action 은 GitHub 소유·커밋 SHA 고정. AUR `PKGBUILD` 는 `scripts/bump-aur.sh` 가 체크섬·출처 증명을 검증한 뒤에만 sha256 을 넣고, COPR 소스 rpm 은 릴리스의 `SHA256SUMS` 와 맞는 tarball 로만 만든다. 어느 쪽도 저장소에서 자동으로 올리지 않음. 설치 스크립트는 네트워크·root 없이 `~/.local/bin`·`~/.config/systemd/user`·`~/.config/autostart` 에만 씀. 자동 시작 항목의 `Exec` 에는 평범한 경로만 넣고, 따옴표가 필요한 경로면 항목을 만들지 않음 |
 
 알려진 한계: 덮개를 닫으면 잠든다 (logind 설정은 바꾸지 않음). 같은 사용자가 `claude` 라는 이름의 바쁜 프로세스를 띄우면 근무를 유지시킬 수 있다 (macOS 와 같음).
@@ -47,7 +51,8 @@
 
 | 항목 | 이유 |
 |------|------|
-| 네트워크 통신 | 없음. 텔레메트리·업데이트 확인·분석 SDK 없음 |
+| 네트워크 통신 (업데이트 확인 외) | 없음. 텔레메트리·분석 SDK·그 밖의 요청 없음. 업데이트 확인은 위 표 |
+| 자동 설치 | 백그라운드 다운로드·조용한 설치 없음. 업데이트는 메뉴에서 누르고 확인할 때만 (리눅스는 명령 안내만) |
 | App Sandbox | `ps`·`pmset` 실행이 필요해 샌드박스와 양립 불가. 대신 위 항목으로 권한 사용 범위를 좁힘 |
 | 상주 root 데몬 | v0.1 은 필요할 때만 `osascript` 로 권한 상승. privileged helper(`SMAppService.daemon`)는 로드맵 v0.4 — 도입 시 XPC 호출자 코드서명 검증 필수 |
 

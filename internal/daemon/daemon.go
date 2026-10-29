@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"slices"
 	"sort"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/s3onghyun/bulchimbeon/internal/engine"
 	"github.com/s3onghyun/bulchimbeon/internal/platform"
 	"github.com/s3onghyun/bulchimbeon/internal/settings"
+	"github.com/s3onghyun/bulchimbeon/internal/update"
 )
 
 const (
@@ -40,6 +42,12 @@ type Config struct {
 	Out    io.Writer // journal output
 	Now    func() time.Time
 	PID    int
+	// Update checks for a newer release once a day (nil: never). It only notifies: the offer
+	// goes into state.json, so `status` and the tray show it with the command for Install.
+	Update *update.Checker
+	// Install is how this binary was installed (update.Install*), Arch its GOARCH.
+	Install string
+	Arch    string
 }
 
 // Daemon is one running agent watch.
@@ -57,6 +65,7 @@ type Daemon struct {
 	thermal   platform.ThermalReading
 	scanErr   string
 	lastLock  string
+	offer     *UpdateOffer
 }
 
 // ResolveLang: `--lang`, then the `language` setting, then LANGUAGE/LC_*/LANG.
@@ -80,6 +89,12 @@ func New(cfg Config) *Daemon {
 	}
 	if cfg.Out == nil {
 		cfg.Out = io.Discard
+	}
+	if cfg.Install == "" {
+		cfg.Install = update.InstallManual
+	}
+	if cfg.Arch == "" {
+		cfg.Arch = runtime.GOARCH
 	}
 	d := &Daemon{cfg: cfg, cpu: engine.NewCPUHistory(), log: engine.NewDutyLog(cfg.Paths.Log)}
 	d.reloadSettings()
@@ -172,7 +187,26 @@ func (d *Daemon) Tick() {
 		inh.Acquire()
 		d.reportLock()
 	}
+	d.pollUpdate(now)
 	d.writeState(now, false)
+}
+
+// pollUpdate starts the once-a-day check when it is due (in the background) and keeps the
+// offer for state.json. A new offer is also written to the journal, for headless machines.
+func (d *Daemon) pollUpdate(now time.Time) {
+	if d.cfg.Update == nil {
+		return
+	}
+	offer, ok := d.cfg.Update.Poll(d.settings.CheckForUpdates, now)
+	if !ok {
+		d.offer = nil
+		return
+	}
+	u := &UpdateOffer{Version: offer.Version.String(), Critical: offer.Critical, Install: d.cfg.Install, Arch: d.cfg.Arch}
+	if d.offer == nil || *d.offer != *u {
+		fmt.Fprintln(d.cfg.Out, "update: "+offer.Summary(engine.EN)+" · "+update.Instructions(offer, u.Install, u.Arch, engine.EN)[0])
+	}
+	d.offer = u
 }
 
 func floor(s settings.Settings) *int {
@@ -312,6 +346,15 @@ type State struct {
 	Problems      []string                `json:"settingsProblems,omitempty"`
 	ScanError     string                  `json:"scanError,omitempty"`
 	LogPath       string                  `json:"logPath"`
+	Update        *UpdateOffer            `json:"update,omitempty"`
+}
+
+// UpdateOffer is a newer release the daemon found, and how this machine installs it.
+type UpdateOffer struct {
+	Version  string `json:"version"`
+	Critical bool   `json:"critical"`
+	Install  string `json:"install"`
+	Arch     string `json:"arch"`
 }
 
 // AgentState is one agent's open and working processes. No arguments, no directories.
@@ -339,6 +382,7 @@ func (d *Daemon) state(now time.Time, stopped bool) State {
 		DutyStartedAt: e.DutyStartedAt(), Resting: e.Resting(), Heat: e.Heat().String(), Pose: string(e.Pose(now)),
 		Agents: append([]AgentState{}, d.agents...), Lock: d.cfg.Platform.Inhibitor.Status(), Battery: d.battery,
 		Thermal: d.thermal, Settings: d.settings, Problems: d.problems, ScanError: d.scanErr, LogPath: d.cfg.Paths.Log,
+		Update: d.offer,
 	}
 	if w := e.WatchDetail(); w != nil {
 		st.WatchDetail = *w

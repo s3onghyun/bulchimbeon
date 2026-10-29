@@ -29,6 +29,7 @@ func New() platform.Platform {
 		Holders:          logind,
 		SetXfceKeepAwake: lock.SetXfceKeepAwake,
 		Doctor:           Doctor,
+		InstallMethod:    InstallMethod,
 	}
 }
 

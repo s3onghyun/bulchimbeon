@@ -195,6 +195,9 @@ type Platform struct {
 	SetXfceKeepAwake func(on bool)
 	// Doctor checks the setup, prints the findings and returns false if something needs fixing.
 	Doctor func(w io.Writer, lang engine.Lang, xfceKeepAwake bool) bool
+	// InstallMethod says how this binary was installed (internal/update.Install*), for the
+	// update command `status` and `doctor` show; nil where it is not known.
+	InstallMethod func() string
 }
 
 // HolderSummary groups other programs' locks for display.

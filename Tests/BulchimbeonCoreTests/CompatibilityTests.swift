@@ -8,7 +8,7 @@ import Testing
     @Test func publicSettingsKeysAreFrozen() {
         let keys = SettingsKey.allCases.filter(\.isPublic).map(\.rawValue)
         #expect(keys == ["dutyMode", "batteryFloor", "agentGraceMinutes", "agentWatchCountsIdle",
-                         "customAgents", "patrolEnabled", "patrolScale", "uniformTheme"])
+                         "customAgents", "patrolEnabled", "patrolScale", "uniformTheme", "checkForUpdates"])
     }
 
     @Test func publicSettingValuesAreFrozen() {
@@ -22,6 +22,7 @@ import Testing
         // 테마는 늘어날 수 있지만, 한 번 나간 id 는 그대로 남는다
         #expect(Set(["default", "navy", "arctic"]).isSubset(of: UniformTheme.all.map(\.id)))
         #expect(SettingsValues.defaultUniformTheme == "default")
+        #expect(SettingsValues.defaultCheckForUpdates == true)
     }
 
     @Test func launchArgumentsAreFrozen() {

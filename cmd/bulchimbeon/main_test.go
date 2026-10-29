@@ -136,6 +136,16 @@ func TestConfigGetShowsEveryKey(t *testing.T) {
 	if code, out, _ := runCLI(t, "config", "get", "xfceKeepAwake"); code != exitOK || out != "true\n" {
 		t.Errorf("config get xfceKeepAwake = %d %q", code, out)
 	}
+	// the update check is on by default and turned off with one command
+	if code, out, _ := runCLI(t, "config", "get", "checkForUpdates"); code != exitOK || out != "true\n" {
+		t.Errorf("config get checkForUpdates = %d %q", code, out)
+	}
+	if code, _, errOut := runCLI(t, "config", "set", "checkForUpdates", "false"); code != exitOK {
+		t.Fatal(errOut)
+	}
+	if code, out, _ := runCLI(t, "config", "get", "checkForUpdates"); code != exitOK || out != "false\n" {
+		t.Errorf("config get checkForUpdates = %d %q", code, out)
+	}
 }
 
 // The tray's uniform menu and `config set` share the uniformTheme key.

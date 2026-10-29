@@ -5,6 +5,12 @@
 
 ## 다음 버전
 
+- 업데이트 확인: 앱과 리눅스 데몬이 하루 한 번 GitHub Releases 의 최신 릴리스를 묻는다. 요청은 `api.github.com/repos/s3onghyun/bulchimbeon/releases/latest` 에 대한 HTTPS GET 하나이고, 머리글은 `User-Agent: Bulchimbeon/<버전>`·`Accept`·고정값 `Accept-Language: en` 뿐이다. 설정·근무일지·식별자는 보내지 않고 텔레메트리는 없다. 새 공개 설정 `checkForUpdates` (기본 `true`) 로 끈다: `defaults write io.github.s3onghyun.bulchimbeon checkForUpdates -bool false`, 리눅스 `bulchimbeon config set checkForUpdates false`, 메뉴 "새 버전 확인 (하루 한 번)". 이 확인이 불침번의 유일한 네트워크 통신이다 (README "업데이트")
+- macOS 메뉴: 새 버전이 있으면 "새 버전 X.Y.Z — 업데이트" 와 "릴리스 노트 보기" 를 보인다. 누르고 확인해야만 설치한다. Homebrew 로 설치했으면 터미널에서 `brew update && brew upgrade --cask bulchimbeon` 을 보이게 실행하고 앱을 다시 연다. zip 으로 설치했으면 그 릴리스의 zip 과 `.sha256` 을 받아 체크섬을 맞추고, 새 앱의 코드 서명이 유효한지, 서명 식별자·팀 ID 가 지금 앱과 같은지, hardened runtime 인지, 권한 버전인지 확인한 뒤에만 앱을 바꾸고 다시 시작한다. 실패하면 설치된 앱은 그대로 두고 까닭과 릴리스 페이지를 보인다
+- 리눅스: 알림만 한다. `bulchimbeon status`·트레이 메뉴·`bulchimbeon doctor` 가 새 버전과, 설치한 방법(`.deb`, `.rpm`, AUR, Homebrew, tarball)에 맞는 명령을 보이고 데몬이 저널에 한 줄 남긴다. 마지막 확인 결과는 `$XDG_STATE_HOME/bulchimbeon/update.json` 에 둔다
+- 릴리스 노트의 `<!-- bulchimbeon: critical -->` (또는 `<!-- bulchimbeon: critical below X.Y.Z -->`) 한 줄로 중요 수정을 표시하면 메뉴·`status` 에 "(권장: 중요 수정)" 이 붙는다 (CONTRIBUTING 릴리스 체크리스트)
+- 언어 변경·업데이트 뒤 다시 열기는 1초를 기다리는 대신 이전 프로세스가 끝나기를 (최대 30초) 기다린다
+
 ## 0.10.2 — 2026-10-29
 
 - macOS 덮개 닫힘 근무: 0.10.0~0.10.1 에서 관리자 암호를 넣어도 매번 "덮개 근무 승인 거부 — 시스템 근무로 대체" 가 되던 문제를 고친다. 켤 때의 관리자 명령에 든 `pkill` 이, 같은 명령을 인자로 든 `osascript` 를 죽였다 (macOS 10.15+ 는 관리자 명령을 launchd 의 authtrampoline 아래에서 돌려 `osascript` 가 `pkill` 의 조상이 아니다). 그동안 `disablesleep 1` 은 켜진 채 앱은 모르고 있었다. 이제 명령 원문에 감시병 표식이 없고, 암호 창 취소(-128)와 승인 장치 실패를 가려 실패는 원인과 다시 하는 법을 일지·알림에 남긴다. 결과만 끊기고 덮개 잠자기 해제와 감시병이 확인되면 앱이 소유해 근무가 끝날 때 원복한다. 근무 중 메뉴 첫 줄은 이번 근무가 지키는 것(예: "화면은 꺼짐 · 맥만 깨어 있음")을 보이고, 대체 근무 중에는 근무 형태 아래에 "이번 근무: 화면은 꺼짐 · 맥만 깨어 있음 (덮개 근무 실패)" 처럼 까닭과 함께 보인다. 대체 근무 중 `caffeinate -i` 를 고르면 저장되는 방식이 바뀌므로 이제 "근무 방식 변경" 으로 일지에 남는다. `dutyMode` 키와 값은 그대로다 (#57)

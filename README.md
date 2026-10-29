@@ -27,7 +27,7 @@ Install: `brew install --cask s3onghyun/tap/bulchimbeon` — or [download the la
 
 **Why not just use `caffeinate` or Amphetamine?** Those are great when you want a manual, fixed wake lock. Bulchimbeon starts and ends the lock around active AI-agent work, so it does not get left on overnight.
 
-**What does it inspect or send?** It uses no hooks and makes no network connections. It observes only your own local process metadata to decide whether a supported agent is working; it never stores or prints process command lines or environment variables.
+**What does it inspect or send?** It uses no hooks. Its only network request is the once-a-day [update check](#updates), which sends nothing but its version and can be turned off. It observes only your own local process metadata to decide whether a supported agent is working; it never stores or prints process command lines or environment variables.
 
 **Can it keep a closed laptop awake?** Yes, but turning on the lid-closed mode requires an administrator approval. It restores normal lid sleep when the watch ends or the app quits.
 
@@ -131,6 +131,35 @@ Release zips are built only in GitHub Actions and carry a build provenance attes
 ```bash
 gh attestation verify Bulchimbeon-<version>.zip --repo s3onghyun/bulchimbeon
 shasum -a 256 -c Bulchimbeon-<version>.zip.sha256
+```
+
+## Updates
+
+Once a day the app (and the Linux daemon) asks GitHub whether a newer release is out. If one is, the menu shows
+**New version X.Y.Z — Update** and **Release notes**; a release that fixes a serious bug is marked
+**(recommended: important fix)**. Nothing is downloaded or installed until you click Update and confirm.
+
+- **Installed with Homebrew:** Terminal opens and runs `brew update && brew upgrade --cask bulchimbeon` in plain
+  sight, then reopens the app.
+- **Installed from the zip:** the app downloads `Bulchimbeon-X.Y.Z.zip` and its `.sha256` from that release, checks
+  the checksum, and checks that the new app's code signature is valid, has the same signing identifier and team as
+  the running app, uses the hardened runtime and is exactly the offered version. Only then does it replace itself and
+  restart; the current watch carries on. If any step fails, the installed app is left as it was and the release page
+  is offered instead. The app must sit in a folder you can write to, such as `/Applications`.
+- **Linux:** notify only. `bulchimbeon status`, the tray menu and `bulchimbeon doctor` show the update with the
+  command for how you installed it (`brew upgrade bulchimbeon-linux`, `sudo apt install ./….deb`,
+  `sudo dnf install ./….rpm`, `yay -Syu bulchimbeon-bin`, or the tarball), and the daemon notes it in the journal.
+
+**Privacy.** The check is a single HTTPS `GET https://api.github.com/repos/s3onghyun/bulchimbeon/releases/latest`,
+at most once a day, with only `User-Agent: Bulchimbeon/<version>`, `Accept` and a fixed `Accept-Language: en`.
+No settings, duty log, agent names, identifiers or cookies are sent, and there is no telemetry. As with any web
+request, GitHub sees your IP address. This is the only network access Bulchimbeon makes.
+
+To turn it off, untick **Check for updates (once a day)** in the menu, or:
+
+```bash
+defaults write io.github.s3onghyun.bulchimbeon checkForUpdates -bool false   # macOS
+bulchimbeon config set checkForUpdates false                                  # Linux
 ```
 
 ## How it works
@@ -362,7 +391,8 @@ back to logind. The desktop drops its inhibitor when the daemon's bus connection
 The app runs `pmset` with admin rights and reads other processes' metadata, so it has its own threat model:
 [SECURITY.md](SECURITY.md).
 
-- No network access, no third-party dependencies
+- No network access except the once-a-day [update check](#updates), which sends only the app version and can be turned off; no third-party dependencies
+- Updates install only after you click: Homebrew installs go through `brew` in a visible Terminal, zip installs are replaced only after the checksum and code-signature checks pass
 - No shell-injection surface: absolute paths, minimal environment, and only an app PID and a safely quoted app-owned stop-flag path enter the admin command
 - The root lid watchdog has no deadline to extend; the app owns all watch timing. A user-owned, non-world-writable empty stop flag can only make it run `pmset -a disablesleep 0`; it never reads the flag, follows it elsewhere, or writes it
 - Never stores or prints other processes' arguments or environment; never reads AI transcripts

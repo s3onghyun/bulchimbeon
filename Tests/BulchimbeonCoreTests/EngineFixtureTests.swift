@@ -167,6 +167,7 @@ import Testing
         #expect(SettingsValues.patrolScales == f["patrolScales"].array.compactMap(\.int))
         #expect(SettingsValues.defaultPatrolScale == f["defaultPatrolScale"].int)
         #expect(SettingsValues.defaultUniformTheme == f["defaultUniformTheme"].string)
+        #expect(SettingsValues.defaultCheckForUpdates == f["defaultCheckForUpdates"].bool)
         #expect(AgentCatalog.customKinds((0..<40).map { "a\($0)" }).count == f["maxCustomAgents"].int)
         #expect(LaunchArgument.allCases.map(\.rawValue) == f["launchArguments"].strings)
         let engine = DutyEngine(now: Date(timeIntervalSince1970: 0))

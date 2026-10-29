@@ -27,7 +27,7 @@
 
 **为什么不直接用 `caffeinate` 或 Amphetamine？** 想手动让 Mac 保持唤醒一段固定时间时，它们很好用。Bulchimbeon 只在 AI 代理真正干活时开启和关闭防休眠，所以不会整夜开着。
 
-**它会查看或发送什么？** 不使用 hook，也不建立任何网络连接。它只查看你自己账户的本地进程元数据来判断支持的代理是否在工作，从不保存或输出进程命令行和环境变量。
+**它会查看或发送什么？** 不使用 hook。唯一的网络请求是每天一次的[检查更新](README.md#updates)，除了应用版本什么也不发送，并且可以关闭（`defaults write io.github.s3onghyun.bulchimbeon checkForUpdates -bool false`，Linux 上为 `bulchimbeon config set checkForUpdates false`）。它只查看你自己账户的本地进程元数据来判断支持的代理是否在工作，从不保存或输出进程命令行和环境变量。
 
 **合上盖子也能保持唤醒吗？** 可以，但开启合盖模式需要管理员授权。值班结束或退出应用时，会恢复原来的合盖睡眠设置。
 
@@ -113,7 +113,7 @@ brew update && brew upgrade --cask bulchimbeon
 
 应用会以管理员权限执行 `pmset`，并读取其他进程的信息，因此单独整理了威胁模型：[SECURITY.md](SECURITY.md)
 
-- 无任何网络通信，零第三方依赖
+- 唯一的网络通信是每天一次的检查更新（只发送版本，可关闭），零第三方依赖
 - 不保存、不输出其他进程的参数与环境变量；不读取 AI 对话记录
 - 发布包只在 GitHub Actions 中构建，附带 SHA-256 校验和与构建来源证明（attestation）
 

@@ -10,6 +10,7 @@ type Paths struct {
 	Settings string // $XDG_CONFIG_HOME/bulchimbeon/settings.json
 	State    string // $XDG_STATE_HOME/bulchimbeon/state.json
 	Log      string // $XDG_STATE_HOME/bulchimbeon/duty-log.txt
+	Update   string // $XDG_STATE_HOME/bulchimbeon/update.json (the once-a-day update check)
 }
 
 // DefaultPaths follows the XDG Base Directory spec: settings under XDG_CONFIG_HOME
@@ -28,6 +29,7 @@ func DefaultPaths(getenv func(string) string, home string) Paths {
 		Settings: filepath.Join(config, "settings.json"),
 		State:    filepath.Join(state, "state.json"),
 		Log:      filepath.Join(state, "duty-log.txt"),
+		Update:   filepath.Join(state, "update.json"),
 	}
 }
 

@@ -51,8 +51,8 @@ go build ./cmd/bulchimbeon          # run | status | doctor | config
 - Put logic, especially agent detection and duty decisions, in `Sources/BulchimbeonCore/`
   with tests in `Tests/BulchimbeonCoreTests/`, mirrored in `internal/engine` through the
   fixtures. Keep `Sources/Bulchimbeon/` a thin shell that calls the system.
-- No network access of any kind, including telemetry and update checks. No third-party
-  dependencies.
+- No network access apart from the opt-out once-a-day update check (`UpdateCheck` in Core);
+  no telemetry. No third-party dependencies.
 - Write every user-facing string in both Korean and English: `L10n.t("한국어", "English")`.
 - After changing `Sources/BulchimbeonCore/Sprites.swift`, run `make icons` and commit the
   regenerated `Resources/AppIcon.icns` and `docs/sprites-preview.png`.
