@@ -5,6 +5,8 @@
 
 ## 다음 버전
 
+## 0.11.0 — 2026-10-29
+
 - 업데이트 확인: 앱과 리눅스 데몬이 하루 한 번 GitHub Releases 의 최신 릴리스를 묻는다. 요청은 `api.github.com/repos/s3onghyun/bulchimbeon/releases/latest` 에 대한 HTTPS GET 하나이고, 머리글은 `User-Agent: Bulchimbeon/<버전>`·`Accept`·고정값 `Accept-Language: en` 뿐이다. 설정·근무일지·식별자는 보내지 않고 텔레메트리는 없다. 새 공개 설정 `checkForUpdates` (기본 `true`) 로 끈다: `defaults write io.github.s3onghyun.bulchimbeon checkForUpdates -bool false`, 리눅스 `bulchimbeon config set checkForUpdates false`, 메뉴 "새 버전 확인 (하루 한 번)". 이 확인이 불침번의 유일한 네트워크 통신이다 (README "업데이트")
 - macOS 메뉴: 새 버전이 있으면 "새 버전 X.Y.Z — 업데이트" 와 "릴리스 노트 보기" 를 보인다. 누르고 확인해야만 설치한다. Homebrew 로 설치했으면 터미널에서 `brew update && brew upgrade --cask bulchimbeon` 을 보이게 실행하고 앱을 다시 연다. zip 으로 설치했으면 그 릴리스의 zip 과 `.sha256` 을 받아 체크섬을 맞추고, 새 앱의 코드 서명이 유효한지, 서명 식별자·팀 ID 가 지금 앱과 같은지, hardened runtime 인지, 권한 버전인지 확인한 뒤에만 앱을 바꾸고 다시 시작한다. 실패하면 설치된 앱은 그대로 두고 까닭과 릴리스 페이지를 보인다
 - 리눅스: 알림만 한다. `bulchimbeon status`·트레이 메뉴·`bulchimbeon doctor` 가 새 버전과, 설치한 방법(`.deb`, `.rpm`, AUR, Homebrew, tarball)에 맞는 명령을 보이고 데몬이 저널에 한 줄 남긴다. 마지막 확인 결과는 `$XDG_STATE_HOME/bulchimbeon/update.json` 에 둔다
