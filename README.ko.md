@@ -33,8 +33,8 @@
 
 1. 에이전트에게 일을 시킨다. 예: Claude Code에게 테스트를 돌리라고 한다.
 2. 몇 초 안에 메뉴바의 이등병이 손전등을 켠다.
-3. 메뉴를 연다. 첫 줄이 **불침번 — 근무 중 · 0:12 경과 · …** 이고, 그 아래 줄에 까닭이
-   **Claude Code 작업 중**처럼 나온다.
+3. 메뉴를 연다. 환영 안내(**알겠습니다**를 누를 때까지 보인다) 아래의 상태 줄이 **불침번 — 근무 중 · 0:12 경과 · …** 이고,
+   그 아래 줄에 까닭이 **Claude Code 작업 중**처럼 나온다.
 4. 아무 변화가 없으면 `/Applications/Bulchimbeon.app/Contents/MacOS/Bulchimbeon --diagnose`로 무엇이 감지되는지
    보고, [어디서 막혔는지 알려준다](https://github.com/s3onghyun/bulchimbeon/discussions).
 
@@ -58,13 +58,15 @@ Kernel Assertions: 0x100=MAGICWAKE
    id=592  level=255 0x100=MAGICWAKE creat=  mod= description=en0 owner=IOSkywalkNetworkBSDClient
 ```
 
-- `2026-10-31 13:17:17 +0900`: pmset이 맨 먼저 출력하는 날짜와 시각.
+- `2026-10-31 13:17:17 +0900`: 명령을 실행한 시각.
 - `Assertion status system-wide`: 잠자기 방지 종류마다 지금 몇 개가 걸려 있는지.
   `PreventUserIdleSystemSleep 1`은 무언가가 맥의 유휴 잠자기를 막고 있다는 뜻이다. `PreventUserIdleDisplaySleep 0`은
-  화면은 꺼질 수 있다는 뜻으로, 기본 근무 형태다. **화면 켜둠**를 고르면 이 줄이 1이 된다.
+  화면은 꺼질 수 있다는 뜻으로, 기본 근무 형태다. **화면 켜둠**을 고르면 불침번이 화면 잠자기 방지를 대신 잡으므로
+  이 줄이 1이 되고, 아래 불침번 줄의 종류도 그것으로 바뀐다.
 - `Listed by owning process`: 누가 잡고 있는지. `pid 2102(Bulchimbeon)`은 앱(pid는 맥마다 다르다),
-  `[0x002847ba00019690]`은 이 잠자기 방지의 ID, `13:31:53`은 잡은 시각, `PreventUserIdleSystemSleep`은 종류,
-  `named: "Bulchimbeon on duty: keeping AI agents awake"`는 찾아볼 고정된 이름이다.
+  `[0x002847ba00019690]`은 이 잠자기 방지의 ID, `13:31:53`은 근무가 이것을 잡은 시각이다. 날짜가 표시되지 않아
+  며칠 전에 잡은 것일 수도 있으므로 위 헤더 시각보다 늦게 보일 수 있다. `PreventUserIdleSystemSleep`은 종류
+  (**화면 켜둠**이면 `PreventUserIdleDisplaySleep`), `named: "Bulchimbeon on duty: keeping AI agents awake"`는 찾아볼 고정된 이름이다.
   맥을 깨워 두는 다른 앱이 있으면 여기에 함께 나온다.
 - `Kernel Assertions`: macOS 자체 항목(여기서는 `en0` 네트워크 깨우기)으로 불침번과 관계없고, 맥마다 다를 수 있다.
 

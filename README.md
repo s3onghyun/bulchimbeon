@@ -38,8 +38,8 @@ notification permission of its own.
 
 1. Give an agent a task, for example ask Claude Code to run your tests.
 2. Within a few seconds the private in the menu bar turns his flashlight on.
-3. Open the menu. The first line reads **Bulchimbeon — On duty · 0:12 · …**, and the line under it says why,
-   such as **Claude Code working**.
+3. Open the menu. Below the welcome note (shown until you click **Got it**), the status line reads
+   **Bulchimbeon — On duty · 0:12 · …**, and the line under it says why, such as **Claude Code working**.
 4. Nothing happens? Run `/Applications/Bulchimbeon.app/Contents/MacOS/Bulchimbeon --diagnose` to see what it
    detects, and [tell us where you got stuck](https://github.com/s3onghyun/bulchimbeon/discussions).
 
@@ -63,13 +63,16 @@ Kernel Assertions: 0x100=MAGICWAKE
    id=592  level=255 0x100=MAGICWAKE creat=  mod= description=en0 owner=IOSkywalkNetworkBSDClient
 ```
 
-- `2026-10-31 13:17:17 +0900`: the date and time pmset prints first.
+- `2026-10-31 13:17:17 +0900`: when the command ran.
 - `Assertion status system-wide`: every kind of sleep block, with how many are held right now.
   `PreventUserIdleSystemSleep 1` means something is keeping the Mac from idle sleep. `PreventUserIdleDisplaySleep 0`
-  means the display may still sleep, the default watch mode; with **Keep display on** that line reads 1 instead.
+  means the display may still sleep, the default watch mode. With **Keep display on**, Bulchimbeon takes a display
+  block instead, so `PreventUserIdleDisplaySleep` reads 1 and Bulchimbeon's own line below shows that kind.
 - `Listed by owning process`: who holds each block. `pid 2102(Bulchimbeon)` is the app (your pid will differ),
-  `[0x002847ba00019690]` is the block's ID, `13:31:53` is when it was taken, `PreventUserIdleSystemSleep` is
-  its kind, and `named: "Bulchimbeon on duty: keeping AI agents awake"` is the fixed name to look for.
+  `[0x002847ba00019690]` is the block's ID, and `13:31:53` is when the watch took it. That time has no date, so it
+  can be from an earlier day and read later than the header time. `PreventUserIdleSystemSleep` is its kind
+  (`PreventUserIdleDisplaySleep` with **Keep display on**), and `named: "Bulchimbeon on duty: keeping AI agents awake"`
+  is the fixed name to look for.
   Other apps holding the Mac awake would be listed here too.
 - `Kernel Assertions`: macOS's own entries (here a network wake for `en0`), not from Bulchimbeon; yours may differ.
 

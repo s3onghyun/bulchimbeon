@@ -37,7 +37,7 @@
 
 1. エージェントに作業を頼みます。例: Claude Code にテストを実行させる。
 2. 数秒以内に、メニューバーの二等兵が懐中電灯をつけます。
-3. メニューを開きます。1 行目が **Bulchimbeon — On duty · 0:12 · …**、その下の行に
+3. メニューを開きます。ようこそ表示（**Got it** を押すまで出ます）の下の状態行が **Bulchimbeon — On duty · 0:12 · …**、その下の行に
    **Claude Code working** のように理由が出ます（日本語 UI はまだないため英語表示）。
 4. 何も起きない場合は `/Applications/Bulchimbeon.app/Contents/MacOS/Bulchimbeon --diagnose` で検出結果を確認し、
    [どこでつまずいたか教えてください](https://github.com/s3onghyun/bulchimbeon/discussions)。
@@ -62,13 +62,15 @@ Kernel Assertions: 0x100=MAGICWAKE
    id=592  level=255 0x100=MAGICWAKE creat=  mod= description=en0 owner=IOSkywalkNetworkBSDClient
 ```
 
-- `2026-10-31 13:17:17 +0900`: pmset が最初に出力する日時。
+- `2026-10-31 13:17:17 +0900`: コマンドを実行した時刻。
 - `Assertion status system-wide`: スリープ防止の種類ごとに、いま保持されている数。
   `PreventUserIdleSystemSleep 1` は何かが Mac のアイドルスリープを止めていることを示します。`PreventUserIdleDisplaySleep 0`
-  はディスプレイはスリープしてよいという意味で、既定の勤務モードです。**Keep display on** を選ぶとこの行が 1 になります。
+  はディスプレイはスリープしてよいという意味で、既定の勤務モードです。**Keep display on** を選ぶと Bulchimbeon は代わりに
+  ディスプレイのスリープ防止を保持するので、この行が 1 になり、下の Bulchimbeon の行の種類もそれに変わります。
 - `Listed by owning process`: 誰が保持しているか。`pid 2102(Bulchimbeon)` はアプリ（pid は環境ごとに異なります）、
-  `[0x002847ba00019690]` はこのスリープ防止の ID、`13:31:53` は保持を始めた時刻、`PreventUserIdleSystemSleep` は種類、
-  `named: "Bulchimbeon on duty: keeping AI agents awake"` は探すときの固定の名前です。
+  `[0x002847ba00019690]` はこのスリープ防止の ID、`13:31:53` は勤務がこれを保持した時刻です。日付がないため前日以前の
+  こともあり、ヘッダーの時刻より後に見えることがあります。`PreventUserIdleSystemSleep` は種類
+  （**Keep display on** なら `PreventUserIdleDisplaySleep`）、`named: "Bulchimbeon on duty: keeping AI agents awake"` は探すときの固定の名前です。
   Mac を起こしている他のアプリもここに並びます。
 - `Kernel Assertions`: macOS 自身の項目（ここでは `en0` のネットワークウェイク）で、Bulchimbeon とは関係なく、環境によって異なります。
 
