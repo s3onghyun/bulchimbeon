@@ -27,7 +27,7 @@
 3. 在 *已阻止“Bulchimbeon”* 旁点击 **仍要打开**，然后确认。
    （从 macOS 15 起，右键 → 打开 已无法绕过。）
 
-<!-- TODO(mac-capture): add the Gatekeeper screenshot docs/media/gatekeeper-open-anyway.png here -->
+![系统设置“隐私与安全性”：已阻止“Bulchimbeon”的提示和“仍要打开”按钮](docs/media/gatekeeper-open-anyway.png)
 
 通知显示为 **「脚本编辑器」** 是正常的：公证之前，macOS 不会给应用本身授予通知权限。
 
@@ -76,9 +76,7 @@ Kernel Assertions: 0x100=MAGICWAKE
 
 捕获环境：macOS 26.6.2，Apple Silicon，Bulchimbeon 0.11.0。
 
-待命时（没有代理在工作），Bulchimbeon 会释放防休眠，`pid …(Bulchimbeon)` 这一行随之消失。
-
-<!-- TODO(mac-capture): real idle `pmset -g assertions` output and its line-by-line explanation -->
+待命时（没有代理在工作），Bulchimbeon 会释放防休眠，运行 `pmset -g assertions | grep -i bulchimbeon` 不会显示 Bulchimbeon 的行。
 
 ### 常见问题
 

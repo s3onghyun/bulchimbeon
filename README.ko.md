@@ -23,7 +23,7 @@
 3. *"Bulchimbeon"이(가) 차단되었습니다* 옆의 **그래도 열기**를 누르고 확인한다.
    (macOS 15부터는 우클릭 → 열기로 우회되지 않는다.)
 
-<!-- TODO(mac-capture): add the Gatekeeper screenshot docs/media/gatekeeper-open-anyway.png here -->
+![시스템 설정 개인정보 보호 및 보안: "Bulchimbeon"이(가) 차단되었다는 안내와 그래도 열기 버튼](docs/media/gatekeeper-open-anyway.png)
 
 알림이 **"스크립트 편집기"** 이름으로 표시되는 건 정상이다. 공증 전에는 macOS가 앱 자체의 알림 권한을 주지 않기 때문이다.
 
@@ -72,9 +72,7 @@ Kernel Assertions: 0x100=MAGICWAKE
 
 macOS 26.6.2, Apple Silicon, 불침번 0.11.0에서 캡처.
 
-대기 중(일하는 에이전트 없음)에는 불침번이 잠자기 방지를 풀어서 `pid …(Bulchimbeon)` 줄이 사라진다.
-
-<!-- TODO(mac-capture): real idle `pmset -g assertions` output and its line-by-line explanation -->
+대기 중(일하는 에이전트 없음)에는 불침번이 잠자기 방지를 풀어서, `pmset -g assertions | grep -i bulchimbeon`를 실행해도 불침번 줄이 나오지 않는다.
 
 ### 자주 묻는 질문
 

@@ -27,7 +27,7 @@ Install: `brew install --cask s3onghyun/tap/bulchimbeon` — or [download the la
 3. Next to *"Bulchimbeon" was blocked*, click **Open Anyway**, then confirm.
    (Since macOS 15, right-click → Open no longer bypasses this.)
 
-<!-- TODO(mac-capture): add the Gatekeeper screenshot docs/media/gatekeeper-open-anyway.png here -->
+![System Settings, Privacy & Security: "Bulchimbeon" was blocked to protect your Mac, with the Open Anyway button](docs/media/gatekeeper-open-anyway.png)
 
 Notifications show up as **"Script Editor"**. That is normal: until the app is notarized, macOS won't grant it
 notification permission of its own.
@@ -78,9 +78,7 @@ Kernel Assertions: 0x100=MAGICWAKE
 
 Captured on macOS 26.6.2, Apple Silicon, Bulchimbeon 0.11.0.
 
-While idle (no agent working), Bulchimbeon releases its block, so its `pid …(Bulchimbeon)` line is gone.
-
-<!-- TODO(mac-capture): real idle `pmset -g assertions` output and its line-by-line explanation -->
+While idle (no agent working), Bulchimbeon releases its block, so `pmset -g assertions | grep -i bulchimbeon` prints no Bulchimbeon line.
 
 ### FAQ
 

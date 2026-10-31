@@ -27,7 +27,7 @@
 3. *“Bulchimbeon”はブロックされました* の横の **このまま開く** を押して確認します。
    （macOS 15 以降は、右クリック → 開く では回避できません。）
 
-<!-- TODO(mac-capture): add the Gatekeeper screenshot docs/media/gatekeeper-open-anyway.png here -->
+![システム設定のプライバシーとセキュリティ:「Bulchimbeon」がブロックされた旨の表示と「このまま開く」ボタン](docs/media/gatekeeper-open-anyway.png)
 
 通知が **「スクリプトエディタ」** の名前で表示されるのは正常です。公証前は macOS がアプリ自身の通知権限を与えないためです。
 
@@ -76,9 +76,7 @@ Kernel Assertions: 0x100=MAGICWAKE
 
 macOS 26.6.2、Apple Silicon、Bulchimbeon 0.11.0 でキャプチャ。
 
-待機中（作業中のエージェントなし）は、Bulchimbeon がスリープ防止を解除するので `pid …(Bulchimbeon)` の行は消えます。
-
-<!-- TODO(mac-capture): real idle `pmset -g assertions` output and its line-by-line explanation -->
+待機中（作業中のエージェントなし）は、Bulchimbeon がスリープ防止を解除するので、`pmset -g assertions | grep -i bulchimbeon` を実行しても Bulchimbeon の行は出ません。
 
 ### よくある質問
 
