@@ -8,6 +8,7 @@
 
 > 🌐 [English](README.md) · [日本語](README.ja.md) · [简体中文](README.zh-CN.md)
 > 💡 [Ideas / 문의 / 建议](https://github.com/s3onghyun/bulchimbeon/discussions)
+> 🗳️ **어떤 에이전트와 함께 쓰세요? 어디서 막혔나요?** [투표하고 알려주기](https://github.com/s3onghyun/bulchimbeon/discussions)
 
 ![불침번 데모](docs/media/demo.gif)
 
@@ -15,9 +16,63 @@
 
 설치: `brew install --cask s3onghyun/tap/bulchimbeon` — 또는 [최신 macOS zip을 내려받아](https://github.com/s3onghyun/bulchimbeon/releases) `/Applications`로 옮긴다.
 
-**첫 실행:** 아직 공증을 받지 않아 macOS가 한 번 막는다. [설치의 첫 실행 안내](#설치)를 따른다.
+**첫 실행:** 아직 Apple 공증(notarization)을 받지 않은 ad-hoc 서명 앱이라 macOS가 한 번 막는다.
+
+1. 불침번을 연다. 열 수 없다는 창이 뜨면 **완료**를 누른다.
+2. **시스템 설정 → 개인정보 보호 및 보안**에서 아래 **보안** 항목까지 내린다.
+3. *"Bulchimbeon"이(가) 차단되었습니다* 옆의 **그래도 열기**를 누르고 확인한다.
+   (macOS 15부터는 우클릭 → 열기로 우회되지 않는다.)
+
+<!-- TODO(mac-capture): add the Gatekeeper screenshot docs/media/gatekeeper-open-anyway.png here -->
+
+알림이 **"스크립트 편집기"** 이름으로 표시되는 건 정상이다. 공증 전에는 macOS가 앱 자체의 알림 권한을 주지 않기 때문이다.
 
 **지원 에이전트:** Claude Code · Codex · Gemini CLI · Cursor Agent · Copilot CLI · Aider · OpenCode (사용자 지정 에이전트도 가능).
+
+### 설치 후 1분 점검
+
+1. 에이전트에게 일을 시킨다. 예: Claude Code에게 테스트를 돌리라고 한다.
+2. 몇 초 안에 메뉴바의 이등병이 손전등을 켠다.
+3. 메뉴를 연다. 첫 줄이 **불침번 — 근무 중 · 0:12 경과 · …** 이고, 그 아래 줄에 까닭이
+   **Claude Code 작업 중**처럼 나온다.
+4. 아무 변화가 없으면 `/Applications/Bulchimbeon.app/Contents/MacOS/Bulchimbeon --diagnose`로 무엇이 감지되는지
+   보고, [어디서 막혔는지 알려준다](https://github.com/s3onghyun/bulchimbeon/discussions).
+
+macOS가 실제로 들고 있는 잠자기 방지는 `pmset -g assertions`로 본다. 근무 중일 때:
+
+```text
+2026-10-31 13:17:17 +0900
+Assertion status system-wide:
+   BackgroundTask                 0
+   ApplePushServiceTask           0
+   UserIsActive                   0
+   PreventUserIdleDisplaySleep    0
+   SoftwareUpdateTask             0
+   PreventSystemSleep             0
+   ExternalMedia                  0
+   PreventUserIdleSystemSleep     1
+   NetworkClientActive            0
+Listed by owning process:
+   pid 2102(Bulchimbeon): [0x002847ba00019690] 13:31:53 PreventUserIdleSystemSleep named: "Bulchimbeon on duty: keeping AI agents awake"
+Kernel Assertions: 0x100=MAGICWAKE
+   id=592  level=255 0x100=MAGICWAKE creat=  mod= description=en0 owner=IOSkywalkNetworkBSDClient
+```
+
+- `2026-10-31 13:17:17 +0900`: pmset이 맨 먼저 출력하는 날짜와 시각.
+- `Assertion status system-wide`: 잠자기 방지 종류마다 지금 몇 개가 걸려 있는지.
+  `PreventUserIdleSystemSleep 1`은 무언가가 맥의 유휴 잠자기를 막고 있다는 뜻이다. `PreventUserIdleDisplaySleep 0`은
+  화면은 꺼질 수 있다는 뜻으로, 기본 근무 형태다. **화면 켜둠**를 고르면 이 줄이 1이 된다.
+- `Listed by owning process`: 누가 잡고 있는지. `pid 2102(Bulchimbeon)`은 앱(pid는 맥마다 다르다),
+  `[0x002847ba00019690]`은 이 잠자기 방지의 ID, `13:31:53`은 잡은 시각, `PreventUserIdleSystemSleep`은 종류,
+  `named: "Bulchimbeon on duty: keeping AI agents awake"`는 찾아볼 고정된 이름이다.
+  맥을 깨워 두는 다른 앱이 있으면 여기에 함께 나온다.
+- `Kernel Assertions`: macOS 자체 항목(여기서는 `en0` 네트워크 깨우기)으로 불침번과 관계없고, 맥마다 다를 수 있다.
+
+macOS 26.6.2, Apple Silicon, 불침번 0.11.0에서 캡처.
+
+대기 중(일하는 에이전트 없음)에는 불침번이 잠자기 방지를 풀어서 `pid …(Bulchimbeon)` 줄이 사라진다.
+
+<!-- TODO(mac-capture): real idle `pmset -g assertions` output and its line-by-line explanation -->
 
 ### 자주 묻는 질문
 
@@ -112,10 +167,7 @@ brew update && brew upgrade --cask bulchimbeon
 
 또는 [Releases](https://github.com/s3onghyun/bulchimbeon/releases) 에서 zip 을 받아 `/Applications` 로 옮긴다. (macOS 13+, Apple Silicon·Intel universal)
 
-> **첫 실행:** 아직 Apple 공증(notarization)을 받지 않은 ad-hoc 서명 앱이라 macOS 가 실행을 막는다.
-> 한 번 열기를 시도한 뒤 **시스템 설정 → 개인정보 보호 및 보안 → "그래도 열기"** 를 누르면 된다.
-> (macOS 15 부터는 우클릭 → 열기로 우회되지 않는다.)
-> 공증 전에는 macOS 가 알림 권한을 주지 않아서, 알림이 **"스크립트 편집기"** 이름으로 표시된다.
+첫 실행: macOS가 앱을 한 번 막는다. 방법은 [바로 시작하기](#바로-시작하기)에 있다.
 
 ### 받은 파일 검증 (선택)
 
