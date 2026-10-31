@@ -12,7 +12,7 @@ A pixel-art private takes that shift for your Mac.
 
 > 🌐 [한국어](README.ko.md) · [日本語](README.ja.md) · [简体中文](README.zh-CN.md)
 > 💡 [Ideas / 문의 / 建议](https://github.com/s3onghyun/bulchimbeon/discussions)
-> 🗳️ **Which agent do you use it with? Where did you get stuck?** [Vote and tell us](https://github.com/s3onghyun/bulchimbeon/discussions)
+> 🗳️ **Which agent do you use it with? Where did you get stuck?** [Vote and tell us](https://github.com/s3onghyun/bulchimbeon/discussions/64)
 
 ![Bulchimbeon demo](docs/media/demo.gif)
 
@@ -41,7 +41,7 @@ notification permission of its own.
 3. Open the menu. Below the welcome note (shown until you click **Got it**), the status line reads
    **Bulchimbeon — On duty · 0:12 · …**, and the line under it says why, such as **Claude Code working**.
 4. Nothing happens? Run `/Applications/Bulchimbeon.app/Contents/MacOS/Bulchimbeon --diagnose` to see what it
-   detects, and [tell us where you got stuck](https://github.com/s3onghyun/bulchimbeon/discussions).
+   detects, and [tell us where you got stuck](https://github.com/s3onghyun/bulchimbeon/discussions/64).
 
 To see the sleep block macOS itself is holding, run `pmset -g assertions`. While on watch:
 

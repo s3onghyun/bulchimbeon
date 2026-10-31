@@ -12,7 +12,7 @@
 > 📝 この日本語版は AI による翻訳です。より自然な表現への修正 PR を歓迎します。
 > [English](README.md) · [한국어](README.ko.md) · [简体中文](README.zh-CN.md)
 > 💡 [Ideas / 문의 / 建议](https://github.com/s3onghyun/bulchimbeon/discussions)
-> 🗳️ **どのエージェントと使っていますか？どこでつまずきましたか？** [投票して教えてください](https://github.com/s3onghyun/bulchimbeon/discussions)
+> 🗳️ **どのエージェントと使っていますか？どこでつまずきましたか？** [投票して教えてください](https://github.com/s3onghyun/bulchimbeon/discussions/64)
 
 ![Bulchimbeon デモ](docs/media/demo.gif)
 
@@ -40,7 +40,7 @@
 3. メニューを開きます。ようこそ表示（**Got it** を押すまで出ます）の下の状態行が **Bulchimbeon — On duty · 0:12 · …**、その下の行に
    **Claude Code working** のように理由が出ます（日本語 UI はまだないため英語表示）。
 4. 何も起きない場合は `/Applications/Bulchimbeon.app/Contents/MacOS/Bulchimbeon --diagnose` で検出結果を確認し、
-   [どこでつまずいたか教えてください](https://github.com/s3onghyun/bulchimbeon/discussions)。
+   [どこでつまずいたか教えてください](https://github.com/s3onghyun/bulchimbeon/discussions/64)。
 
 macOS が実際に保持しているスリープ防止は `pmset -g assertions` で確認できます。勤務中:
 

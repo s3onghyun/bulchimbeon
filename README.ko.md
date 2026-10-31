@@ -8,7 +8,7 @@
 
 > 🌐 [English](README.md) · [日本語](README.ja.md) · [简体中文](README.zh-CN.md)
 > 💡 [Ideas / 문의 / 建议](https://github.com/s3onghyun/bulchimbeon/discussions)
-> 🗳️ **어떤 에이전트와 함께 쓰세요? 어디서 막혔나요?** [투표하고 알려주기](https://github.com/s3onghyun/bulchimbeon/discussions)
+> 🗳️ **어떤 에이전트와 함께 쓰세요? 어디서 막혔나요?** [투표하고 알려주기](https://github.com/s3onghyun/bulchimbeon/discussions/64)
 
 ![불침번 데모](docs/media/demo.gif)
 
@@ -36,7 +36,7 @@
 3. 메뉴를 연다. 환영 안내(**알겠습니다**를 누를 때까지 보인다) 아래의 상태 줄이 **불침번 — 근무 중 · 0:12 경과 · …** 이고,
    그 아래 줄에 까닭이 **Claude Code 작업 중**처럼 나온다.
 4. 아무 변화가 없으면 `/Applications/Bulchimbeon.app/Contents/MacOS/Bulchimbeon --diagnose`로 무엇이 감지되는지
-   보고, [어디서 막혔는지 알려준다](https://github.com/s3onghyun/bulchimbeon/discussions).
+   보고, [어디서 막혔는지 알려준다](https://github.com/s3onghyun/bulchimbeon/discussions/64).
 
 macOS가 실제로 들고 있는 잠자기 방지는 `pmset -g assertions`로 본다. 근무 중일 때:
 

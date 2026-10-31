@@ -12,7 +12,7 @@
 > 📝 本中文版由 AI 翻译，欢迎提交 PR 改进表达。
 > [English](README.md) · [한국어](README.ko.md) · [日本語](README.ja.md)
 > 💡 [Ideas / 문의 / 建议](https://github.com/s3onghyun/bulchimbeon/discussions)
-> 🗳️ **你和哪个代理一起用？在哪一步卡住了？** [来投票并告诉我们](https://github.com/s3onghyun/bulchimbeon/discussions)
+> 🗳️ **你和哪个代理一起用？在哪一步卡住了？** [来投票并告诉我们](https://github.com/s3onghyun/bulchimbeon/discussions/64)
 
 ![Bulchimbeon 演示](docs/media/demo.gif)
 
@@ -40,7 +40,7 @@
 3. 打开菜单。在欢迎提示（点 **知道了** 之前会一直显示）下方，状态行显示 **Bulchimbeon — 值班中 · 已过 0:12 · …**，
    下一行写明原因，例如 **Claude Code 正在工作**。
 4. 没有反应？运行 `/Applications/Bulchimbeon.app/Contents/MacOS/Bulchimbeon --diagnose` 查看检测结果，
-   并[告诉我们卡在哪里](https://github.com/s3onghyun/bulchimbeon/discussions)。
+   并[告诉我们卡在哪里](https://github.com/s3onghyun/bulchimbeon/discussions/64)。
 
 要查看 macOS 实际持有的防休眠，运行 `pmset -g assertions`。值班中：
 
