@@ -12,6 +12,7 @@
 > 📝 本中文版由 AI 翻译，欢迎提交 PR 改进表达。
 > [English](README.md) · [한국어](README.ko.md) · [日本語](README.ja.md)
 > 💡 [Ideas / 문의 / 建议](https://github.com/s3onghyun/bulchimbeon/discussions)
+> 🗳️ **你和哪个代理一起用？在哪一步卡住了？** [来投票并告诉我们](https://github.com/s3onghyun/bulchimbeon/discussions/64)
 
 ![Bulchimbeon 演示](docs/media/demo.gif)
 
@@ -19,9 +20,63 @@
 
 安装：`brew install --cask s3onghyun/tap/bulchimbeon` —— 或[下载最新的 macOS zip](https://github.com/s3onghyun/bulchimbeon/releases) 并移动到 `/Applications`。
 
-**首次启动：** 应用尚未经过公证，macOS 会拦截一次。请按照[安装中的首次启动步骤](#安装)操作。
+**首次启动：** 应用目前为 ad-hoc 签名，尚未经过 Apple 公证，macOS 会拦截一次：
+
+1. 打开 Bulchimbeon。macOS 提示无法打开时，点击 **完成**。
+2. 前往 **系统设置 → 隐私与安全性**，向下滚动到 **安全性**。
+3. 在 *已阻止“Bulchimbeon”* 旁点击 **仍要打开**，然后确认。
+   （从 macOS 15 起，右键 → 打开 已无法绕过。）
+
+![系统设置“隐私与安全性”：已阻止“Bulchimbeon”的提示和“仍要打开”按钮](docs/media/gatekeeper-open-anyway.png)
+
+通知显示为 **「脚本编辑器」** 是正常的：公证之前，macOS 不会给应用本身授予通知权限。
 
 **支持的代理：** Claude Code · Codex · Gemini CLI · Cursor Agent · Copilot CLI · Aider · OpenCode（也可添加自定义代理）。
+
+### 安装后 1 分钟检查
+
+1. 给代理派个任务，例如让 Claude Code 跑一遍测试。
+2. 几秒内，菜单栏里的小兵会打开手电筒。
+3. 打开菜单。在欢迎提示（点 **知道了** 之前会一直显示）下方，状态行显示 **Bulchimbeon — 值班中 · 已过 0:12 · …**，
+   下一行写明原因，例如 **Claude Code 正在工作**。
+4. 没有反应？运行 `/Applications/Bulchimbeon.app/Contents/MacOS/Bulchimbeon --diagnose` 查看检测结果，
+   并[告诉我们卡在哪里](https://github.com/s3onghyun/bulchimbeon/discussions/64)。
+
+要查看 macOS 实际持有的防休眠，运行 `pmset -g assertions`。值班中：
+
+```text
+2026-10-31 13:17:17 +0900
+Assertion status system-wide:
+   BackgroundTask                 0
+   ApplePushServiceTask           0
+   UserIsActive                   0
+   PreventUserIdleDisplaySleep    0
+   SoftwareUpdateTask             0
+   PreventSystemSleep             0
+   ExternalMedia                  0
+   PreventUserIdleSystemSleep     1
+   NetworkClientActive            0
+Listed by owning process:
+   pid 2102(Bulchimbeon): [0x002847ba00019690] 13:31:53 PreventUserIdleSystemSleep named: "Bulchimbeon on duty: keeping AI agents awake"
+Kernel Assertions: 0x100=MAGICWAKE
+   id=592  level=255 0x100=MAGICWAKE creat=  mod= description=en0 owner=IOSkywalkNetworkBSDClient
+```
+
+- `2026-10-31 13:17:17 +0900`：运行命令的时间。
+- `Assertion status system-wide`：每种防休眠当前被持有的数量。
+  `PreventUserIdleSystemSleep 1` 表示有程序在阻止 Mac 空闲休眠。`PreventUserIdleDisplaySleep 0`
+  表示屏幕仍可关闭，这是默认的值班模式；选择 **保持屏幕常亮** 时，Bulchimbeon 改为持有屏幕防休眠，
+  这一行会变成 1，下方 Bulchimbeon 那一行的类型也随之改变。
+- `Listed by owning process`：由谁持有。`pid 2102(Bulchimbeon)` 是本应用（你的 pid 会不同），
+  `[0x002847ba00019690]` 是这条防休眠的 ID，`13:31:53` 是值班持有它的时间。这个时间不带日期，可能是前一天或更早，
+  所以可能比开头的时间更晚。`PreventUserIdleSystemSleep` 是类型
+  （选择 **保持屏幕常亮** 时为 `PreventUserIdleDisplaySleep`），`named: "Bulchimbeon on duty: keeping AI agents awake"` 是可用来查找的固定名称。
+  其他让 Mac 保持唤醒的应用也会列在这里。
+- `Kernel Assertions`：macOS 自己的条目（这里是 `en0` 的网络唤醒），与 Bulchimbeon 无关，你的可能不同。
+
+捕获环境：macOS 26.6.2，Apple Silicon，Bulchimbeon 0.11.0。
+
+待命时（没有代理在工作），Bulchimbeon 会释放防休眠，运行 `pmset -g assertions | grep -i bulchimbeon` 不会显示 Bulchimbeon 的行。
 
 ### 常见问题
 
@@ -96,9 +151,7 @@ brew update && brew upgrade --cask bulchimbeon
 
 需要 macOS 13 及以上，通用二进制（Apple Silicon 与 Intel）。
 
-> **首次启动：** 应用目前为 ad-hoc 签名，尚未经过 Apple 公证，macOS 会拦截一次。
-> 先尝试打开，然后前往 **系统设置 → 隐私与安全性 →「仍要打开」**。
-> 公证之前，通知会以「脚本编辑器」的名义显示。
+首次启动：macOS 会拦截一次，步骤见[快速开始](#快速开始)。
 
 ## 工作原理（简要）
 

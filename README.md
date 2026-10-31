@@ -12,6 +12,7 @@ A pixel-art private takes that shift for your Mac.
 
 > 🌐 [한국어](README.ko.md) · [日本語](README.ja.md) · [简体中文](README.zh-CN.md)
 > 💡 [Ideas / 문의 / 建议](https://github.com/s3onghyun/bulchimbeon/discussions)
+> 🗳️ **Which agent do you use it with? Where did you get stuck?** [Vote and tell us](https://github.com/s3onghyun/bulchimbeon/discussions/64)
 
 ![Bulchimbeon demo](docs/media/demo.gif)
 
@@ -19,9 +20,65 @@ A pixel-art private takes that shift for your Mac.
 
 Install: `brew install --cask s3onghyun/tap/bulchimbeon` — or [download the latest macOS zip](https://github.com/s3onghyun/bulchimbeon/releases) and move it to `/Applications`.
 
-**First launch:** the app is not notarized yet, so macOS blocks it once. See the [first-launch steps under Install](#install).
+**First launch:** the app is ad-hoc signed and not notarized by Apple yet, so macOS blocks it once:
+
+1. Open Bulchimbeon. macOS says it can't be opened; click **Done**.
+2. Go to **System Settings → Privacy & Security** and scroll down to **Security**.
+3. Next to *"Bulchimbeon" was blocked*, click **Open Anyway**, then confirm.
+   (Since macOS 15, right-click → Open no longer bypasses this.)
+
+![System Settings, Privacy & Security: "Bulchimbeon" was blocked to protect your Mac, with the Open Anyway button](docs/media/gatekeeper-open-anyway.png)
+
+Notifications show up as **"Script Editor"**. That is normal: until the app is notarized, macOS won't grant it
+notification permission of its own.
 
 **Supported agents:** Claude Code · Codex · Gemini CLI · Cursor Agent · Copilot CLI · Aider · OpenCode (and your own custom agents).
+
+### 1-minute check after install
+
+1. Give an agent a task, for example ask Claude Code to run your tests.
+2. Within a few seconds the private in the menu bar turns his flashlight on.
+3. Open the menu. Below the welcome note (shown until you click **Got it**), the status line reads
+   **Bulchimbeon — On duty · 0:12 · …**, and the line under it says why, such as **Claude Code working**.
+4. Nothing happens? Run `/Applications/Bulchimbeon.app/Contents/MacOS/Bulchimbeon --diagnose` to see what it
+   detects, and [tell us where you got stuck](https://github.com/s3onghyun/bulchimbeon/discussions/64).
+
+To see the sleep block macOS itself is holding, run `pmset -g assertions`. While on watch:
+
+```text
+2026-10-31 13:17:17 +0900
+Assertion status system-wide:
+   BackgroundTask                 0
+   ApplePushServiceTask           0
+   UserIsActive                   0
+   PreventUserIdleDisplaySleep    0
+   SoftwareUpdateTask             0
+   PreventSystemSleep             0
+   ExternalMedia                  0
+   PreventUserIdleSystemSleep     1
+   NetworkClientActive            0
+Listed by owning process:
+   pid 2102(Bulchimbeon): [0x002847ba00019690] 13:31:53 PreventUserIdleSystemSleep named: "Bulchimbeon on duty: keeping AI agents awake"
+Kernel Assertions: 0x100=MAGICWAKE
+   id=592  level=255 0x100=MAGICWAKE creat=  mod= description=en0 owner=IOSkywalkNetworkBSDClient
+```
+
+- `2026-10-31 13:17:17 +0900`: when the command ran.
+- `Assertion status system-wide`: every kind of sleep block, with how many are held right now.
+  `PreventUserIdleSystemSleep 1` means something is keeping the Mac from idle sleep. `PreventUserIdleDisplaySleep 0`
+  means the display may still sleep, the default watch mode. With **Keep display on**, Bulchimbeon takes a display
+  block instead, so `PreventUserIdleDisplaySleep` reads 1 and Bulchimbeon's own line below shows that kind.
+- `Listed by owning process`: who holds each block. `pid 2102(Bulchimbeon)` is the app (your pid will differ),
+  `[0x002847ba00019690]` is the block's ID, and `13:31:53` is when the watch took it. That time has no date, so it
+  can be from an earlier day and read later than the header time. `PreventUserIdleSystemSleep` is its kind
+  (`PreventUserIdleDisplaySleep` with **Keep display on**), and `named: "Bulchimbeon on duty: keeping AI agents awake"`
+  is the fixed name to look for.
+  Other apps holding the Mac awake would be listed here too.
+- `Kernel Assertions`: macOS's own entries (here a network wake for `en0`), not from Bulchimbeon; yours may differ.
+
+Captured on macOS 26.6.2, Apple Silicon, Bulchimbeon 0.11.0.
+
+While idle (no agent working), Bulchimbeon releases its block, so `pmset -g assertions | grep -i bulchimbeon` prints no Bulchimbeon line.
 
 ### FAQ
 
@@ -119,10 +176,7 @@ brew update && brew upgrade --cask bulchimbeon
 Or download the zip from [Releases](https://github.com/s3onghyun/bulchimbeon/releases) and move it to `/Applications`.
 macOS 13+, universal (Apple Silicon and Intel).
 
-> **First launch:** the app is ad-hoc signed and not notarized by Apple yet, so macOS blocks it once.
-> Try to open it, then go to **System Settings → Privacy & Security → "Open Anyway"**.
-> (Since macOS 15, right-click → Open no longer bypasses this.)
-> Until it's notarized, macOS won't grant it notification permission, so notifications show up as **"Script Editor"**.
+First launch: macOS blocks the app once; the steps are in [Start here](#start-here).
 
 ### Verify the download (optional)
 
