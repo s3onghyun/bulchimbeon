@@ -54,8 +54,16 @@ brew list --cask --versions bulchimbeon
 Run the last line only if `command -v brew` printed a path.
 
 - `ls` says `No such file or directory`: not installed. Skip the `defaults` line and go to M3.
-- `brew list` prints `bulchimbeon X.Y.Z`: installed with Homebrew. To update, run `brew update`, then
-  `brew upgrade --cask bulchimbeon`, then go to M5.
+- `brew list` prints `bulchimbeon X.Y.Z`: installed with Homebrew. To update, quit the running copy first so M5
+  starts the new version, then upgrade, one command per line:
+
+  ```sh
+  osascript -e 'quit app "Bulchimbeon"'
+  brew update
+  brew upgrade --cask bulchimbeon
+  ```
+
+  Then go to M5.
 - The app exists but `brew list` prints nothing (or there is no Homebrew): installed from the zip. Ask the person
   whether to replace it with the latest release (M4b), or keep it and go to M5.
 
