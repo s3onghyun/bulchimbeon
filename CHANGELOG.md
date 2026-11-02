@@ -5,6 +5,8 @@
 
 ## 다음 버전
 
+- macOS 첫 실행: 새로 설치한 앱을 처음 켜면 에이전트 근무가 켜진 채 시작해, 따로 체크하지 않아도 일하는 에이전트를 지킨다. 저장된 근무 명령(`dutyOrder`)도 근무 형태(`dutyMode`, 앱이 실행할 때마다 저장)도 없을 때만이다. 근무를 껐거나 시간 근무 중이던 사용자의 선택은 그대로 따른다. 배터리 하한과 폭염 대응도 그대로다. 근무일지에 "첫 실행 — 에이전트 근무 기본으로 켬" 을 남기고, 환영 안내에 끄는 법을 보인다. 리눅스 데몬은 원래 실행되면 늘 에이전트 근무라 바뀌지 않는다
+
 ## 0.11.0 — 2026-10-29
 
 - 업데이트 확인: 앱과 리눅스 데몬이 하루 한 번 GitHub Releases 의 최신 릴리스를 묻는다. 요청은 `api.github.com/repos/s3onghyun/bulchimbeon/releases/latest` 에 대한 HTTPS GET 하나이고, 머리글은 `User-Agent: Bulchimbeon/<버전>`·`Accept`·고정값 `Accept-Language: en` 뿐이다. 설정·근무일지·식별자는 보내지 않고 텔레메트리는 없다. 새 공개 설정 `checkForUpdates` (기본 `true`) 로 끈다: `defaults write io.github.s3onghyun.bulchimbeon checkForUpdates -bool false`, 리눅스 `bulchimbeon config set checkForUpdates false`, 메뉴 "새 버전 확인 (하루 한 번)". 이 확인이 불침번의 유일한 네트워크 통신이다 (README "업데이트")

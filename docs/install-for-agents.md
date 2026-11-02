@@ -141,8 +141,9 @@ defaults read /Applications/Bulchimbeon.app/Contents/Info CFBundleShortVersionSt
 
 ### M5. Launch with agent watch on
 
-A fresh install starts **off duty**: it guards nothing until **Agent watch** is turned on. The `--agent-watch`
-launch flag turns it on, and the app remembers it across restarts.
+**Agent watch** is on by default: the first launch of a fresh install turns it on, and the app remembers the
+person's choice across restarts. Versions up to 0.11.0 start off duty instead, so launch with the `--agent-watch`
+flag anyway; it turns agent watch on in every version.
 
 ```sh
 pgrep -x Bulchimbeon
@@ -186,7 +187,7 @@ pgrep -x Bulchimbeon
   an hour). Do not try to bypass it yourself.
 
 In every case, finish with the person: ask them to click the soldier in the menu bar and check that
-**🤖 Agent watch (auto shift)** is ticked (tick it if not; after Open Anyway the app starts without the flag). The
+**🤖 Agent watch (auto shift)** is ticked. It is on by default; if they turned it off, they tick it. The
 first line of the menu then reads **Bulchimbeon — Waiting for agents** (or **On duty** if an agent is busy).
 That, with a process ID from `pgrep`, means the install worked.
 

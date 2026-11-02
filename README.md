@@ -50,8 +50,8 @@ Finish by checking with me that Agent watch is ticked in the menu.
 
 ### 1-minute check after install
 
-1. Click the private in the menu bar and tick **🤖 Agent watch (auto shift)**. A fresh install starts off duty and
-   guards nothing until you do; the app remembers it after that.
+1. Click the private in the menu bar and check that **🤖 Agent watch (auto shift)** is ticked. Agent watch is on by
+   default; if you turned it off, tick it. The app remembers your choice.
 2. Give an agent a task, for example ask Claude Code to run your tests.
 3. Within a few seconds the private in the menu bar turns his flashlight on.
 4. Open the menu. Below the welcome note (shown until you click **Got it**), the status line reads

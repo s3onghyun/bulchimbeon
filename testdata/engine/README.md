@@ -65,7 +65,8 @@ Samples are added in order to one history; `expect` (`{pid: percent}`, exact key
 | `heatCoolDownSeconds` | the cool-down constant |
 | `heatDecide` | `{level, onDuty, resting, advised, coolSince \| null, now, expect: none\|advisory\|rest\|resume}` |
 | `heatLevelName` | `{name, expect: level \| null}` (the `simulateHeat` names) |
-| `dutyResume` | `{stored \| null, until: seconds \| "inf" \| null, now, expect: {action, until?}}` |
+| `dutyResume` | `{stored \| null, until: seconds \| "inf" \| null, now, firstLaunch?: bool (default false), expect: {action, until?}}`; `action` is `none`, `agentWatch`, `firstLaunch`, `timed` or `expired` |
+| `firstLaunch` | `{name, stored: [settings keys that hold a value], expect: bool}`: whether this is a fresh install's first launch |
 | `dutyClock` | `{seconds, expect}` |
 
 ### `settings.json`: the compatibility promise
@@ -110,7 +111,7 @@ Each step runs one operation at time `at`, then checks the result:
 
 | Field | Meaning |
 |-------|---------|
-| `op` | `startTimed` (`seconds` \| null, `label`), `startAgentWatch`, `stop`, `setMode` (`mode`), `resume` (`resume: {action, until?}`), `lidEnableResult` (`ok`; when false, an optional `failure: {cause: stopSignal \| launch \| interrupted \| error, signal?, code?}` makes it a failed approval instead of a cancelled one), `lidRestoreResult` (`ok`), `lidSleepRestoredExternally`, or `tick` |
+| `op` | `startTimed` (`seconds` \| null, `label`), `startAgentWatch`, `stop`, `setMode` (`mode`), `resume` (`resume: {action, until?}`, `action` as in `dutyResume`), `lidEnableResult` (`ok`; when false, an optional `failure: {cause: stopSignal \| launch \| interrupted \| error, signal?, code?}` makes it a failed approval instead of a cancelled one), `lidRestoreResult` (`ok`), `lidSleepRestoredExternally`, or `tick` |
 | tick inputs | `open` and `busy` (`{id: n}`), `battery` (`{percent, onBattery}`), `heat` (default `normal`), `assertionHeld` (default `true`) |
 | `effects` | the exact effect list, in order: `{type: acquire, mode}`, `release`, `reacquire`, `enableLid`, `restoreLid`, `{type: notify, line, args?}` (a `lines.json` function; `args` may be `{ko, en}`), `{type: log, kind, ko, en}` |
 | `state` | fields that change at this step. Runners keep the full expected state and compare all of it after every step: `isOnDuty`, `order` (`off`, `timed`, `agentWatch`), `orderUntil`, `resting`, `mode` (the user's pick), `effectiveMode` (what this watch keeps after a lid fallback), `shiftReason` (why: `restarted`, `approvalCancelled`, `approvalFailed`, `heat`, `lidRestoredExternally`, or null), `heat`, `quote`, `dutyStartedAt`, `watchDetail` (`{ko, en}` or null), `lidEngagedByUs`, `lidSleepDisabled` |
