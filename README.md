@@ -34,13 +34,29 @@ notification permission of its own.
 
 **Supported agents:** Claude Code · Codex · Gemini CLI · Cursor Agent · Copilot CLI · Aider · OpenCode (and your own custom agents).
 
+### Install with your AI agent
+
+Paste this into Claude Code, Codex, Gemini CLI or another coding agent. The agent follows
+[docs/install-for-agents.md](docs/install-for-agents.md) and stops when you need to click **Open Anyway**.
+
+```text
+Install Bulchimbeon (https://github.com/s3onghyun/bulchimbeon) on this computer by following
+https://raw.githubusercontent.com/s3onghyun/bulchimbeon/main/docs/install-for-agents.md step by step. Show me each command before you run it.
+Rules: install only from the Homebrew cask s3onghyun/tap/bulchimbeon or github.com/s3onghyun/bulchimbeon releases,
+and check the SHA-256 of anything you download. No sudo for the Mac app. Never remove the quarantine attribute
+(xattr) or turn off Gatekeeper (spctl): when macOS blocks the first launch, stop and let me click Open Anyway myself.
+Finish by checking with me that Agent watch is ticked in the menu.
+```
+
 ### 1-minute check after install
 
-1. Give an agent a task, for example ask Claude Code to run your tests.
-2. Within a few seconds the private in the menu bar turns his flashlight on.
-3. Open the menu. Below the welcome note (shown until you click **Got it**), the status line reads
+1. Click the private in the menu bar and tick **🤖 Agent watch (auto shift)**. A fresh install starts off duty and
+   guards nothing until you do; the app remembers it after that.
+2. Give an agent a task, for example ask Claude Code to run your tests.
+3. Within a few seconds the private in the menu bar turns his flashlight on.
+4. Open the menu. Below the welcome note (shown until you click **Got it**), the status line reads
    **Bulchimbeon — On duty · 0:12 · …**, and the line under it says why, such as **Claude Code working**.
-4. Nothing happens? Run `/Applications/Bulchimbeon.app/Contents/MacOS/Bulchimbeon --diagnose` to see what it
+5. Nothing happens? Run `/Applications/Bulchimbeon.app/Contents/MacOS/Bulchimbeon --diagnose` to see what it
    detects, and [tell us where you got stuck](https://github.com/s3onghyun/bulchimbeon/discussions/64).
 
 To see the sleep block macOS itself is holding, run `pmset -g assertions`. While on watch:

@@ -29,13 +29,29 @@
 
 **지원 에이전트:** Claude Code · Codex · Gemini CLI · Cursor Agent · Copilot CLI · Aider · OpenCode (사용자 지정 에이전트도 가능).
 
+### AI 에이전트로 설치하기
+
+Claude Code, Codex, Gemini CLI 같은 코딩 에이전트에 아래를 붙여 넣는다. 에이전트가
+[docs/install-for-agents.md](docs/install-for-agents.md)를 따라 설치하고, **그래도 열기**를 눌러야 할 때는 멈추고 기다린다.
+
+```text
+https://github.com/s3onghyun/bulchimbeon 의 불침번(Bulchimbeon)을 이 컴퓨터에 설치해줘.
+https://raw.githubusercontent.com/s3onghyun/bulchimbeon/main/docs/install-for-agents.md 를 한 단계씩 따라 하고, 명령은 실행하기 전에 먼저 보여줘.
+규칙: Homebrew cask s3onghyun/tap/bulchimbeon 이나 github.com/s3onghyun/bulchimbeon 릴리스에서만 설치하고,
+내려받은 파일은 SHA-256을 확인해. Mac 앱 설치에 sudo는 쓰지 마. 격리 속성(xattr)을 지우거나 Gatekeeper(spctl)를 끄지 마.
+macOS가 첫 실행을 막으면 멈추고 내가 직접 "그래도 열기"를 누르게 해줘.
+마지막에 메뉴에서 에이전트 근무가 켜졌는지 나와 함께 확인해줘.
+```
+
 ### 설치 후 1분 점검
 
-1. 에이전트에게 일을 시킨다. 예: Claude Code에게 테스트를 돌리라고 한다.
-2. 몇 초 안에 메뉴바의 이등병이 손전등을 켠다.
-3. 메뉴를 연다. 환영 안내(**알겠습니다**를 누를 때까지 보인다) 아래의 상태 줄이 **불침번 — 근무 중 · 0:12 경과 · …** 이고,
+1. 메뉴바의 이등병을 눌러 **🤖 에이전트 근무 (자동 교대)** 항목에 체크한다. 처음 설치하면 취침 중으로 시작해서, 켜기 전에는
+   아무것도 지키지 않는다. 한 번 켜면 앱이 기억한다.
+2. 에이전트에게 일을 시킨다. 예: Claude Code에게 테스트를 돌리라고 한다.
+3. 몇 초 안에 메뉴바의 이등병이 손전등을 켠다.
+4. 메뉴를 연다. 환영 안내(**알겠습니다**를 누를 때까지 보인다) 아래의 상태 줄이 **불침번 — 근무 중 · 0:12 경과 · …** 이고,
    그 아래 줄에 까닭이 **Claude Code 작업 중**처럼 나온다.
-4. 아무 변화가 없으면 `/Applications/Bulchimbeon.app/Contents/MacOS/Bulchimbeon --diagnose`로 무엇이 감지되는지
+5. 아무 변화가 없으면 `/Applications/Bulchimbeon.app/Contents/MacOS/Bulchimbeon --diagnose`로 무엇이 감지되는지
    보고, [어디서 막혔는지 알려준다](https://github.com/s3onghyun/bulchimbeon/discussions/64).
 
 macOS가 실제로 들고 있는 잠자기 방지는 `pmset -g assertions`로 본다. 근무 중일 때:
