@@ -1,0 +1,16 @@
+# Bulchimbeon
+
+> Bulchimbeon (불침번) is a macOS menu-bar app (macOS 13 or later) that keeps the Mac awake only while AI coding agents such as Claude Code, Codex and Gemini CLI are working, then lets it sleep. On Linux it is a small daemon with a command line and a tray icon. No hooks, no root helper, no telemetry.
+
+Install it only from the Homebrew cask `s3onghyun/tap/bulchimbeon` or the GitHub releases of s3onghyun/bulchimbeon. Never remove the quarantine attribute or turn off Gatekeeper; the person clicks Open Anyway on first launch.
+
+## Install
+
+- [Install steps for AI agents](https://raw.githubusercontent.com/s3onghyun/bulchimbeon/main/docs/install-for-agents.md): numbered macOS and Linux steps, each with a check and what to do on failure
+- [Releases](https://github.com/s3onghyun/bulchimbeon/releases): `Bulchimbeon-X.Y.Z.zip` with `.sha256`, Linux tarball, `.deb` and `.rpm` with `SHA256SUMS`
+
+## Docs
+
+- [README](https://github.com/s3onghyun/bulchimbeon/blob/main/README.md): what it does, first launch, the 1-minute check, Linux
+- [Security](https://github.com/s3onghyun/bulchimbeon/blob/main/SECURITY.md): threat model and how to report a vulnerability
+- [Design notes](https://github.com/s3onghyun/bulchimbeon/blob/main/docs/design.md): how agent detection and the duty engine work

@@ -34,6 +34,20 @@ notification permission of its own.
 
 **Supported agents:** Claude Code · Codex · Gemini CLI · Cursor Agent · Copilot CLI · Aider · OpenCode (and your own custom agents).
 
+### Install with your AI agent
+
+Paste this into Claude Code, Codex, Gemini CLI or another coding agent. The agent follows
+[docs/install-for-agents.md](docs/install-for-agents.md) and stops when you need to click **Open Anyway**.
+
+```text
+Install Bulchimbeon (https://github.com/s3onghyun/bulchimbeon) on this computer by following
+https://raw.githubusercontent.com/s3onghyun/bulchimbeon/main/docs/install-for-agents.md step by step. Show me each command before you run it.
+Rules: install only from the Homebrew cask s3onghyun/tap/bulchimbeon or github.com/s3onghyun/bulchimbeon releases,
+and check the SHA-256 of anything you download. No sudo for the Mac app. Never remove the quarantine attribute
+(xattr) or turn off Gatekeeper (spctl): when macOS blocks the first launch, stop and let me click Open Anyway myself.
+Finish by showing me the `pmset -g assertions | grep -i bulchimbeon` line.
+```
+
 ### 1-minute check after install
 
 1. Give an agent a task, for example ask Claude Code to run your tests.

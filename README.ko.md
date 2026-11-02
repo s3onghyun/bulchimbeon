@@ -29,6 +29,20 @@
 
 **지원 에이전트:** Claude Code · Codex · Gemini CLI · Cursor Agent · Copilot CLI · Aider · OpenCode (사용자 지정 에이전트도 가능).
 
+### AI 에이전트로 설치하기
+
+Claude Code, Codex, Gemini CLI 같은 코딩 에이전트에 아래를 붙여 넣는다. 에이전트가
+[docs/install-for-agents.md](docs/install-for-agents.md)를 따라 설치하고, **그래도 열기**를 눌러야 할 때는 멈추고 기다린다.
+
+```text
+https://github.com/s3onghyun/bulchimbeon 의 불침번(Bulchimbeon)을 이 컴퓨터에 설치해줘.
+https://raw.githubusercontent.com/s3onghyun/bulchimbeon/main/docs/install-for-agents.md 를 한 단계씩 따라 하고, 명령은 실행하기 전에 먼저 보여줘.
+규칙: Homebrew cask s3onghyun/tap/bulchimbeon 이나 github.com/s3onghyun/bulchimbeon 릴리스에서만 설치하고,
+내려받은 파일은 SHA-256을 확인해. Mac 앱 설치에 sudo는 쓰지 마. 격리 속성(xattr)을 지우거나 Gatekeeper(spctl)를 끄지 마.
+macOS가 첫 실행을 막으면 멈추고 내가 직접 "그래도 열기"를 누르게 해줘.
+마지막에 `pmset -g assertions | grep -i bulchimbeon` 결과 줄을 보여줘.
+```
+
 ### 설치 후 1분 점검
 
 1. 에이전트에게 일을 시킨다. 예: Claude Code에게 테스트를 돌리라고 한다.

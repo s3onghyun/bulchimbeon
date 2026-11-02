@@ -33,6 +33,20 @@
 
 **対応エージェント:** Claude Code · Codex · Gemini CLI · Cursor Agent · Copilot CLI · Aider · OpenCode（独自のカスタムエージェントも可）。
 
+### AI エージェントでインストール
+
+Claude Code、Codex、Gemini CLI などのコーディングエージェントに次を貼り付けます。エージェントは
+[docs/install-for-agents.md](docs/install-for-agents.md)（英語）に沿ってインストールし、**このまま開く** を押す場面では止まって待ちます。
+
+```text
+https://github.com/s3onghyun/bulchimbeon の Bulchimbeon をこのコンピュータにインストールしてください。
+https://raw.githubusercontent.com/s3onghyun/bulchimbeon/main/docs/install-for-agents.md の手順に一つずつ従い、コマンドは実行する前に見せてください。
+ルール: Homebrew cask s3onghyun/tap/bulchimbeon か github.com/s3onghyun/bulchimbeon のリリースからのみインストールし、
+ダウンロードしたものは SHA-256 を確認すること。Mac アプリに sudo は使わないこと。隔離属性（xattr）を消したり
+Gatekeeper（spctl）を無効にしたりしないこと。macOS が初回起動をブロックしたら止まり、「このまま開く」は私が押します。
+最後に `pmset -g assertions | grep -i bulchimbeon` の行を見せてください。
+```
+
 ### インストール後 1 分チェック
 
 1. エージェントに作業を頼みます。例: Claude Code にテストを実行させる。

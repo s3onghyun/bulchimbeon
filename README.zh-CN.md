@@ -33,6 +33,20 @@
 
 **支持的代理：** Claude Code · Codex · Gemini CLI · Cursor Agent · Copilot CLI · Aider · OpenCode（也可添加自定义代理）。
 
+### 用 AI 代理安装
+
+把下面这段粘贴给 Claude Code、Codex、Gemini CLI 或其他编程代理。代理会按
+[docs/install-for-agents.md](docs/install-for-agents.md)（英文）安装，需要你点击 **仍要打开** 时会停下等你。
+
+```text
+请按照 https://raw.githubusercontent.com/s3onghyun/bulchimbeon/main/docs/install-for-agents.md
+一步一步把 Bulchimbeon（https://github.com/s3onghyun/bulchimbeon）安装到这台电脑上，每条命令运行前先给我看。
+规则：只从 Homebrew cask s3onghyun/tap/bulchimbeon 或 github.com/s3onghyun/bulchimbeon 的 Releases 安装，
+下载的文件要校验 SHA-256。安装 Mac 应用不要用 sudo。不要删除隔离属性（xattr），也不要关闭 Gatekeeper（spctl）：
+macOS 拦截首次启动时，停下来让我自己点击“仍要打开”。
+最后给我看 `pmset -g assertions | grep -i bulchimbeon` 输出的那一行。
+```
+
 ### 安装后 1 分钟检查
 
 1. 给代理派个任务，例如让 Claude Code 跑一遍测试。
