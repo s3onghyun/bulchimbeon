@@ -44,16 +44,18 @@ https://raw.githubusercontent.com/s3onghyun/bulchimbeon/main/docs/install-for-ag
 ルール: Homebrew cask s3onghyun/tap/bulchimbeon か github.com/s3onghyun/bulchimbeon のリリースからのみインストールし、
 ダウンロードしたものは SHA-256 を確認すること。Mac アプリに sudo は使わないこと。隔離属性（xattr）を消したり
 Gatekeeper（spctl）を無効にしたりしないこと。macOS が初回起動をブロックしたら止まり、「このまま開く」は私が押します。
-最後に `pmset -g assertions | grep -i bulchimbeon` の行を見せてください。
+最後に、メニューで Agent watch がオンになっているか私と一緒に確認してください。
 ```
 
 ### インストール後 1 分チェック
 
-1. エージェントに作業を頼みます。例: Claude Code にテストを実行させる。
-2. 数秒以内に、メニューバーの二等兵が懐中電灯をつけます。
-3. メニューを開きます。ようこそ表示（**Got it** を押すまで出ます）の下の状態行が **Bulchimbeon — On duty · 0:12 · …**、その下の行に
+1. メニューバーの二等兵をクリックし、**🤖 Agent watch (auto shift)** にチェックを入れます。インストール直後は
+   Off duty で始まり、オンにするまで何も見張りません。一度オンにすればアプリが覚えています。
+2. エージェントに作業を頼みます。例: Claude Code にテストを実行させる。
+3. 数秒以内に、メニューバーの二等兵が懐中電灯をつけます。
+4. メニューを開きます。ようこそ表示（**Got it** を押すまで出ます）の下の状態行が **Bulchimbeon — On duty · 0:12 · …**、その下の行に
    **Claude Code working** のように理由が出ます（日本語 UI はまだないため英語表示）。
-4. 何も起きない場合は `/Applications/Bulchimbeon.app/Contents/MacOS/Bulchimbeon --diagnose` で検出結果を確認し、
+5. 何も起きない場合は `/Applications/Bulchimbeon.app/Contents/MacOS/Bulchimbeon --diagnose` で検出結果を確認し、
    [どこでつまずいたか教えてください](https://github.com/s3onghyun/bulchimbeon/discussions/64)。
 
 macOS が実際に保持しているスリープ防止は `pmset -g assertions` で確認できます。勤務中:

@@ -44,16 +44,17 @@
 规则：只从 Homebrew cask s3onghyun/tap/bulchimbeon 或 github.com/s3onghyun/bulchimbeon 的 Releases 安装，
 下载的文件要校验 SHA-256。安装 Mac 应用不要用 sudo。不要删除隔离属性（xattr），也不要关闭 Gatekeeper（spctl）：
 macOS 拦截首次启动时，停下来让我自己点击“仍要打开”。
-最后给我看 `pmset -g assertions | grep -i bulchimbeon` 输出的那一行。
+最后和我一起确认菜单里已勾选代理值班。
 ```
 
 ### 安装后 1 分钟检查
 
-1. 给代理派个任务，例如让 Claude Code 跑一遍测试。
-2. 几秒内，菜单栏里的小兵会打开手电筒。
-3. 打开菜单。在欢迎提示（点 **知道了** 之前会一直显示）下方，状态行显示 **Bulchimbeon — 值班中 · 已过 0:12 · …**，
+1. 点击菜单栏里的小兵，勾选 **🤖 代理值班（自动交班）**。刚安装时处于休息状态，勾选之前什么都不守；勾选一次后应用会记住。
+2. 给代理派个任务，例如让 Claude Code 跑一遍测试。
+3. 几秒内，菜单栏里的小兵会打开手电筒。
+4. 打开菜单。在欢迎提示（点 **知道了** 之前会一直显示）下方，状态行显示 **Bulchimbeon — 值班中 · 已过 0:12 · …**，
    下一行写明原因，例如 **Claude Code 正在工作**。
-4. 没有反应？运行 `/Applications/Bulchimbeon.app/Contents/MacOS/Bulchimbeon --diagnose` 查看检测结果，
+5. 没有反应？运行 `/Applications/Bulchimbeon.app/Contents/MacOS/Bulchimbeon --diagnose` 查看检测结果，
    并[告诉我们卡在哪里](https://github.com/s3onghyun/bulchimbeon/discussions/64)。
 
 要查看 macOS 实际持有的防休眠，运行 `pmset -g assertions`。值班中：

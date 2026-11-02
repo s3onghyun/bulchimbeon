@@ -1,7 +1,7 @@
 # Installing Bulchimbeon: steps for an AI agent
 
 This page is written for an AI coding agent (Claude Code, Codex, Gemini CLI and others) that a person
-has asked to install Bulchimbeon. A person can follow it too. Every step gives the command, the check
+has asked to install Bulchimbeon. A person can follow it too. Every step gives the commands, the check
 that tells you it worked, and what to do if it did not.
 
 Bulchimbeon is a macOS menu-bar app (macOS 13 or later) that keeps the Mac awake only while AI coding
@@ -22,6 +22,9 @@ agents are working. On Linux it is a small daemon with a command line. Project:
   permission error, stop and tell the person rather than retrying with `sudo`.
 - **Show before you run.** Tell the person each command before you run it. On Linux, the `.deb` and `.rpm`
   installs need `sudo`; let the person run or approve that command.
+- **One command at a time.** Each code line below is one command, so a person can approve them one by one.
+  Do not join them with `&&`, `;` or `$(...)`, and do not rely on shell variables surviving between commands.
+  Where a line says `X.Y.Z`, write the version from M3 in its place.
 - **Don't guess.** If a check fails and the "on failure" note does not cover it, stop and report the exact output.
 
 Pick the branch for this computer: `uname -s` prints `Darwin` (macOS, go to [macOS](#macos)) or `Linux`
@@ -32,7 +35,8 @@ Pick the branch for this computer: `uname -s` prints `Darwin` (macOS, go to [mac
 ### M1. Check the system
 
 ```sh
-sw_vers -productVersion; uname -m
+sw_vers -productVersion
+uname -m
 ```
 
 - **Expect:** a version of 13 or higher (for example `15.5`), and `arm64` or `x86_64`. The app is universal.
@@ -41,15 +45,19 @@ sw_vers -productVersion; uname -m
 ### M2. Is it already installed?
 
 ```sh
-ls -d /Applications/Bulchimbeon.app 2>/dev/null && defaults read /Applications/Bulchimbeon.app/Contents/Info CFBundleShortVersionString
-command -v brew >/dev/null && brew list --cask bulchimbeon 2>/dev/null
+ls -d /Applications/Bulchimbeon.app
+defaults read /Applications/Bulchimbeon.app/Contents/Info CFBundleShortVersionString
+command -v brew
+brew list --cask --versions bulchimbeon
 ```
 
-- Nothing printed: not installed. Continue with M3.
-- A version printed and `brew list` printed files: installed with Homebrew. To update, run
-  `brew update && brew upgrade --cask bulchimbeon`, then go to M7.
-- A version printed but no Homebrew install: installed from the zip. Ask the person whether to replace it with
-  the latest release (M4b, which quits the running copy first), or keep it and go to M7.
+Run the last line only if `command -v brew` printed a path.
+
+- `ls` says `No such file or directory`: not installed. Skip the `defaults` line and go to M3.
+- `brew list` prints `bulchimbeon X.Y.Z`: installed with Homebrew. To update, run `brew update`, then
+  `brew upgrade --cask bulchimbeon`, then go to M5.
+- The app exists but `brew list` prints nothing (or there is no Homebrew): installed from the zip. Ask the person
+  whether to replace it with the latest release (M4b), or keep it and go to M5.
 
 ### M3. Find the latest release
 
@@ -57,19 +65,19 @@ command -v brew >/dev/null && brew list --cask bulchimbeon 2>/dev/null
 curl -fsSLI -o /dev/null -w '%{url_effective}\n' https://github.com/s3onghyun/bulchimbeon/releases/latest
 ```
 
-- **Expect:** `https://github.com/s3onghyun/bulchimbeon/releases/tag/vX.Y.Z`. Write down `X.Y.Z`; the steps below
-  call it `VERSION`.
+- **Expect:** `https://github.com/s3onghyun/bulchimbeon/releases/tag/vX.Y.Z`. Note `X.Y.Z`; the steps below use it.
 - **On failure:** no network or GitHub is unreachable. Stop and tell the person.
 
-### M4a. Install with Homebrew (preferred when `command -v brew` prints a path)
+### M4a. Install with Homebrew (preferred when `command -v brew` printed a path)
 
 ```sh
-brew update && brew install --cask s3onghyun/tap/bulchimbeon
+brew update
+brew install --cask s3onghyun/tap/bulchimbeon
+defaults read /Applications/Bulchimbeon.app/Contents/Info CFBundleShortVersionString
 ```
 
-- **Expect:** `🍺  bulchimbeon was successfully installed!` and the caveat about "Open Anyway". Homebrew checks the
-  SHA-256 pinned in the cask itself.
-- **Check:** `defaults read /Applications/Bulchimbeon.app/Contents/Info CFBundleShortVersionString` prints `VERSION`.
+- **Expect:** `🍺  bulchimbeon was successfully installed!`, the caveat about "Open Anyway", and then `X.Y.Z`.
+  Homebrew checks the SHA-256 pinned in the cask itself.
 - **On failure:** `It seems there is already an App at '/Applications/Bulchimbeon.app'` means a zip install exists;
   ask the person before replacing it (`brew install --cask --force s3onghyun/tap/bulchimbeon`). Any other error:
   stop and report it. Do not fall back to `sudo`.
@@ -78,59 +86,78 @@ Then go to M5.
 
 ### M4b. Install from the release zip (no Homebrew)
 
-Run in one shell, replacing `X.Y.Z` with `VERSION`:
+Download into a folder of its own:
 
 ```sh
-VERSION=X.Y.Z
-WORK="$(mktemp -d)" && cd "$WORK" && echo "$WORK"
-BASE="https://github.com/s3onghyun/bulchimbeon/releases/download/v$VERSION"
-curl -fsSLO "$BASE/Bulchimbeon-$VERSION.zip" && curl -fsSLO "$BASE/Bulchimbeon-$VERSION.zip.sha256"
-shasum -a 256 -c "Bulchimbeon-$VERSION.zip.sha256"
+mkdir -p /tmp/bulchimbeon-install
+curl -fsSL -o /tmp/bulchimbeon-install/Bulchimbeon-X.Y.Z.zip https://github.com/s3onghyun/bulchimbeon/releases/download/vX.Y.Z/Bulchimbeon-X.Y.Z.zip
+curl -fsSL -o /tmp/bulchimbeon-install/Bulchimbeon-X.Y.Z.zip.sha256 https://github.com/s3onghyun/bulchimbeon/releases/download/vX.Y.Z/Bulchimbeon-X.Y.Z.zip.sha256
 ```
 
-- **Expect:** the last line is `Bulchimbeon-X.Y.Z.zip: OK`.
-- **On failure:** `FAILED` or `No such file`: stop. Do not unzip or install anything; tell the person.
-- **Optional, if `gh` is installed and signed in:** `gh attestation verify "Bulchimbeon-$VERSION.zip" --repo s3onghyun/bulchimbeon`
+Check the SHA-256:
+
+```sh
+cat /tmp/bulchimbeon-install/Bulchimbeon-X.Y.Z.zip.sha256
+shasum -a 256 /tmp/bulchimbeon-install/Bulchimbeon-X.Y.Z.zip
+```
+
+- **Expect:** both lines start with the same 64-character hash.
+- **On failure:** the hashes differ, or a download failed: stop. Do not unzip or install anything; tell the person.
+- **Optional, if `gh` is installed and signed in:**
+  `gh attestation verify /tmp/bulchimbeon-install/Bulchimbeon-X.Y.Z.zip --repo s3onghyun/bulchimbeon`
   should end with `✓ Verification succeeded!`. On failure, stop.
 
-Unpack, check the signature, then copy into `/Applications` (same shell):
+Unpack and check the signature:
 
 ```sh
-ditto -x -k "Bulchimbeon-$VERSION.zip" "$WORK/out"
-codesign --verify --deep --strict "$WORK/out/Bulchimbeon.app" && echo signature-ok
-codesign -dv "$WORK/out/Bulchimbeon.app" 2>&1 | grep '^Identifier='
+ditto -x -k /tmp/bulchimbeon-install/Bulchimbeon-X.Y.Z.zip /tmp/bulchimbeon-install/out
+codesign --verify --deep --strict /tmp/bulchimbeon-install/out/Bulchimbeon.app
+codesign -dv /tmp/bulchimbeon-install/out/Bulchimbeon.app
 ```
 
-- **Expect:** `signature-ok` and `Identifier=io.github.s3onghyun.bulchimbeon`.
+- **Expect:** the `--verify` line prints nothing and exits 0; `codesign -dv` (it prints to stderr) shows
+  `Identifier=io.github.s3onghyun.bulchimbeon`.
 - **On failure:** stop and report the output. Do not install.
 
-If an older copy is installed, quit it first: `osascript -e 'quit app "Bulchimbeon"'`. Then:
+If an older copy is installed, quit it first with `osascript -e 'quit app "Bulchimbeon"'`. Then copy it in:
 
 ```sh
-rm -rf /Applications/Bulchimbeon.app && ditto "$WORK/out/Bulchimbeon.app" /Applications/Bulchimbeon.app
+rm -rf /Applications/Bulchimbeon.app
+ditto /tmp/bulchimbeon-install/out/Bulchimbeon.app /Applications/Bulchimbeon.app
 defaults read /Applications/Bulchimbeon.app/Contents/Info CFBundleShortVersionString
 ```
 
-- **Expect:** `VERSION`. The `rm -rf` touches only that one app bundle; never widen it.
+- **Expect:** `X.Y.Z`. The `rm -rf` touches only that one app bundle; never widen it.
 - **On failure:** `Permission denied` means this account cannot write to `/Applications` (a standard account).
   Stop and tell the person; do not use `sudo`.
 
-### M5. First launch
+### M5. Launch with agent watch on
+
+A fresh install starts **off duty**: it guards nothing until **Agent watch** is turned on. The `--agent-watch`
+launch flag turns it on, and the app remembers it across restarts.
 
 ```sh
-open /Applications/Bulchimbeon.app
-sleep 5; pgrep -x Bulchimbeon
+pgrep -x Bulchimbeon
 ```
 
-- **Expect:** `pgrep` prints a process ID. The app is running and you can skip M6.
-- **No process ID:** macOS has most likely blocked the first launch, because the app is ad-hoc signed and not yet
-  notarized by Apple. Go to M6. (Whether macOS asks depends on how the file arrived: Homebrew marks it as
-  downloaded, so macOS asks; a `curl` download is not marked, so it may open straight away. Either way, leave
-  the attribute alone.)
+- **No process ID:** the app is not running. Launch it with agent watch on, wait a few seconds, and check again:
 
-### M6. Hand-off: the person clicks Open Anyway
+  ```sh
+  open /Applications/Bulchimbeon.app --args --agent-watch
+  sleep 5
+  pgrep -x Bulchimbeon
+  ```
 
-Stop and give the person these steps, then wait until they say they are done:
+  A process ID now means it is running: skip to M6's last part (ask the person to check the menu).
+  Still no process ID: macOS has most likely blocked the first launch, because the app is ad-hoc signed and not yet
+  notarized by Apple. Go to M6. (Whether macOS asks depends on how the file arrived and whether this Mac approved the
+  build before: Homebrew marks the download, so macOS usually asks; a `curl` download is not marked, so it may open
+  straight away. Either way, leave the attribute alone.)
+- **A process ID right away:** it was already running, and `--args` does not reach a running app. Go to M6's last part.
+
+### M6. Hand-off to the person
+
+If the launch was blocked, stop and give the person these steps, then wait until they say they are done:
 
 1. In the dialog that says Bulchimbeon can't be opened, click **Done**.
 2. Open **System Settings → Privacy & Security** and scroll down to **Security**.
@@ -143,108 +170,134 @@ Screenshot of that setting:
 When they confirm, check:
 
 ```sh
-pgrep -x Bulchimbeon || { open /Applications/Bulchimbeon.app; sleep 5; pgrep -x Bulchimbeon; }
+pgrep -x Bulchimbeon
 ```
 
-- **Expect:** a process ID, and a pixel-art soldier in the menu bar.
-- **On failure:** ask the person whether they saw **Open Anyway** (it appears only after one blocked launch, for
-  about an hour). Do not try to bypass it yourself.
+- **Expect:** a process ID.
+- **On failure:** ask the person whether they saw **Open Anyway** (it appears only after a blocked launch, for about
+  an hour). Do not try to bypass it yourself.
+
+In every case, finish with the person: ask them to click the soldier in the menu bar and check that
+**🤖 Agent watch (auto shift)** is ticked (tick it if not; after Open Anyway the app starts without the flag). The
+first line of the menu then reads **Bulchimbeon — Waiting for agents** (or **On duty** if an agent is busy).
+That, with a process ID from `pgrep`, means the install worked.
 
 Tell the person: notifications from Bulchimbeon show up as **"Script Editor"**. That is expected until the app is
 notarized.
 
-### M7. Verify it keeps the Mac awake
+### M7. Show the person how to see it on duty
 
-The check works while an agent is working. You are one: run this while you are still mid-task, so your own
-process counts as working (Claude Code, for example, runs `caffeinate` while it works).
+Do not expect this to pass inside the session that installed the app: whether your own session counts as a working
+agent depends on how you were started, and an install session is mostly waiting for approvals. Give the person this
+check for later, and run it once yourself if they want:
+
+1. Give any agent a real task in another terminal (or just keep using the agent normally), for example running the
+   project's tests.
+2. Within a few seconds the soldier turns his flashlight on and the menu's first line reads **Bulchimbeon — On duty**.
+3. While it is on duty:
+
+   ```sh
+   pmset -g assertions
+   ```
+
+   One line under `Listed by owning process:` reads like
+   `pid 2102(Bulchimbeon): [0x...] 13:31:53 PreventUserIdleSystemSleep named: "Bulchimbeon on duty: keeping AI agents awake"`
+   (pid and time differ; with **Keep display on** the kind is `PreventUserIdleDisplaySleep`). To see just that line,
+   use `pmset -g assertions | grep -i bulchimbeon`. While idle there is no such line; that is correct.
+
+If it never goes on duty, check what Bulchimbeon detects:
 
 ```sh
-sleep 15; pmset -g assertions | grep -i bulchimbeon
+/Applications/Bulchimbeon.app/Contents/MacOS/Bulchimbeon --diagnose
 ```
 
-- **Expect:** a line like
-  `pid 2102(Bulchimbeon): [0x...] 13:31:53 PreventUserIdleSystemSleep named: "Bulchimbeon on duty: keeping AI agents awake"`
-  (the pid and time differ; with **Keep display on** the kind is `PreventUserIdleDisplaySleep`).
-- **No line:** run the diagnosis and read it with the person:
+It runs a one-off scan, prints a report to standard output and exits; it does not touch the running app. The report
+is always at least a heading, `Bulchimbeon agent detection (checked N processes of UID U)` (in Korean or Chinese
+if that is the system language), then one `✔ <agent>  pid <n>  matched by: ...` line per detected agent, with
+`· working` added when it counts as working, or `No agents detected`. Then come the other apps keeping the Mac or
+display awake, and the custom-agent list. Its exact wording is for people and may change between versions.
 
-  ```sh
-  /Applications/Bulchimbeon.app/Contents/MacOS/Bulchimbeon --diagnose
-  ```
-
-  It lists each detected agent with `✔`, and `· working` when it counts as working. If your agent is listed but
-  not working, that is normal for agents that use little CPU between steps: ask the person to give you or another
-  agent a longer task (for example running tests) and check again. If no agent is listed, the person can add one by
-  name: `defaults write io.github.s3onghyun.bulchimbeon customAgents -array <name>`.
-  Still stuck: <https://github.com/s3onghyun/bulchimbeon/discussions/64>.
-
-When idle, Bulchimbeon releases the block and the `grep` prints nothing. That is correct, not a failure.
+- Agent listed, not working: normal between steps; check again during a longer task.
+- No agents: the person can add one by its executable name:
+  `defaults write io.github.s3onghyun.bulchimbeon customAgents -array <name>`.
+- No output at all: record the exit code (`echo $?` right after) and report it with the macOS version.
+- Still stuck: <https://github.com/s3onghyun/bulchimbeon/discussions/64>.
 
 ### M8. Report
 
 Tell the person: the installed version, how it was installed (Homebrew or zip), whether they had to click
-Open Anyway, and the `pmset` line from M7 (or the `--diagnose` result).
+Open Anyway, that the menu shows **Agent watch** ticked, and the check from M7 to run later.
 
 ## Linux
 
 Needs systemd and logind (tested on Ubuntu 24.04). Pick **one** method; two install methods means two daemons.
+The daemon always does agent watch; there is nothing to turn on.
 
 ### L1. Check the system
 
 ```sh
-uname -m; systemctl --user is-system-running; command -v brew
+uname -m
+systemctl --user is-system-running
+command -v brew
 ```
 
 - `uname -m`: `x86_64` → `amd64` (rpm: `x86_64`), `aarch64` → `arm64` (rpm: `aarch64`). Anything else: stop.
+  Below, `ARCH` means that name.
 - `systemctl --user` must answer (`running` or `degraded`). If it fails, stop: the daemon needs a systemd user session.
-- Also run M3's command to get `VERSION`.
+- Run M3's command to get `X.Y.Z`.
 
 ### L2. Install (one of these)
 
 **Homebrew on Linux** (if `brew` exists; no root):
 
 ```sh
-brew install s3onghyun/tap/bulchimbeon-linux && brew services start bulchimbeon-linux
+brew install s3onghyun/tap/bulchimbeon-linux
+brew services start bulchimbeon-linux
 ```
 
-**Tarball** (no root; any distribution, including Arch). Replace `X.Y.Z` and `ARCH` (`amd64` or `arm64`):
+**Tarball** (no root; any distribution, including Arch). Download and check:
 
 ```sh
-VERSION=X.Y.Z; ARCH=amd64
-WORK="$(mktemp -d)" && cd "$WORK"
-BASE="https://github.com/s3onghyun/bulchimbeon/releases/download/v$VERSION"
-curl -fsSLO "$BASE/bulchimbeon_${VERSION}_linux_${ARCH}.tar.gz" && curl -fsSLO "$BASE/SHA256SUMS"
-sha256sum -c SHA256SUMS --ignore-missing
+mkdir -p /tmp/bulchimbeon-install
+curl -fsSL -o /tmp/bulchimbeon-install/bulchimbeon_X.Y.Z_linux_ARCH.tar.gz https://github.com/s3onghyun/bulchimbeon/releases/download/vX.Y.Z/bulchimbeon_X.Y.Z_linux_ARCH.tar.gz
+curl -fsSL -o /tmp/bulchimbeon-install/SHA256SUMS https://github.com/s3onghyun/bulchimbeon/releases/download/vX.Y.Z/SHA256SUMS
+grep bulchimbeon_X.Y.Z_linux_ARCH.tar.gz /tmp/bulchimbeon-install/SHA256SUMS
+sha256sum /tmp/bulchimbeon-install/bulchimbeon_X.Y.Z_linux_ARCH.tar.gz
 ```
 
-- **Expect:** `./bulchimbeon_X.Y.Z_linux_ARCH.tar.gz: OK`. On `FAILED` or `no file was verified`, stop.
+- **Expect:** the two hashes match. If not, stop.
+
+Then unpack and run its installer (it puts `bulchimbeon` in `~/.local/bin` and starts a systemd user unit):
 
 ```sh
-tar -xzf "bulchimbeon_${VERSION}_linux_${ARCH}.tar.gz"
-cd "bulchimbeon_${VERSION}_linux_${ARCH}" && ./install-linux.sh
+tar -xzf /tmp/bulchimbeon-install/bulchimbeon_X.Y.Z_linux_ARCH.tar.gz -C /tmp/bulchimbeon-install
+/tmp/bulchimbeon-install/bulchimbeon_X.Y.Z_linux_ARCH/install-linux.sh
 ```
 
 **`.deb`** (Debian, Ubuntu) or **`.rpm`** (Fedora and others): download and check the same way, with
-`bulchimbeon_${VERSION}_${ARCH}.deb` or `bulchimbeon-${VERSION}-1.<x86_64|aarch64>.rpm`, then have the person run
-the `sudo` line:
+`bulchimbeon_X.Y.Z_ARCH.deb` or `bulchimbeon-X.Y.Z-1.<x86_64|aarch64>.rpm`, then have the person run the `sudo` line
+and enable the unit:
 
 ```sh
-sudo apt install ./bulchimbeon_${VERSION}_${ARCH}.deb          # or: sudo dnf install ./bulchimbeon-${VERSION}-1.x86_64.rpm
+sudo apt install /tmp/bulchimbeon-install/bulchimbeon_X.Y.Z_ARCH.deb
 systemctl --user enable --now bulchimbeon
 ```
+
+(Fedora: `sudo dnf install /tmp/bulchimbeon-install/bulchimbeon-X.Y.Z-1.x86_64.rpm` instead of the `apt` line.)
 
 ### L3. Verify
 
 ```sh
 bulchimbeon doctor
-sleep 15; bulchimbeon status
+bulchimbeon status
 ```
 
 - **Expect:** `doctor` starts with `Bulchimbeon doctor`, marks `systemd-inhibit` and `logind` with `✔`, names the
   lock in a `→ lock while on duty:` line and shows `✔ service: active, enabled`. It may print a polkit rule for SSH or
-  headless use; only show it to the person, never install it on their behalf. While you are working, `status`
-  starts with `🪖 Bulchimbeon — on duty` and its `Why:` line names an agent.
+  headless use; only show it to the person, never install it on their behalf. `status` starts with
+  `🪖 Bulchimbeon —`; during an agent's real task (2% CPU over 60 seconds) it says `on duty` and its `Why:` line names
+  the agent. As on macOS, give the person that check for later rather than expecting it during the install.
 - **On failure:** `command not found` after the tarball: `~/.local/bin` is not on `PATH`; use
-  `~/.local/bin/bulchimbeon`. Not on duty: Linux counts an agent as working at 2% CPU over 60 seconds, so run
-  `status` again during a longer task. Report what `doctor` says.
+  `~/.local/bin/bulchimbeon`. Report what `doctor` says.
 
-Optional tray icon: `bulchimbeon tray`. Report the version, the method and the `status` output to the person.
+Optional tray icon: `bulchimbeon tray`. Report the version, the method and the `doctor` result to the person.
