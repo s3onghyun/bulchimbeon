@@ -342,6 +342,13 @@ func (e *Engine) Resume(action ResumeAction, now time.Time) []Effect {
 		e.order = DutyOrder{Kind: OrderAgentWatch}
 		e.quote = QuoteStandby
 		effects = append(effects, logEffect(e.t("근무 복귀 — 에이전트 근무", "Back on watch — agent watch", "恢复值班 — 代理值班"), LogOther))
+	case ResumeFirstLaunch:
+		e.watchStartedAt = now
+		e.order = DutyOrder{Kind: OrderAgentWatch}
+		e.quote = QuoteStandby
+		effects = append(effects, logEffect(e.t("첫 실행 — 에이전트 근무 기본으로 켬 (메뉴에서 끌 수 있음)",
+			"First launch — agent watch on by default (untick it in the menu to turn it off)",
+			"首次启动 — 默认开启代理值班（可在菜单中取消勾选关闭）"), LogOther))
 	case ResumeTimed:
 		e.order = DutyOrder{Kind: OrderTimed, Until: action.Until}
 		effects = append(effects, e.engage(now)...)

@@ -218,6 +218,38 @@ import Testing
         #expect(DutyResume.decide(stored: "rm -rf /", until: nil, now: now) == .none)
     }
 
+    @Test func firstLaunchDefaultsToAgentWatch() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let t = now.timeIntervalSince1970
+        // 새 설치: 근무 명령도 근무 형태도 저장된 적 없음 → 에이전트 근무로 시작
+        #expect(DutyResume.isFirstLaunch { _ in false })
+        #expect(DutyResume.decide(stored: nil, until: nil, now: now, firstLaunch: true) == .firstLaunch)
+        // 근무를 끈 사용자: dutyOrder 는 지워지지만 앱이 매번 저장하는 dutyMode 가 남는다 → 끈 채로
+        #expect(!DutyResume.isFirstLaunch { $0 == .dutyMode })
+        #expect(!DutyResume.isFirstLaunch { $0 == .dutyOrder })
+        #expect(!DutyResume.isFirstLaunch { $0 == .dutyOrderUntil })
+        #expect(!DutyResume.isFirstLaunch { $0 == .hasSeenWelcome })
+        // 첫 실행 전에 앱이 먼저 쓰는 키나 다른 설정은 첫 실행 판단에 쓰지 않는다
+        #expect(DutyResume.isFirstLaunch { $0 == .lidEngagedByUs || $0 == .updateLastCheck || $0 == .batteryFloor })
+        #expect(DutyResume.decide(stored: nil, until: nil, now: now, firstLaunch: false) == .none)
+        // 저장된 명령은 그대로
+        #expect(DutyResume.decide(stored: "agentWatch", until: nil, now: now, firstLaunch: true) == .agentWatch)
+        #expect(DutyResume.decide(stored: "timed", until: t + 600, now: now, firstLaunch: true) == .timed(until: now.addingTimeInterval(600)))
+        #expect(DutyResume.decide(stored: "timed", until: t - 1, now: now, firstLaunch: true) == .expired)
+        #expect(DutyResume.decide(stored: "rm -rf /", until: nil, now: now, firstLaunch: true) == .none)
+    }
+
+    @Test func storedDutyOrderRoundTrip() {
+        let until = Date(timeIntervalSince1970: 1_000_600)
+        #expect(DutyResume.stored(.off) == nil)
+        #expect(DutyResume.stored(.agentWatch) == "agentWatch")
+        #expect(DutyResume.stored(.timed(until: nil)) == "timed")
+        #expect(DutyResume.stored(.timed(until: until)) == "timed")
+        #expect(DutyResume.storedUntil(.timed(until: until)) == 1_000_600)
+        #expect(DutyResume.storedUntil(.timed(until: nil)) == nil)
+        #expect(DutyResume.storedUntil(.agentWatch) == nil)
+    }
+
     @Test func timedMenuCheck() {
         let until = Date(timeIntervalSince1970: 1_000_000)
         #expect(TimedMenu.isChecked(nil, order: .timed(until: nil), picked: nil), "무기한")

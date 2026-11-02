@@ -157,6 +157,48 @@ import Testing
         #expect(acquired(watcher.tick(lowBusy)), "충전 중이면 투입")
     }
 
+    // MARK: 첫 실행
+
+    /// 새 설치에서 처음 켜면 에이전트 근무가 켜지고, 그 명령이 저장돼 다음 실행에도 이어진다.
+    @Test func firstLaunchStartsAgentWatchAndPersistsIt() {
+        var engine = DutyEngine(now: t0)
+        let action = DutyResume.decide(stored: nil, until: nil, now: t0,
+                                       firstLaunch: DutyResume.isFirstLaunch { _ in false })
+        let effects = engine.resume(action, now: t0)
+        #expect(engine.order == .agentWatch && !engine.isOnDuty, "대기만 하고 바로 투입하지 않는다")
+        #expect(!acquired(effects) && logged(effects, .other))
+        #expect(acquired(engine.tick(busy(5))), "에이전트가 일하면 투입")
+        // 저장된 명령으로 다음 실행에도 이어진다
+        let stored = DutyResume.stored(engine.order)
+        #expect(stored == "agentWatch")
+        #expect(DutyResume.decide(stored: stored, until: nil, now: at(100), firstLaunch: false) == .agentWatch)
+    }
+
+    /// 사용자가 끈 뒤에는 다시 켜지지 않는다 (근무 명령은 지워지지만 근무 형태가 남아 첫 실행이 아님).
+    @Test func firstLaunchAgentWatchTurnedOffStaysOff() {
+        var engine = DutyEngine(now: t0)
+        _ = engine.resume(DutyResume.decide(stored: nil, until: nil, now: t0, firstLaunch: true), now: t0)
+        _ = engine.stop(now: at(10))
+        let stored = DutyResume.stored(engine.order)
+        #expect(stored == nil)
+        let firstLaunch = DutyResume.isFirstLaunch { $0 == .dutyMode }
+        #expect(!firstLaunch)
+        #expect(DutyResume.decide(stored: stored, until: nil, now: at(100), firstLaunch: firstLaunch) == .none)
+    }
+
+    /// 첫 실행으로 켜진 에이전트 근무에도 배터리 하한과 폭염 대응은 그대로다.
+    @Test func firstLaunchAgentWatchKeepsBatteryAndHeatSafeguards() {
+        var engine = DutyEngine(batteryFloor: 20, now: t0)
+        _ = engine.resume(.firstLaunch, now: t0)
+        var lowBusy = busy(5); lowBusy.battery = BatteryStatus(percent: 15, onBattery: true)
+        #expect(!acquired(engine.tick(lowBusy)), "배터리 하한 이하면 투입하지 않음")
+        lowBusy.battery = BatteryStatus(percent: 15, onBattery: false)
+        #expect(acquired(engine.tick(lowBusy)), "충전 중이면 투입")
+        var alert = busy(10); alert.heat = .alert
+        let rest = engine.tick(alert)
+        #expect(released(rest) && logged(rest, .heat) && engine.resting, "폭염 경보면 전투휴식")
+    }
+
     @Test func abandonedPostIsReacquired() {
         var engine = DutyEngine(now: t0)
         _ = engine.startTimed(seconds: nil, label: "무기한", now: t0)

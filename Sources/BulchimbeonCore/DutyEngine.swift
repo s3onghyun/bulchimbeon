@@ -203,7 +203,7 @@ public struct DutyEngine: Sendable {
         case .expired:
             order = .off
             return [.log(L10n.t("앱이 꺼져 있는 동안 근무 시간 종료", "Watch ended while the app was closed", "应用关闭期间，值班时间已到"), .other)]
-        case .agentWatch, .timed:
+        case .agentWatch, .firstLaunch, .timed:
             break
         }
         var effects: [DutyEffect] = []
@@ -221,6 +221,13 @@ public struct DutyEngine: Sendable {
             order = .agentWatch
             quote = .standby
             effects.append(.log(L10n.t("근무 복귀 — 에이전트 근무", "Back on watch — agent watch", "恢复值班 — 代理值班"), .other))
+        case .firstLaunch:
+            watchStartedAt = now
+            order = .agentWatch
+            quote = .standby
+            effects.append(.log(L10n.t("첫 실행 — 에이전트 근무 기본으로 켬 (메뉴에서 끌 수 있음)",
+                                       "First launch — agent watch on by default (untick it in the menu to turn it off)",
+                                       "首次启动 — 默认开启代理值班（可在菜单中取消勾选关闭）"), .other))
         case .timed(let until):
             order = .timed(until: until)
             effects += engage(now: now)

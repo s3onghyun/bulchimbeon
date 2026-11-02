@@ -177,6 +177,8 @@ func TestFixtureEngineScenarios(t *testing.T) {
 					switch st.Resume.Action {
 					case "agentWatch":
 						a.Kind = ResumeAgentWatch
+					case "firstLaunch":
+						a.Kind = ResumeFirstLaunch
 					case "expired":
 						a.Kind = ResumeExpired
 					case "timed":

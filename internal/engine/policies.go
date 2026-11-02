@@ -82,7 +82,8 @@ const (
 	ResumeNone ResumeKind = iota
 	ResumeAgentWatch
 	ResumeTimed
-	ResumeExpired // the watch time ran out while the app was closed
+	ResumeExpired     // the watch time ran out while the app was closed
+	ResumeFirstLaunch // a fresh install's first launch: agent watch on by default
 )
 
 // ResumeAction is a DutyResume decision. Until is set only for a timed watch with an end.
@@ -94,9 +95,28 @@ type ResumeAction struct {
 // maxRemaining: a stored watch with more time left than this is treated as tampering.
 const maxRemaining = 24 * time.Hour
 
+// launchedBeforeKeys are left behind by any earlier run (Swift `DutyResume.launchedBeforeKeys`):
+// the app saves dutyMode on every run, so a person who turned the watch off still has it.
+// Keys the app writes before the first resume (lidEngagedByUs, the update check) do not count.
+var launchedBeforeKeys = []string{"dutyOrder", "dutyOrderUntil", "dutyMode", "hasSeenWelcome"}
+
+// IsFirstLaunch reports a fresh install. isStored tells whether a settings key holds a value.
+func IsFirstLaunch(isStored func(key string) bool) bool {
+	for _, k := range launchedBeforeKeys {
+		if isStored(k) {
+			return false
+		}
+	}
+	return true
+}
+
 // DecideResume decides whether to continue a stored order. until is seconds since 1970.
-func DecideResume(stored *string, until *float64, now time.Time) ResumeAction {
+// firstLaunch only applies when no order is stored; a stored choice always wins.
+func DecideResume(stored *string, until *float64, now time.Time, firstLaunch bool) ResumeAction {
 	if stored == nil {
+		if firstLaunch {
+			return ResumeAction{Kind: ResumeFirstLaunch}
+		}
 		return ResumeAction{}
 	}
 	switch *stored {
