@@ -297,14 +297,20 @@ func TestFixturePolicies(t *testing.T) {
 			Expect *string `json:"expect"`
 		} `json:"heatLevelName"`
 		DutyResume []struct {
-			Stored *string         `json:"stored"`
-			Until  json.RawMessage `json:"until"`
-			Now    float64         `json:"now"`
-			Expect struct {
+			Stored      *string         `json:"stored"`
+			Until       json.RawMessage `json:"until"`
+			Now         float64         `json:"now"`
+			FirstLaunch bool            `json:"firstLaunch"`
+			Expect      struct {
 				Action string   `json:"action"`
 				Until  *float64 `json:"until"`
 			} `json:"expect"`
 		} `json:"dutyResume"`
+		FirstLaunch []struct {
+			Name   string   `json:"name"`
+			Stored []string `json:"stored"`
+			Expect bool     `json:"expect"`
+		} `json:"firstLaunch"`
 		DutyClock []struct {
 			Seconds float64 `json:"seconds"`
 			Expect  string  `json:"expect"`
@@ -369,8 +375,9 @@ func TestFixturePolicies(t *testing.T) {
 			}
 			until = &u
 		}
-		got := DecideResume(c.Stored, until, unix(c.Now))
-		name := map[ResumeKind]string{ResumeNone: "none", ResumeAgentWatch: "agentWatch", ResumeTimed: "timed", ResumeExpired: "expired"}[got.Kind]
+		got := DecideResume(c.Stored, until, unix(c.Now), c.FirstLaunch)
+		name := map[ResumeKind]string{ResumeNone: "none", ResumeAgentWatch: "agentWatch", ResumeTimed: "timed",
+			ResumeExpired: "expired", ResumeFirstLaunch: "firstLaunch"}[got.Kind]
 		var wantUntil *time.Time
 		if c.Expect.Until != nil {
 			u := unix(*c.Expect.Until)
@@ -378,6 +385,18 @@ func TestFixturePolicies(t *testing.T) {
 		}
 		if name != c.Expect.Action || !sameTime(got.Until, wantUntil) {
 			t.Errorf("dutyResume(%v, %s) = %s %v, want %+v", c.Stored, c.Until, name, got.Until, c.Expect)
+		}
+	}
+	if len(f.FirstLaunch) == 0 {
+		t.Error("firstLaunch: no cases")
+	}
+	for _, c := range f.FirstLaunch {
+		stored := map[string]bool{}
+		for _, k := range c.Stored {
+			stored[k] = true
+		}
+		if got := IsFirstLaunch(func(k string) bool { return stored[k] }); got != c.Expect {
+			t.Errorf("firstLaunch(%s %v) = %v, want %v", c.Name, c.Stored, got, c.Expect)
 		}
 	}
 	for _, c := range f.DutyClock {

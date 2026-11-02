@@ -140,15 +140,23 @@ import Testing
         for c in f["dutyResume"].array {
             let until: Double? = c["until"].string == "inf" ? .infinity : c["until"].double
             let action = DutyResume.decide(stored: c["stored"].string, until: until,
-                                           now: Date(timeIntervalSince1970: c["now"].double ?? 0))
+                                           now: Date(timeIntervalSince1970: c["now"].double ?? 0),
+                                           firstLaunch: c["firstLaunch"].bool ?? false)
             let want: DutyResume.Action
             switch c["expect"]["action"].string {
             case "agentWatch": want = .agentWatch
+            case "firstLaunch": want = .firstLaunch
             case "expired": want = .expired
             case "timed": want = .timed(until: c["expect"]["until"].double.map { Date(timeIntervalSince1970: $0) })
             default: want = .none
             }
             #expect(action == want, "dutyResume: \(c)")
+        }
+        #expect(!f["firstLaunch"].array.isEmpty)
+        for c in f["firstLaunch"].array {
+            let stored = Set(c["stored"].array.compactMap(\.string))
+            #expect(stored.allSatisfy { SettingsKey(rawValue: $0) != nil }, "firstLaunch: unknown key in \(c)")
+            #expect(DutyResume.isFirstLaunch { stored.contains($0.rawValue) } == c["expect"].bool, "firstLaunch: \(c)")
         }
         for c in f["dutyClock"].array {
             #expect(DutyClock.format(c["seconds"].double ?? 0) == c["expect"].string, "dutyClock: \(c)")
@@ -249,6 +257,7 @@ import Testing
                 let action: DutyResume.Action
                 switch r["action"].string {
                 case "agentWatch": action = .agentWatch
+                case "firstLaunch": action = .firstLaunch
                 case "expired": action = .expired
                 case "timed": action = .timed(until: r["until"].isNull ? nil : date(r["until"]))
                 default: action = .none

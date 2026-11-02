@@ -57,7 +57,20 @@
     {"name": "ends right now", "stored": "timed", "until": 1000000, "now": 1000000, "expect": {"action": "expired"}},
     {"name": "tampered: a week left", "stored": "timed", "until": 1604800, "now": 1000000, "expect": {"action": "none"}},
     {"name": "not finite", "stored": "timed", "until": "inf", "now": 1000000, "expect": {"action": "none"}},
-    {"name": "unknown order", "stored": "rm -rf /", "until": null, "now": 1000000, "expect": {"action": "none"}}
+    {"name": "unknown order", "stored": "rm -rf /", "until": null, "now": 1000000, "expect": {"action": "none"}},
+    {"name": "first launch", "stored": null, "until": null, "now": 1000000, "firstLaunch": true, "expect": {"action": "firstLaunch"}},
+    {"name": "first launch keeps a stored agent watch", "stored": "agentWatch", "until": null, "now": 1000000, "firstLaunch": true, "expect": {"action": "agentWatch"}},
+    {"name": "first launch keeps a stored timed watch", "stored": "timed", "until": 1000600, "now": 1000000, "firstLaunch": true, "expect": {"action": "timed", "until": 1000600}},
+    {"name": "first launch keeps an expired watch over", "stored": "timed", "until": 999999, "now": 1000000, "firstLaunch": true, "expect": {"action": "expired"}},
+    {"name": "first launch ignores an unknown order", "stored": "rm -rf /", "until": null, "now": 1000000, "firstLaunch": true, "expect": {"action": "none"}}
+  ],
+  "firstLaunch": [
+    {"name": "fresh install", "stored": [], "expect": true},
+    {"name": "turned off before: the watch mode is saved on every run", "stored": ["dutyMode"], "expect": false},
+    {"name": "stored order", "stored": ["dutyOrder"], "expect": false},
+    {"name": "stored order end", "stored": ["dutyOrderUntil"], "expect": false},
+    {"name": "welcome dismissed", "stored": ["hasSeenWelcome"], "expect": false},
+    {"name": "keys written before the first resume do not count", "stored": ["lidEngagedByUs", "updateLastCheck", "batteryFloor", "checkForUpdates"], "expect": true}
   ],
   "dutyClock": [
     {"seconds": 0, "expect": "0:00"},

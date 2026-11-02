@@ -67,6 +67,7 @@ public enum DutyResume {
     public enum Action: Equatable {
         case none
         case agentWatch
+        case firstLaunch         // 새 설치의 첫 실행 → 에이전트 근무를 기본으로 켬
         case timed(until: Date?) // nil = 무기한
         case expired             // 앱이 꺼져 있는 동안 근무 시간이 끝남
     }
@@ -74,8 +75,21 @@ public enum DutyResume {
     /// 근무 명령으로 허용하는 최대 남은 시간. 이보다 길면 저장값 조작으로 보고 무시한다.
     static let maxRemaining: TimeInterval = 24 * 3600
 
-    public static func decide(stored: String?, until: Double?, now: Date) -> Action {
+    /// 한 번이라도 실행된 적이 있으면 남는 키. 앱은 실행할 때마다(v0.1부터) 근무 형태(`dutyMode`)를 저장하므로,
+    /// 근무를 끈 사용자는 `dutyOrder` 가 없어도 `dutyMode` 가 남아 첫 실행으로 보지 않는다.
+    /// 첫 근무 복귀 전에 앱이 먼저 쓰는 키(`lidEngagedByUs`, 업데이트 확인)는 넣지 않는다.
+    static let launchedBeforeKeys: [SettingsKey] = [.dutyOrder, .dutyOrderUntil, .dutyMode, .hasSeenWelcome]
+
+    /// 새 설치의 첫 실행인지. `isStored` 는 그 키에 저장된 값이 있는지 알려 준다.
+    public static func isFirstLaunch(isStored: (SettingsKey) -> Bool) -> Bool {
+        !launchedBeforeKeys.contains(where: isStored)
+    }
+
+    /// `firstLaunch` 는 저장된 근무 명령이 없을 때만 쓴다 — 저장된 선택은 언제나 그대로 따른다.
+    public static func decide(stored: String?, until: Double?, now: Date, firstLaunch: Bool = false) -> Action {
         switch stored {
+        case nil:
+            return firstLaunch ? .firstLaunch : .none
         case "agentWatch":
             return .agentWatch
         case "timed":
@@ -87,6 +101,21 @@ public enum DutyResume {
         default:
             return .none
         }
+    }
+
+    /// 근무 명령을 `dutyOrder` 에 저장할 값. nil 이면 키를 지운다 (근무 없음).
+    public static func stored(_ order: DutyOrder) -> String? {
+        switch order {
+        case .off: nil
+        case .agentWatch: "agentWatch"
+        case .timed: "timed"
+        }
+    }
+
+    /// `dutyOrderUntil` 에 저장할 끝나는 시각 (Unix 초). nil 이면 키를 지운다.
+    public static func storedUntil(_ order: DutyOrder) -> Double? {
+        guard case .timed(let until?) = order else { return nil }
+        return until.timeIntervalSince1970
     }
 }
 

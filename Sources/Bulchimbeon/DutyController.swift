@@ -254,18 +254,10 @@ final class DutyController: ObservableObject {
     private func persist() {
         defaults.set(engine.mode.rawValue, forKey: Keys.mode)
         defaults.set(engine.lidEngagedByUs, forKey: Keys.lidEngagedByUs)
-        switch engine.order {
-        case .off:
-            defaults.removeObject(forKey: Keys.order)
-            defaults.removeObject(forKey: Keys.orderUntil)
-        case .agentWatch:
-            defaults.set("agentWatch", forKey: Keys.order)
-            defaults.removeObject(forKey: Keys.orderUntil)
-        case .timed(let until):
-            defaults.set("timed", forKey: Keys.order)
-            if let until { defaults.set(until.timeIntervalSince1970, forKey: Keys.orderUntil) }
-            else { defaults.removeObject(forKey: Keys.orderUntil) }
-        }
+        if let order = DutyResume.stored(engine.order) { defaults.set(order, forKey: Keys.order) }
+        else { defaults.removeObject(forKey: Keys.order) }
+        if let until = DutyResume.storedUntil(engine.order) { defaults.set(until, forKey: Keys.orderUntil) }
+        else { defaults.removeObject(forKey: Keys.orderUntil) }
         if engine.quote != quoteKind {
             quoteKind = engine.quote
             switch quoteKind {
@@ -368,12 +360,13 @@ final class DutyController: ObservableObject {
 
     // MARK: - 재시작 복귀
 
-    /// 앱 재시작·업데이트·재부팅 후 저장된 근무를 이어간다.
+    /// 앱 재시작·업데이트·재부팅 후 저장된 근무를 이어간다. 새 설치의 첫 실행이면 에이전트 근무를 켠다.
     private func resume() async {
         guard !CommandLine.arguments.contains("--demo") else { return }
+        let firstLaunch = DutyResume.isFirstLaunch { defaults.object(forKey: $0.rawValue) != nil }
         let action = DutyResume.decide(stored: defaults.string(forKey: Keys.order),
                                        until: defaults.object(forKey: Keys.orderUntil) as? Double,
-                                       now: Date())
+                                       now: Date(), firstLaunch: firstLaunch)
         await run(engine.resume(action, now: Date()))
     }
 
