@@ -7,6 +7,7 @@ struct BulchimbeonApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var duty = DutyController.shared
     @StateObject private var animator = SpriteAnimator()
+    @StateObject private var animationEnvironment = MenuBarAnimationEnvironment.shared
     @StateObject private var patrol = PatrolController.shared
     @StateObject private var uniform = UniformSetting.shared
     @StateObject private var updater = UpdateController.shared
@@ -24,7 +25,7 @@ struct BulchimbeonApp: App {
         MenuBarExtra {
             DutyMenu(duty: duty, patrol: patrol, uniform: uniform, updater: updater)
         } label: {
-            MenuBarLabel(duty: duty, animator: animator, uniform: uniform)
+            MenuBarLabel(duty: duty, animator: animator, uniform: uniform, environment: animationEnvironment)
         }
         .menuBarExtraStyle(.menu)
     }
@@ -34,6 +35,15 @@ struct MenuBarLabel: View {
     @ObservedObject var duty: DutyController
     @ObservedObject var animator: SpriteAnimator
     @ObservedObject var uniform: UniformSetting
+    @ObservedObject var environment: MenuBarAnimationEnvironment
+
+    private var animationState: MenuBarAnimationState {
+        MenuBarAnimationState(frameCount: SpriteImages.frames(duty.pose).count,
+                              displaySleeping: environment.displaySleeping,
+                              screenLocked: environment.screenLocked,
+                              statusItemVisible: environment.statusItemVisible,
+                              lowPowerMode: environment.lowPowerMode)
+    }
 
     var body: some View {
         let frames = SpriteImages.frames(duty.pose)
@@ -45,6 +55,47 @@ struct MenuBarLabel: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(L10n.t("불침번: ", "Bulchimbeon: ", "Bulchimbeon：") + duty.statusLine)
+        .onAppear { animator.configure(animationState) }
+        .onChange(of: animationState) { animator.configure($0) }
+    }
+}
+
+/// SwiftUI's MenuBarExtra does not expose its NSStatusItem or its per-display copies.
+/// These system notifications are the visibility states AppKit does expose without polling.
+@MainActor
+final class MenuBarAnimationEnvironment: ObservableObject {
+    static let shared = MenuBarAnimationEnvironment()
+
+    @Published private(set) var displaySleeping = false
+    @Published private(set) var screenLocked = false
+    @Published private(set) var statusItemVisible = true
+    @Published private(set) var lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+
+    private init() {
+        let center = NotificationCenter.default
+        center.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { MenuBarAnimationEnvironment.shared.displaySleeping = true }
+        }
+        center.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { MenuBarAnimationEnvironment.shared.displaySleeping = false }
+        }
+        center.addObserver(forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { MenuBarAnimationEnvironment.shared.screenLocked = true }
+        }
+        center.addObserver(forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { MenuBarAnimationEnvironment.shared.screenLocked = false }
+        }
+        center.addObserver(forName: NSApplication.didHideNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { MenuBarAnimationEnvironment.shared.statusItemVisible = false }
+        }
+        center.addObserver(forName: NSApplication.didUnhideNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { MenuBarAnimationEnvironment.shared.statusItemVisible = true }
+        }
+        center.addObserver(forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                MenuBarAnimationEnvironment.shared.lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+            }
+        }
     }
 }
 

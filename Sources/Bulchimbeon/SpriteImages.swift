@@ -50,16 +50,36 @@ final class UniformSetting: ObservableObject {
     private init() { themeID = SpriteImages.theme.id }
 }
 
-/// 0.5초 간격 프레임 카운터
+/// 보이는 메뉴 막대에만 다음 스프라이트 프레임을 요청한다.
 @MainActor
 final class SpriteAnimator: ObservableObject {
     @Published private(set) var tick = 0
     private var timer: Timer?
+    private var state: MenuBarAnimationState?
 
-    init() {
-        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tick &+= 1 }
+    deinit { timer?.invalidate() }
+
+    func configure(_ newState: MenuBarAnimationState) {
+        guard newState != state else { return }
+        state = newState
+        let interval = MenuBarAnimationPolicy.interval(for: newState)
+        timer?.invalidate()
+        timer = nil
+        guard let interval else { return }
+
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.advanceFrame() }
         }
-        timer?.tolerance = 0.1
+        timer.tolerance = min(0.25, interval * 0.2)
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    private func advanceFrame() {
+        guard let state, state.frameCount > 1 else { return }
+        let next = (tick + 1) % state.frameCount
+        // Avoid publishing a SwiftUI redraw if the visible frame would be unchanged.
+        guard next != tick % state.frameCount else { return }
+        tick = next
     }
 }

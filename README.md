@@ -500,6 +500,22 @@ git tag vX.Y.Z && git push origin vX.Y.Z   # → the Release workflow builds, at
 Sprites are ASCII grids in `Sources/BulchimbeonCore/Sprites.swift`: one character per pixel, drawn as vector
 rectangles so both the 16 pt menu bar icon and the 1024 px app icon stay crisp.
 
+### Menu-bar animation and power
+
+The menu-bar sprite advances at 2 frames per second while it can be seen. It stops completely when the screen is
+locked, the displays sleep, or the app is hidden; it runs at 0.67 fps in Low Power Mode. The timer has tolerance and
+publishes only a different frame, so a static pose creates no redraw.
+
+One AppKit `NSStatusItem` is replicated by macOS to each menu bar. AppKit does not expose an independently drawable
+status item, active display, or occlusion state for those copies, so Bulchimbeon cannot animate just one display without
+replacing the standard menu-bar item. The visible animation therefore remains identical on every active display.
+
+Measured on 2026-11-06 on an M5 Pro on AC with the built-in panel plus two LG 4K displays: `top` reported 2.04% CPU
+and 167 context switches/s before this change, 1.58% CPU and 186 context switches/s after it (five 2-second samples,
+patrol mode enabled). `top` on this macOS release has no per-process wakeups counter, so context switches are recorded
+as the available wakeup proxy; normal visible animation is intentionally not claimed as a speed-up. The saving is the
+zero scheduled menu-bar frames while it is not visible (rather than 2/s), and 67% fewer frames in Low Power Mode.
+
 ## Roadmap
 
 Tracked as [milestones](https://github.com/s3onghyun/bulchimbeon/milestones). 1.0 means settings keys, command-line
