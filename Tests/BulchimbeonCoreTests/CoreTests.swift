@@ -910,3 +910,33 @@ import Testing
         #expect(s.display.isEmpty && s.system.isEmpty)
     }
 }
+
+@Suite struct MenuBarAnimationPolicyTests {
+    @Test func animatesOnlyWhenAPixelCanBeSeen() {
+        let visible = MenuBarAnimationState(frameCount: 2, displaySleeping: false, screenLocked: false,
+                                            statusItemVisible: true, lowPowerMode: false)
+        #expect(MenuBarAnimationPolicy.interval(for: visible) == 0.5)
+
+        #expect(MenuBarAnimationPolicy.interval(for: .init(frameCount: 1, displaySleeping: false, screenLocked: false,
+                                                             statusItemVisible: true, lowPowerMode: false)) == nil)
+        #expect(MenuBarAnimationPolicy.interval(for: .init(frameCount: 2, displaySleeping: true, screenLocked: false,
+                                                             statusItemVisible: true, lowPowerMode: false)) == nil)
+        #expect(MenuBarAnimationPolicy.interval(for: .init(frameCount: 2, displaySleeping: false, screenLocked: true,
+                                                             statusItemVisible: true, lowPowerMode: false)) == nil)
+        #expect(MenuBarAnimationPolicy.interval(for: .init(frameCount: 2, displaySleeping: false, screenLocked: false,
+                                                             statusItemVisible: false, lowPowerMode: false)) == nil)
+    }
+
+    @Test func lowPowerModeSlowsRatherThanStopsVisibleAnimation() {
+        let state = MenuBarAnimationState(frameCount: 2, displaySleeping: false, screenLocked: false,
+                                          statusItemVisible: true, lowPowerMode: true)
+        #expect(MenuBarAnimationPolicy.interval(for: state) == 1.5)
+    }
+
+    @Test func statusItemIsHiddenOnlyWhenEveryWindowIsOccluded() {
+        #expect(MenuBarAnimationPolicy.statusItemVisible(windowsVisible: []))
+        #expect(MenuBarAnimationPolicy.statusItemVisible(windowsVisible: [false, true]))
+        #expect(!MenuBarAnimationPolicy.statusItemVisible(windowsVisible: [false]))
+        #expect(!MenuBarAnimationPolicy.statusItemVisible(windowsVisible: [false, false]))
+    }
+}

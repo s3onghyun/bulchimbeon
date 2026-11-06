@@ -26,12 +26,11 @@ import Testing
         #expect(got == want, "testdata/engine/sprites.json is out of date: BULCHIMBEON_WRITE_SPRITES=1 swift test --filter SpriteFixtureTests")
     }
 
-    /// 픽스처의 프레임 간격이 macOS 메뉴바 타이머와 같은지 (앱 타깃은 리눅스에서 빌드되지 않아 소스로 확인)
-    @Test func frameSecondsMatchesMenuBarTimer() throws {
-        let source = Fixture.directory.deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("Sources/Bulchimbeon/SpriteImages.swift")
-        let text = try String(contentsOf: source, encoding: .utf8)
-        #expect(text.contains("withTimeInterval: \(Self.frameSeconds)"), "SpriteAnimator interval changed: update frameSeconds")
+    /// 픽스처의 정상 프레임 간격은 실제 정책의 보이는 일반 상태와 같다.
+    @Test func frameSecondsMatchesVisibleMenuBarPolicy() {
+        let state = MenuBarAnimationState(frameCount: 2, displaySleeping: false, screenLocked: false,
+                                          statusItemVisible: true, lowPowerMode: false)
+        #expect(MenuBarAnimationPolicy.interval(for: state) == Self.frameSeconds)
     }
 
     /// 내보낸 본문(= 파일, 위 테스트)을 다시 읽어 Core 와 비교한다
