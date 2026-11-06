@@ -31,4 +31,10 @@ public enum MenuBarAnimationPolicy {
         // Low Power Mode intentionally favors fewer compositor updates over animation speed.
         return state.lowPowerMode ? 1.5 : 0.5
     }
+
+    /// The status item can be seen while any of its windows is not occluded. With no window
+    /// reported yet, assume it is visible so the sprite never freezes on a missing signal.
+    public static func statusItemVisible(windowsVisible: [Bool]) -> Bool {
+        windowsVisible.isEmpty || windowsVisible.contains(true)
+    }
 }

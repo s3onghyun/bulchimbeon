@@ -932,4 +932,11 @@ import Testing
                                           statusItemVisible: true, lowPowerMode: true)
         #expect(MenuBarAnimationPolicy.interval(for: state) == 1.5)
     }
+
+    @Test func statusItemIsHiddenOnlyWhenEveryWindowIsOccluded() {
+        #expect(MenuBarAnimationPolicy.statusItemVisible(windowsVisible: []))
+        #expect(MenuBarAnimationPolicy.statusItemVisible(windowsVisible: [false, true]))
+        #expect(!MenuBarAnimationPolicy.statusItemVisible(windowsVisible: [false]))
+        #expect(!MenuBarAnimationPolicy.statusItemVisible(windowsVisible: [false, false]))
+    }
 }

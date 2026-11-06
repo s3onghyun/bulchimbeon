@@ -77,9 +77,6 @@ final class SpriteAnimator: ObservableObject {
 
     private func advanceFrame() {
         guard let state, state.frameCount > 1 else { return }
-        let next = (tick + 1) % state.frameCount
-        // Avoid publishing a SwiftUI redraw if the visible frame would be unchanged.
-        guard next != tick % state.frameCount else { return }
-        tick = next
+        tick = (tick + 1) % state.frameCount
     }
 }

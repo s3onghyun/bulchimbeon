@@ -72,24 +72,27 @@ final class MenuBarAnimationEnvironment: ObservableObject {
     @Published private(set) var lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
 
     private init() {
-        let center = NotificationCenter.default
-        center.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { _ in
+        let workspace = NSWorkspace.shared.notificationCenter
+        workspace.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated { MenuBarAnimationEnvironment.shared.displaySleeping = true }
         }
-        center.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { _ in
+        workspace.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated { MenuBarAnimationEnvironment.shared.displaySleeping = false }
         }
-        center.addObserver(forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main) { _ in
+        let distributed = DistributedNotificationCenter.default()
+        distributed.addObserver(forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main) { _ in
             MainActor.assumeIsolated { MenuBarAnimationEnvironment.shared.screenLocked = true }
         }
-        center.addObserver(forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main) { _ in
+        distributed.addObserver(forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main) { _ in
             MainActor.assumeIsolated { MenuBarAnimationEnvironment.shared.screenLocked = false }
         }
-        center.addObserver(forName: NSApplication.didHideNotification, object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { MenuBarAnimationEnvironment.shared.statusItemVisible = false }
-        }
-        center.addObserver(forName: NSApplication.didUnhideNotification, object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { MenuBarAnimationEnvironment.shared.statusItemVisible = true }
+        let center = NotificationCenter.default
+        center.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                let statusWindows = NSApp.windows.filter { $0.className.contains("StatusBarWindow") }
+                MenuBarAnimationEnvironment.shared.statusItemVisible = MenuBarAnimationPolicy.statusItemVisible(
+                    windowsVisible: statusWindows.map { $0.occlusionState.contains(.visible) })
+            }
         }
         center.addObserver(forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated {

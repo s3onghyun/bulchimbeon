@@ -503,12 +503,12 @@ rectangles so both the 16 pt menu bar icon and the 1024 px app icon stay crisp.
 ### Menu-bar animation and power
 
 The menu-bar sprite advances at 2 frames per second while it can be seen. It stops completely when the screen is
-locked, the displays sleep, or the app is hidden; it runs at 0.67 fps in Low Power Mode. The timer has tolerance and
-publishes only a different frame, so a static pose creates no redraw.
+locked, the displays sleep, or AppKit reports the status item's window as fully occluded; it runs at 0.67 fps in Low
+Power Mode. The timer has tolerance, and a single-frame pose schedules no timer at all, so it creates no redraw.
 
 One AppKit `NSStatusItem` is replicated by macOS to each menu bar. AppKit does not expose an independently drawable
-status item, active display, or occlusion state for those copies, so Bulchimbeon cannot animate just one display without
-replacing the standard menu-bar item. The visible animation therefore remains identical on every active display.
+status item or active display for those copies, so Bulchimbeon cannot animate just one display without replacing the
+standard menu-bar item. The visible animation therefore remains identical on every active display.
 
 Measured on 2026-11-06 on an M5 Pro on AC with the built-in panel plus two LG 4K displays: `top` reported 2.04% CPU
 and 167 context switches/s before this change, 1.58% CPU and 186 context switches/s after it (five 2-second samples,
