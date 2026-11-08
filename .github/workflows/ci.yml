@@ -19,6 +19,8 @@ jobs:
         with:
           persist-credentials: false
       - name: Test
+        # 정상은 2분 안팎. 테스트가 멈추면 작업 전체(20분)가 아니라 이 단계에서 끊는다 (2026-10-31 PR #63 실행)
+        timeout-minutes: 10
         run: swift test
       - name: Build app bundle
         run: ./scripts/build-app.sh
