@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/s3onghyun/bulchimbeon/internal/engine"
 	"github.com/s3onghyun/bulchimbeon/internal/platform"
@@ -66,7 +67,12 @@ func TestProcScannerRecordedTree(t *testing.T) {
 		t.Errorf("helper args = %q", helper.Arguments)
 	}
 
-	status := engine.Evaluate(scan.Snapshots, nil, engine.BuiltIn)
+	// start times: btime from testdata/proc/stat plus field 22 in clock ticks
+	if want := time.Unix(1762560000, 0).Add(9251235 * 10 * time.Millisecond); !claude.StartedAt.Equal(want) {
+		t.Errorf("claude started at %v, want %v", claude.StartedAt, want)
+	}
+
+	status := engine.Evaluate(scan.Snapshots, nil, time.Now(), engine.BuiltIn)
 	got := map[string]int{}
 	for k, s := range status {
 		got[k.ID] = s.Present
@@ -118,6 +124,21 @@ func TestParseStat(t *testing.T) {
 		if (err != nil) != c.shouldError || ppid != c.ppid || ticks != c.ticks {
 			t.Errorf("ParseStat(%q) = %d, %d, %v", c.in, ppid, ticks, err)
 		}
+	}
+}
+
+func TestParseStartTicksAndBootTime(t *testing.T) {
+	if v, ok := ParseStartTicks([]byte("1582871 (cat) R 1582870 1582871 1582870 0 -1 4194304 89 0 0 0 7 3 0 0 20 0 1 0 9251235\n")); !ok || v != 9251235 {
+		t.Errorf("start ticks = %d, %v", v, ok)
+	}
+	if _, ok := ParseStartTicks([]byte("42 (a) b) (c) S 7 1 1 0 -1 0 0 0 0 0 1 2 0")); ok {
+		t.Error("a short stat line has no start time")
+	}
+	if b, ok := ParseBootTime([]byte("cpu  1 2 3\nbtime 1762560000\nprocesses 9\n")); !ok || b.Unix() != 1762560000 {
+		t.Errorf("btime = %v, %v", b, ok)
+	}
+	if _, ok := ParseBootTime([]byte("cpu  1 2 3\n")); ok {
+		t.Error("no btime line")
 	}
 }
 

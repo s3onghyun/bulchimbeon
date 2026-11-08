@@ -171,7 +171,7 @@ func (r *rig) state(order, pose string, onDuty, resting bool) {
 	st := daemon.State{Version: 1, PID: 77, Platform: "linux", StartedAt: started, UpdatedAt: r.now, Order: order,
 		OnDuty: onDuty, Resting: resting, Pose: pose, Heat: "normal", Settings: settings.Defaults(), LogPath: r.paths.Log,
 		Agents: []daemon.AgentState{{ID: "claude", Name: "Claude Code", Open: 1, Working: 1,
-			Processes: []daemon.ProcessState{{PID: 100, Working: onDuty, TreeCPU: 9.5, Reason: "executableName"}}}}}
+			Processes: []daemon.ProcessState{{PID: 100, Working: onDuty, RecentCPU: 9.5, BusyReason: "recentCPU", Reason: "executableName"}}}}}
 	if onDuty {
 		st.DutyStartedAt = &started
 		st.Lock = platform.LockStatus{Wanted: true, Method: platform.MethodGnome,
@@ -310,7 +310,7 @@ func TestPoseAndStatusFollowTheStateFile(t *testing.T) {
 	r.state("agentWatch", "duty", true, false)
 	r.tray.refresh()
 	want := []string{"Lock: blocking auto-suspend via org.gnome.SessionManager · confirmed by the session",
-		"Why: Claude Code pid 100 9.5% (process-tree CPU ≥ 2.0%, 60 s average)",
+		"Why: Claude Code pid 100 9.5% (own + recent processes CPU ≥ 2.0%, 60 s average)",
 		"Agents: Claude Code ×1 open, 1 working", "Handover: 5 min after the last agent goes quiet (agentGraceMinutes)",
 		"Power: battery: none · heat: no sensor · lid: not handled (closing it still suspends)",
 		"Others: blocking sleep: none · delaying sleep: UPower · blocking idle: none", "Log: " + r.paths.Log}
@@ -381,7 +381,7 @@ func TestMenuLayoutAndUniformChoice(t *testing.T) {
 	}
 	got := labels(root.children)
 	want := []string{"🪖 Bulchimbeon — on duty for 1:30 (agent watch)", "Lock: blocking auto-suspend via org.gnome.SessionManager · confirmed by the session",
-		"Why: Claude Code pid 100 9.5% (process-tree CPU ≥ 2.0%, 60 s average)", "Agents: Claude Code ×1 open, 1 working",
+		"Why: Claude Code pid 100 9.5% (own + recent processes CPU ≥ 2.0%, 60 s average)", "Agents: Claude Code ×1 open, 1 working",
 		"Handover: 5 min after the last agent goes quiet (agentGraceMinutes)", "Power: battery: none · heat: no sensor · lid: not handled (closing it still suspends)",
 		"Others: blocking sleep: none · delaying sleep: UPower · blocking idle: none", "Log: " + r.paths.Log,
 		"--", "🧥 Uniform", "--", "Quit tray (the watch keeps running)"}

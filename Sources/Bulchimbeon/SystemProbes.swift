@@ -164,23 +164,33 @@ enum SystemProbes {
 enum ProcessScanner {
     private static var argumentCache = ProcessArgumentCache()
 
-    /// `Bulchimbeon --diagnose`: 감지 결과와 근거를 출력한다. 명령줄 인자는 출력하지 않는다.
-    static func diagnose(custom: [String]) -> String {
+    /// `Bulchimbeon --diagnose`: 감지 결과와 근거를 출력한다. 명령줄 인자·환경변수는 출력하지 않는다.
+    /// CPU 는 `sampleSeconds` 간격의 두 번 스캔으로 잰다 (앱은 60초 평균).
+    static func diagnose(custom: [String], sampleSeconds: TimeInterval = 5) -> String {
         let kinds = AgentCatalog.builtIn + AgentCatalog.customKinds(custom)
-        let processes = scan(kinds: kinds).snapshots
-        var children: [Int32: [ProcessSnapshot]] = [:]
-        for p in processes { children[p.ppid, default: []].append(p) }
+        var history = CPUHistory()
+        _ = history.add(scan(kinds: kinds).cpuTimes, at: Date())
+        Thread.sleep(forTimeInterval: sampleSeconds)
+        let now = Date()
+        let scanned = scan(kinds: kinds)
+        let processes = scanned.snapshots
+        let cpu = history.add(scanned.cpuTimes, at: now)
+        let tree = AgentActivity.Tree(processes, kinds: kinds)
         var lines = [L10n.t("불침번 에이전트 감지 진단 (UID \(getuid()) 프로세스 \(processes.count)개 검사)",
-                            "Bulchimbeon agent detection (checked \(processes.count) processes of UID \(getuid()))", "Bulchimbeon 代理检测诊断（已扫描 UID \(getuid()) 的 \(processes.count) 个进程）"), ""]
+                            "Bulchimbeon agent detection (checked \(processes.count) processes of UID \(getuid()))", "Bulchimbeon 代理检测诊断（已扫描 UID \(getuid()) 的 \(processes.count) 个进程）"),
+                     L10n.t("CPU 는 \(Int(sampleSeconds))초 동안 잼 (앱은 60초 평균으로 판단)",
+                            "CPU measured over \(Int(sampleSeconds)) s (the app decides on a 60 s average)", "CPU 在 \(Int(sampleSeconds)) 秒内测量（应用按 60 秒平均值判断）"), ""]
+        let header = lines.count
         for process in processes {
             guard let (kind, reason) = AgentCatalog.match(process, kinds: kinds) else { continue }
-            let busy = AgentActivity.isBusy(process, children: children, cpu: [:])
+            let activity = AgentActivity.explain(process, tree: tree, cpu: cpu, now: now)
             lines.append("  ✔ \(kind.displayName)  pid \(process.pid)  " + L10n.t("근거: ", "matched by: ", "匹配依据：") + reason.label
-                         + (busy ? L10n.t("  · 작업 중", "  · working", "  · 工作中") : ""))
+                         + "  · " + activity.verdict)
             if let cwd = process.cwd { lines.append("      " + L10n.t("작업 폴더: ", "cwd: ", "工作目录：") + cwd) }
             lines.append("      " + L10n.t("실행 파일: ", "executable: ", "可执行文件：") + process.executablePath)
+            lines += activity.details.map { "      " + $0 }
         }
-        if lines.count == 2 { lines.append("  " + L10n.t("감지된 에이전트 없음", "No agents detected", "未检测到代理")) }
+        if lines.count == header { lines.append("  " + L10n.t("감지된 에이전트 없음", "No agents detected", "未检测到代理")) }
         let holders = PowerHolders.summarize(PowerHolderProbe.assertions(), ownPID: getpid())
         lines += ["", L10n.t("화면을 막는 다른 앱: ", "Also keeping the display on: ", "同样保持屏幕常亮的应用：") + (holders.display.isEmpty ? "-" : holders.display.joined(separator: ", ")),
                   L10n.t("잠들지 못하게 하는 다른 앱: ", "Also keeping the Mac awake: ", "同样阻止 Mac 休眠的应用：") + (holders.system.isEmpty ? "-" : holders.system.joined(separator: ", "))]
@@ -228,8 +238,10 @@ enum ProcessScanner {
             return AgentCatalog.isCandidate(executablePath: path, argv0: args.first) ? arguments(pid, limit: 64) : args
         }
         let isAgentCandidate = AgentCatalog.isCandidate(executablePath: path, argv0: args.first)
+        let startedAt = Date(timeIntervalSince1970: TimeInterval(process.startedAtSeconds)
+                             + TimeInterval(process.startedAtMicroseconds) / 1_000_000)
         return ProcessSnapshot(pid: pid, ppid: process.ppid, executablePath: path, arguments: args,
-                               cwd: isAgentCandidate ? workingDirectory(pid) : nil)
+                               cwd: isAgentCandidate ? workingDirectory(pid) : nil, startedAt: startedAt)
     }
 
     private static func workingDirectory(_ pid: pid_t) -> String? {

@@ -172,7 +172,7 @@ brew update && brew upgrade --cask bulchimbeon
 
 - 防休眠使用 `IOPMAssertion`（与 `caffeinate` 相同）；合盖模式额外使用 `pmset -a disablesleep 1`
 - 通过 libproc **只扫描当前用户的进程**，按可执行文件名、`argv[0]`、安装路径、脚本路径识别代理（不做子串匹配）
-- "正在工作"的判断：Claude Code 只在工作时自己启动的 `caffeinate` 子进程，或进程树的 CPU 使用率（60 秒平均）
+- "正在工作"的判断：只看代理自身的最近活动：代理及其最近 10 分钟内启动的进程 CPU 合计 ≥ 2%（60 秒平均）；运行超过 10 分钟的进程（MCP 服务器、hook 轮询）单独 ≥ 5% 才算；`caffeinate` 子进程只在旁边有最近 10 分钟内启动的子进程时才算；由其他代理启动的代理（`claude -p` 辅助会话）单独判断。想恢复"打开就算"的旧行为，打开菜单"代理值班设置 ▸ 将空闲会话也视为工作中"（`agentWatchCountsIdle`）
 - 判断逻辑位于不含系统调用的状态机（`DutyEngine`）中，使用伪时钟做了场景测试
 
 详情：[English README](README.md) · [设计文档（韩语）](docs/design.md)

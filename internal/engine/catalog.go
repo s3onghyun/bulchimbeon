@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Kind identifies one agent. It is comparable so it can key the per-agent counts.
@@ -37,6 +38,8 @@ type ProcessSnapshot struct {
 	Arguments []string
 	// CWD is collected on macOS for agent candidates only, for `--diagnose` output.
 	CWD string
+	// StartedAt is when the process started; zero when unknown (then it counts as recent).
+	StartedAt time.Time
 }
 
 // Reason says which rule matched (diagnostic output).

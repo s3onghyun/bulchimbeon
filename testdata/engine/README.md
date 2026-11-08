@@ -46,9 +46,20 @@ for texts the core renders without one: duty-engine log lines, notifications ins
 
 ### `activity.json`: working vs. idle
 
-`cpuThreshold` (percent) and `busyGraceSeconds` pin the constants. Each `evaluate` case is
-`{name, processes: [{pid, ppid, exe, args}], cpu: {pid: percent}, custom?, expect: {id: {present, busy}}}`.
-A process is busy when it has a `caffeinate` child, or when it and its descendants use at least the threshold.
+`cpuThreshold` and `backgroundCPUThreshold` (percent), `backgroundAgeSeconds` and `busyGraceSeconds` pin the
+constants; `now` is the evaluation time (Unix seconds). Each `evaluate` case is
+`{name, processes: [{pid, ppid, exe, args, age?}], cpu: {pid: percent}, custom?, reasons?, expect: {id: {present, busy}}}`.
+`age` is how many seconds before `now` the process started; without it the start time is unknown and the process
+counts as recent. `reasons` maps an agent's PID to why it is busy (`caffeinate`, `recentCPU`, `background`, or `null`
+for idle), checked through `explain` / `Explain`.
+
+An agent is busy when (first match wins):
+
+1. `caffeinate`: it has a `caffeinate` child and another child (not an agent) younger than `backgroundAgeSeconds`;
+2. `recentCPU`: its own CPU plus that of descendants younger than `backgroundAgeSeconds` reaches `cpuThreshold`;
+3. `background`: one older descendant alone reaches `backgroundCPUThreshold`.
+
+The descendant walk stops at other agents: an agent started under another agent is judged on its own.
 
 ### `cpu_history.json`: CPU averaging
 

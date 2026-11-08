@@ -70,17 +70,30 @@ import Testing
         let f = try Fixture.load("activity.json")
         #expect(AgentActivity.cpuThreshold == f["cpuThreshold"].double)
         #expect(AgentActivity.busyGrace == f["busyGraceSeconds"].double)
+        #expect(AgentActivity.backgroundAge == f["backgroundAgeSeconds"].double)
+        #expect(AgentActivity.backgroundCPUThreshold == f["backgroundCPUThreshold"].double)
+        let now = Date(timeIntervalSince1970: try #require(f["now"].double))
         for c in f["evaluate"].array {
+            let name = c["name"].string ?? ""
             let processes = c["processes"].array.map { p in
                 ProcessSnapshot(pid: Int32(p["pid"].int ?? 0), ppid: Int32(p["ppid"].int ?? 0),
-                                executablePath: p["exe"].string ?? "", arguments: p["args"].strings)
+                                executablePath: p["exe"].string ?? "", arguments: p["args"].strings,
+                                startedAt: p["age"].double.map { now.addingTimeInterval(-$0) })
             }
             var cpu: [Int32: Double] = [:]
             for (pid, value) in c["cpu"].object { cpu[Int32(pid) ?? -1] = value.double }
-            let status = AgentActivity.evaluate(processes, cpu: cpu, kinds: kinds(c["custom"]))
+            let status = AgentActivity.evaluate(processes, cpu: cpu, now: now, kinds: kinds(c["custom"]))
             let got = Dictionary(uniqueKeysWithValues: status.map { ($0.key.id, [$0.value.present, $0.value.busy]) })
             let want = c["expect"].object.mapValues { [$0["present"].int ?? -1, $0["busy"].int ?? -1] }
-            #expect(got == want, "evaluate: \(c["name"].string ?? "")")
+            #expect(got == want, "evaluate: \(name)")
+
+            let tree = AgentActivity.Tree(processes, kinds: kinds(c["custom"]))
+            for (pid, reason) in c["reasons"].object {
+                let agent = try #require(processes.first { String($0.pid) == pid }, "\(name): no pid \(pid)")
+                #expect(tree.agents[agent.pid] != nil, "\(name): pid \(pid) is not an agent")
+                let explained = AgentActivity.explain(agent, tree: tree, cpu: cpu, now: now)
+                #expect(explained.reason?.rawValue == reason.string, "\(name): reason of pid \(pid)")
+            }
         }
     }
 

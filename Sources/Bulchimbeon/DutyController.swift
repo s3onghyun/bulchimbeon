@@ -398,8 +398,7 @@ final class DutyController: ObservableObject {
         now = Date()
         if let scanned {
             let cpu = cpuHistory.add(scanned.cpuTimes, at: now)
-            agentStatus = AgentActivity.evaluate(scanned.snapshots, cpu: cpu,
-                                                 kinds: kinds)
+            agentStatus = AgentActivity.evaluate(scanned.snapshots, cpu: cpu, now: now, kinds: kinds)
             agents = agentStatus.mapValues(\.present).filter { $0.value > 0 }
             lastScan = now
         }

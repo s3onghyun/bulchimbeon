@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/s3onghyun/bulchimbeon/internal/engine"
 	"github.com/s3onghyun/bulchimbeon/internal/platform"
@@ -53,14 +54,21 @@ func (s *ProcScanner) Scan(kinds []engine.AgentKind) (platform.ProcessScan, erro
 		return platform.ProcessScan{}, err
 	}
 	scan := platform.ProcessScan{CPUTimes: map[int32]uint64{}}
+	boot, bootOK := time.Time{}, false
+	if data, err := os.ReadFile(filepath.Join(s.Root, "stat")); err == nil {
+		boot, bootOK = ParseBootTime(data)
+	}
 	for _, e := range entries {
 		pid, err := strconv.ParseInt(e.Name(), 10, 32)
 		if err != nil || pid <= 0 {
 			continue
 		}
-		snap, ticks, ok := s.snapshot(int32(pid), kinds)
+		snap, ticks, start, ok := s.snapshot(int32(pid), kinds)
 		if !ok {
 			continue
+		}
+		if bootOK && start > 0 {
+			snap.StartedAt = boot.Add(time.Duration(start) * (time.Second / time.Duration(s.ClockTick)))
 		}
 		scan.Snapshots = append(scan.Snapshots, snap)
 		scan.CPUTimes[snap.PID] = ticks * uint64(1_000_000_000/s.ClockTick)
@@ -71,27 +79,29 @@ func (s *ProcScanner) Scan(kinds []engine.AgentKind) (platform.ProcessScan, erro
 
 // snapshot reads one process. Processes that vanish, belong to someone else or refuse
 // readlink (non-dumpable ones such as gpg-agent or sshd) are skipped.
-func (s *ProcScanner) snapshot(pid int32, kinds []engine.AgentKind) (engine.ProcessSnapshot, uint64, bool) {
+// start is the process start time in clock ticks after boot (0 when unreadable).
+func (s *ProcScanner) snapshot(pid int32, kinds []engine.AgentKind) (snap engine.ProcessSnapshot, ticks, start uint64, ok bool) {
 	dir := filepath.Join(s.Root, strconv.Itoa(int(pid)))
 	info, err := os.Stat(dir)
 	if err != nil {
-		return engine.ProcessSnapshot{}, 0, false
+		return engine.ProcessSnapshot{}, 0, 0, false
 	}
 	if st, ok := info.Sys().(*syscall.Stat_t); !ok || int(st.Uid) != s.UID {
-		return engine.ProcessSnapshot{}, 0, false
+		return engine.ProcessSnapshot{}, 0, 0, false
 	}
 	exe, err := os.Readlink(filepath.Join(dir, "exe"))
 	if err != nil {
-		return engine.ProcessSnapshot{}, 0, false
+		return engine.ProcessSnapshot{}, 0, 0, false
 	}
 	exe = StripDeleted(exe)
 	stat, err := os.ReadFile(filepath.Join(dir, "stat"))
 	if err != nil {
-		return engine.ProcessSnapshot{}, 0, false
+		return engine.ProcessSnapshot{}, 0, 0, false
 	}
 	ppid, ticks, err := ParseStat(stat)
+	start, _ = ParseStartTicks(stat)
 	if err != nil {
-		return engine.ProcessSnapshot{}, 0, false
+		return engine.ProcessSnapshot{}, 0, 0, false
 	}
 
 	raw := readCmdline(filepath.Join(dir, "cmdline"))
@@ -105,12 +115,12 @@ func (s *ProcScanner) snapshot(pid int32, kinds []engine.AgentKind) (engine.Proc
 	if len(args) > 0 {
 		argv0 = &args[0]
 	}
-	snap := engine.ProcessSnapshot{PID: pid, PPID: ppid, ExecutablePath: exe}
+	snap = engine.ProcessSnapshot{PID: pid, PPID: ppid, ExecutablePath: exe}
 	if engine.IsCandidate(exe, argv0, kinds) {
 		args = ParseCmdline(raw, engine.ArgsCandidate)
 	}
 	snap.Arguments = args
-	return snap, ticks, true
+	return snap, ticks, start, true
 }
 
 func readCmdline(path string) []byte {
@@ -154,6 +164,34 @@ func ParseStat(data []byte) (ppid int32, ticks uint64, err error) {
 		return 0, 0, err
 	}
 	return int32(p), utime + stime, nil
+}
+
+// ParseStartTicks reads the start time (clock ticks after boot, field 22 of proc(5)) from
+// /proc/<pid>/stat.
+func ParseStartTicks(data []byte) (uint64, bool) {
+	end := bytes.LastIndexByte(data, ')')
+	if end < 0 {
+		return 0, false
+	}
+	f := strings.Fields(string(data[end+1:]))
+	if len(f) < 20 {
+		return 0, false
+	}
+	v, err := strconv.ParseUint(f[19], 10, 64)
+	return v, err == nil
+}
+
+// ParseBootTime reads the boot time (`btime`, Unix seconds) from /proc/stat.
+func ParseBootTime(data []byte) (time.Time, bool) {
+	for _, line := range strings.Split(string(data), "\n") {
+		f := strings.Fields(line)
+		if len(f) == 2 && f[0] == "btime" {
+			if v, err := strconv.ParseInt(f[1], 10, 64); err == nil && v > 0 {
+				return time.Unix(v, 0), true
+			}
+		}
+	}
+	return time.Time{}, false
 }
 
 // ParseCmdline splits /proc/<pid>/cmdline (NUL-separated, NUL-terminated) and keeps at
