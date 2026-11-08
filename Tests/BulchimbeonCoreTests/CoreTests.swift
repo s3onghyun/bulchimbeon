@@ -525,7 +525,9 @@ import Testing
     }
 }
 
-@Suite struct LidWatchdogTests {
+/// 자식 프로세스를 띄우는 테스트다. 기다림은 모두 `Child` 의 기한 안에서만 하고, 묶음 전체에도 시간 제한을 둔다
+/// (2026-10-31 CI 가 20분 동안 멈춘 뒤).
+@Suite(.timeLimit(.minutes(1))) struct LidWatchdogTests {
     /// 관리자 명령 원문은 osascript 인자(`-e "do shell script …"`)에도 그대로 들어간다. macOS 10.15+ 는 그 명령을
     /// launchd 의 authtrampoline 아래에서 돌려 osascript 가 pkill 의 조상이 아니므로, 원문이 패턴에 걸리면 pkill 이 osascript 를 죽인다.
     @Test func adminCommandTextsDoNotMatchWatchdogPattern() throws {
@@ -552,47 +554,34 @@ import Testing
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakePmset.path)
 
         // 리눅스 Foundation 은 자식의 SIGTERM 을 막아 둔 채 띄운다 → 가짜 앱은 SIGKILL 로 끝낸다
-        let app = Process()
-        app.executableURL = URL(fileURLWithPath: "/bin/sleep")
-        app.arguments = ["60"]
-        try app.run()
-        defer { if app.isRunning { kill(app.processIdentifier, SIGKILL) } }
+        let app = try Child("/bin/sleep", ["60"])
+        defer { app.forceKill() }
 
-        let command = LidCommands.enable(pid: app.processIdentifier, stopSignal: dir.appendingPathComponent("lid-stop").path,
+        let command = LidCommands.enable(pid: app.pid, stopSignal: dir.appendingPathComponent("lid-stop").path,
                                          pmset: fakePmset.path)
         let script = LidApproval.script(command: command, prompt: "test")
         // `osascript -e <script>` 처럼 인자에 원문을 든 채 기다리는 대역 (perl 은 자식 없이 자기 인자를 그대로 둔다).
         // 막힌 신호를 풀어 osascript 처럼 SIGTERM 에 죽게 한다.
-        let osascript = Process()
-        osascript.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
-        osascript.arguments = ["-MPOSIX", "-e", "sigprocmask(SIG_SETMASK, POSIX::SigSet->new); sleep 30", "osascript", "-e", script]
-        try osascript.run()
-        defer { if osascript.isRunning { kill(osascript.processIdentifier, SIGKILL) } }
+        let osascript = try Child("/usr/bin/perl", ["-MPOSIX", "-e", "sigprocmask(SIG_SETMASK, POSIX::SigSet->new); sleep 30",
+                                                    "osascript", "-e", script])
+        defer { osascript.forceKill() }
         try await Task.sleep(for: .milliseconds(200))
 
         // authtrampoline 이 띄운 권한 셸 대역: 표준 입출력 말고는 물려받은 fd 가 없다.
-        // (리눅스 Foundation 은 자식 종료를 물려준 소켓으로 알아채, 감시병이 그 fd 를 쥐면 waitUntilExit 가 끝나지 않는다)
-        let shell = Process()
-        shell.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
-        shell.arguments = ["-MPOSIX", "-e", "POSIX::close($_) for 3..1023; exec @ARGV", "/bin/sh", "-c", command]
-        try shell.run()
-        shell.waitUntilExit()
+        // (리눅스 Foundation 은 자식 종료를 물려준 소켓으로 알아채, 감시병이 그 fd 를 쥐면 종료 통지가 오지 않는다)
+        let shell = try Child("/usr/bin/perl", ["-MPOSIX", "-e", "POSIX::close($_) for 3..1023; exec @ARGV", "/bin/sh", "-c", command])
+        try await shell.wait()
         try await Task.sleep(for: .milliseconds(300))
         let approverAlive = osascript.isRunning
         #expect(approverAlive, "관리자 명령이 자기를 띄운 osascript 를 죽이면 앱은 승인 실패로 본다")
-        #expect(shell.terminationStatus == 0)
+        #expect(shell.status == 0)
 
-        let pgrep = Process()
-        pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-        pgrep.arguments = ["-f", LidCommands.watchdogPattern(pid: app.processIdentifier)]
-        let out = Pipe(); pgrep.standardOutput = out
-        try pgrep.run(); pgrep.waitUntilExit()
-        let pids = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        let pids = try await Child.run("/usr/bin/pgrep", ["-f", LidCommands.watchdogPattern(pid: app.pid)]).output
             .split(separator: "\n").compactMap { Int32($0) }
         #expect(pids.count == 1, "감시병은 실행 중 인자로 표식을 들어 pgrep·pkill 이 찾을 수 있어야 한다")
 
-        kill(app.processIdentifier, SIGKILL)
-        app.waitUntilExit()
+        app.forceKill()
+        try await app.wait()
         var restored = false
         for _ in 0..<16 {
             try await Task.sleep(for: .milliseconds(500))
@@ -612,30 +601,20 @@ import Testing
         try "#!/bin/sh\necho \"$@\" >> '\(log.path)'\n".write(to: fakePmset, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakePmset.path)
 
-        let app = Process()
-        app.executableURL = URL(fileURLWithPath: "/bin/sleep")
-        app.arguments = ["60"]
-        try app.run()
+        let app = try Child("/bin/sleep", ["60"])
+        defer { app.forceKill() }
 
-        let shell = Process()
-        shell.executableURL = URL(fileURLWithPath: "/bin/sh")
-        shell.arguments = ["-c", LidCommands.enable(pid: app.processIdentifier, stopSignal: stopSignal.path, pmset: fakePmset.path)]
         let started = Date()
-        try shell.run()
-        shell.waitUntilExit()
-        #expect(shell.terminationStatus == 0)
+        let shell = try Child("/bin/sh", ["-c", LidCommands.enable(pid: app.pid, stopSignal: stopSignal.path, pmset: fakePmset.path)])
+        try await shell.wait()
+        #expect(shell.status == 0)
         // 실측 버그: 명령이 감시병을 기다리느라 끝나지 않아 osascript 가 영원히 대기했다
         #expect(Date().timeIntervalSince(started) < 2, "켜기 명령은 감시병을 띄우고 바로 끝나야 한다")
 
         try await Task.sleep(for: .seconds(1))
         #expect(try String(contentsOf: log, encoding: .utf8) == "-a disablesleep 1\n", "켜기만 실행됨")
         // 감시병은 자기 프로세스 그룹의 리더여야 한다 (부모 그룹이 정리돼도 살아남음)
-        let ps = Process()
-        ps.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-        ps.arguments = ["-f", LidCommands.watchdogPattern(pid: app.processIdentifier)]
-        let out = Pipe(); ps.standardOutput = out
-        try ps.run(); ps.waitUntilExit()
-        let found = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        let found = try await Child.run("/usr/bin/pgrep", ["-f", LidCommands.watchdogPattern(pid: app.pid)]).output
             .split(separator: "\n").compactMap { Int32($0) }
         #expect(!found.isEmpty, "감시병 프로세스가 떠 있어야 한다")
         // 핵심 성질: 띄운 쪽(이 테스트)의 프로세스 그룹에서 빠져나왔는가. 부모 그룹이 정리돼도 살아남는다.
@@ -644,8 +623,8 @@ import Testing
             #expect(getpgid(pid) != getpgrp(), "감시병이 원래 프로세스 그룹에 남아 있음: pid \(pid)")
         }
 
-        app.terminate() // 앱 강제 종료
-        app.waitUntilExit()
+        app.forceKill() // 앱 강제 종료
+        try await app.wait()
         var restored = false
         for _ in 0..<16 { // 감시 주기 5초 + 여유
             try await Task.sleep(for: .milliseconds(500))
@@ -664,17 +643,11 @@ import Testing
         try "#!/bin/sh\necho \"$@\" >> '\(log.path)'\n".write(to: fakePmset, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakePmset.path)
 
-        let app = Process()
-        app.executableURL = URL(fileURLWithPath: "/bin/sleep")
-        app.arguments = ["60"]
-        try app.run()
-        defer { if app.isRunning { app.terminate() } }
+        let app = try Child("/bin/sleep", ["60"])
+        defer { app.forceKill() }
 
-        let shell = Process()
-        shell.executableURL = URL(fileURLWithPath: "/bin/sh")
-        shell.arguments = ["-c", LidCommands.enable(pid: app.processIdentifier, stopSignal: stopSignal.path, pmset: fakePmset.path)]
-        try shell.run()
-        shell.waitUntilExit()
+        let shell = try Child("/bin/sh", ["-c", LidCommands.enable(pid: app.pid, stopSignal: stopSignal.path, pmset: fakePmset.path)])
+        try await shell.wait()
         try await Task.sleep(for: .seconds(1))
         #expect(FileManager.default.createFile(atPath: stopSignal.path, contents: nil))
 
@@ -697,18 +670,12 @@ import Testing
         try "#!/bin/sh\necho \"$@\" >> '\(log.path)'\n".write(to: fakePmset, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakePmset.path)
 
-        let app = Process()
-        app.executableURL = URL(fileURLWithPath: "/bin/sleep")
-        app.arguments = ["60"]
-        try app.run()
-        defer { if app.isRunning { app.terminate() } }
+        let app = try Child("/bin/sleep", ["60"])
+        defer { app.forceKill() }
 
-        let shell = Process()
-        shell.executableURL = URL(fileURLWithPath: "/bin/sh")
-        shell.arguments = ["-c", LidCommands.enable(pid: app.processIdentifier, stopSignal: stopSignal.path, pmset: fakePmset.path)]
-        try shell.run()
-        shell.waitUntilExit()
-        #expect(shell.terminationStatus == 0)
+        let shell = try Child("/bin/sh", ["-c", LidCommands.enable(pid: app.pid, stopSignal: stopSignal.path, pmset: fakePmset.path)])
+        try await shell.wait()
+        #expect(shell.status == 0)
         try await Task.sleep(for: .seconds(1))
         let started = (try? String(contentsOf: log, encoding: .utf8)) ?? ""
         #expect(started.contains("disablesleep 1"))
@@ -732,29 +699,18 @@ import Testing
         try "#!/bin/sh\necho \"$@\" >> '\(log.path)'\n".write(to: fakePmset, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakePmset.path)
 
-        let app = Process()
-        app.executableURL = URL(fileURLWithPath: "/bin/sleep")
-        app.arguments = ["60"]
-        try app.run()
-        defer { if app.isRunning { app.terminate() } }
+        let app = try Child("/bin/sleep", ["60"])
+        defer { app.forceKill() }
 
-        let command = LidCommands.enable(pid: app.processIdentifier, stopSignal: stopSignal.path, pmset: fakePmset.path)
+        let command = LidCommands.enable(pid: app.pid, stopSignal: stopSignal.path, pmset: fakePmset.path)
         for _ in 0..<2 {
-            let shell = Process()
-            shell.executableURL = URL(fileURLWithPath: "/bin/sh")
-            shell.arguments = ["-c", command]
-            try shell.run()
-            shell.waitUntilExit()
-            #expect(shell.terminationStatus == 0)
+            let shell = try Child("/bin/sh", ["-c", command])
+            try await shell.wait()
+            #expect(shell.status == 0)
         }
         try await Task.sleep(for: .seconds(1))
 
-        let pgrep = Process()
-        pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-        pgrep.arguments = ["-f", LidCommands.watchdogPattern(pid: app.processIdentifier)]
-        let out = Pipe(); pgrep.standardOutput = out
-        try pgrep.run(); pgrep.waitUntilExit()
-        let pids = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        let pids = try await Child.run("/usr/bin/pgrep", ["-f", LidCommands.watchdogPattern(pid: app.pid)]).output
             .split(separator: "\n").compactMap { Int32($0) }
         #expect(pids.count == 1, "같은 앱 PID에는 감시병 하나만 남아야 한다")
 

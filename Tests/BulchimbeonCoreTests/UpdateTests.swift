@@ -102,7 +102,8 @@ import Testing
 }
 
 /// macOS 앱이 Core 에 맡기는 설치 판단 (Homebrew 인지, 체크섬, 새 번들 검증). 리눅스에서도 돈다.
-@Suite struct UpdateInstallerTests {
+/// 스크립트를 실제로 돌리는 테스트는 자식 프로세스를 `Child` 의 기한 안에서만 기다린다 (LidWatchdogTests 와 같은 까닭).
+@Suite(.timeLimit(.minutes(1))) struct UpdateInstallerTests {
     private let v0102 = AppVersion("0.10.2")!
 
     @Test func homebrewIsDetectedFromTheCaskroomRecord() {
@@ -130,15 +131,11 @@ import Testing
         #expect(UpdateInstaller.homebrewScript(brew: "/opt/homebrew/bin/brew; rm -rf ~", pid: 4242, running: v0102, lang: .en) == nil)
     }
 
-    @Test func homebrewScriptIsValidShell() throws {
+    @Test func homebrewScriptIsValidShell() async throws {
         for lang in L10n.Language.allCases {
             let script = try #require(UpdateInstaller.homebrewScript(brew: "/usr/local/bin/brew", pid: 4242, running: v0102, lang: lang))
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/sh")
-            process.arguments = ["-n", "-c", script] // 문법만 확인하고 실행하지 않는다
-            try process.run()
-            process.waitUntilExit()
-            #expect(process.terminationStatus == 0, "\(lang)")
+            let status = try await Child.run("/bin/sh", ["-n", "-c", script]).status // 문법만 확인하고 실행하지 않는다
+            #expect(status == 0, "\(lang)")
         }
     }
 
@@ -149,7 +146,7 @@ import Testing
         var opened: Bool
     }
 
-    private func runHomebrewScript(upgradeStatus: Int32, installed: String, pid: Int32, waitSeconds: Int = 1) throws -> ScriptRun {
+    private func runHomebrewScript(upgradeStatus: Int32, installed: String, pid: Int32, waitSeconds: Int = 1) async throws -> ScriptRun {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("bulchimbeon-script-\(UUID().uuidString)", isDirectory: true)
         let tools = root.appendingPathComponent("tools", isDirectory: true)
@@ -179,31 +176,21 @@ import Testing
         let file = scriptDir.appendingPathComponent("Bulchimbeon-update.command")
         try Data(script.utf8).write(to: file)
 
-        let process = Process()
-        let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = [file.path]
-        process.standardOutput = pipe
-        try process.run()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
+        let run = try await Child.run("/bin/sh", [file.path])
         #expect(!fm.fileExists(atPath: file.path)) // 스스로 지운다
         let opened = (try? String(contentsOf: marker, encoding: .utf8)) ?? ""
         if !opened.isEmpty { #expect(opened == "-b io.github.s3onghyun.bulchimbeon\n") }
-        return ScriptRun(output: String(decoding: data, as: UTF8.self), status: process.terminationStatus, opened: !opened.isEmpty)
+        return ScriptRun(output: run.output, status: run.status, opened: !opened.isEmpty)
     }
 
-    private func exitedPID() throws -> Int32 {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", "exit 0"]
-        try process.run()
-        process.waitUntilExit()
-        return process.processIdentifier
+    private func exitedPID() async throws -> Int32 {
+        let child = try Child("/bin/sh", ["-c", "exit 0"])
+        try await child.wait()
+        return child.pid
     }
 
-    @Test func homebrewScriptReopensOnceTheOldAppHasQuit() throws {
-        let run = try runHomebrewScript(upgradeStatus: 0, installed: "0.10.3", pid: try exitedPID())
+    @Test func homebrewScriptReopensOnceTheOldAppHasQuit() async throws {
+        let run = try await runHomebrewScript(upgradeStatus: 0, installed: "0.10.3", pid: try await exitedPID())
         #expect(run.status == 0)
         #expect(run.opened)
         #expect(run.output.contains("Done. Reopening Bulchimbeon"))
@@ -211,13 +198,11 @@ import Testing
         #expect(!run.output.contains("has not caught up"))
     }
 
-    @Test func homebrewScriptAsksToReopenWhenTheOldAppIsStillRunning() throws {
-        let alive = Process()
-        alive.executableURL = URL(fileURLWithPath: "/bin/sh")
-        alive.arguments = ["-c", "sleep 30"]
-        try alive.run()
-        defer { alive.terminate(); alive.waitUntilExit() }
-        let run = try runHomebrewScript(upgradeStatus: 0, installed: "0.10.3", pid: alive.processIdentifier)
+    @Test func homebrewScriptAsksToReopenWhenTheOldAppIsStillRunning() async throws {
+        // 리눅스 Foundation 은 자식의 SIGTERM 을 막아 두므로 SIGKILL 로 끝낸다 (전에는 `sleep 30` 이 끝날 때까지 30초를 기다렸다)
+        let alive = try Child("/bin/sleep", ["30"])
+        defer { alive.forceKill() }
+        let run = try await runHomebrewScript(upgradeStatus: 0, installed: "0.10.3", pid: alive.pid)
         #expect(run.status == 0)
         #expect(!run.opened) // 옛 프로세스를 앞으로 가져오지 않는다
         #expect(run.output.contains("the old Bulchimbeon is still running. Quit Bulchimbeon and open it again."))
@@ -225,16 +210,16 @@ import Testing
         #expect(!run.output.contains("Reopening"))
     }
 
-    @Test func homebrewScriptBlamesTheTapOnlyWhenBrewKeptThisVersion() throws {
-        let run = try runHomebrewScript(upgradeStatus: 0, installed: "0.10.2", pid: try exitedPID())
+    @Test func homebrewScriptBlamesTheTapOnlyWhenBrewKeptThisVersion() async throws {
+        let run = try await runHomebrewScript(upgradeStatus: 0, installed: "0.10.2", pid: try await exitedPID())
         #expect(run.status == 0)
         #expect(!run.opened)
         #expect(run.output.contains("the tap has not caught up yet"))
         #expect(!run.output.contains("Reopening"))
     }
 
-    @Test func homebrewScriptReportsAFailedUpgrade() throws {
-        let run = try runHomebrewScript(upgradeStatus: 1, installed: "0.10.2", pid: try exitedPID())
+    @Test func homebrewScriptReportsAFailedUpgrade() async throws {
+        let run = try await runHomebrewScript(upgradeStatus: 1, installed: "0.10.2", pid: try await exitedPID())
         #expect(run.status == 1)
         #expect(!run.opened)
         #expect(run.output.contains("Update failed."))
