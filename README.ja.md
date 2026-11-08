@@ -173,7 +173,7 @@ macOS 13 以降、ユニバーサル（Apple Silicon・Intel）。
 
 - スリープ防止は `IOPMAssertion`（`caffeinate` と同じ仕組み）。蓋を閉じるモードは `pmset -a disablesleep 1` を併用
 - エージェントは**自分のユーザーのプロセスだけ**を libproc で調べ、実行ファイル名・`argv[0]`・インストールパス・スクリプトパスで判定（部分一致はしない）
-- 「作業中」の判定: Claude Code が作業中にだけ自ら起動する `caffeinate` 子プロセス、またはプロセスツリーの CPU 使用率（60 秒平均）
+- 「作業中」の判定: エージェント自身の最近の活動だけを見る。エージェントと直近 10 分以内に起動した子孫の CPU 合計 ≥ 2%（60 秒平均）。10 分以上動いている子孫（MCP サーバー、hook のポーリング）は単独で ≥ 5% のときだけ。`caffeinate` 子プロセスは直近 10 分以内に起動した別の子プロセスがあるときだけ。他のエージェントが起動したエージェント（`claude -p` の補助セッション）は別に判定。開いているだけで数える旧動作に戻すには、メニュー「Agent watch settings ▸ Count idle sessions as working」（`agentWatchCountsIdle`）をオン
 - 判定ロジックはシステム呼び出しのない状態機械（`DutyEngine`）にあり、偽の時計でシナリオテスト済み
 
 詳細: [English README](README.md) · [設計ドキュメント（韓国語）](docs/design.md)

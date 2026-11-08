@@ -256,13 +256,19 @@ install path or script path. Never by substring (Claude Code hooks run `node -e 
 Supported: Claude Code · Codex · Gemini CLI · Cursor Agent · Copilot CLI · Aider · OpenCode
 
 **Only while working.** People keep several Claude Code sessions open, so counting open sessions would never let the
-Mac sleep. An agent counts as working when (you can switch back to counting open sessions in the menu):
+Mac sleep. An agent counts as working when it shows its own recent activity:
 
 | Signal | Why (measured on a real machine) |
 |--------|----------------------------------|
-| It has a `caffeinate` child process | Claude Code spawns `caffeinate -i -t 300` itself, only while it's working |
-| Its process tree uses ≥ 2% CPU averaged over 60 s | Covers tool runs like builds and tests. Idle sessions sit at 0–0.1%. A 5-second sample made periodic background jobs look busy forever |
+| The agent plus processes it started in the last 10 minutes use ≥ 2% CPU, averaged over 60 s | Covers replies and tool runs like builds and tests. Idle sessions sit at 0–0.1% (0.6–0.9% on Linux). A 5-second sample made periodic background jobs look busy forever |
+| A process running longer than 10 minutes counts only if it alone uses ≥ 5% CPU | Long builds still count. MCP servers (~0.3%) and hook pollers (~1%) do not, and no longer add up across a session |
+| A `caffeinate` child counts when another child started in the last 10 minutes runs next to it | Claude Code spawns `caffeinate -i -t 300` while a turn is in progress, but a Stop hook that waits for hours keeps the turn open. Tool calls and command hooks time out after 10 minutes by default |
+| An agent started under another agent (a `claude -p` helper run by a hook) is judged on its own | Its CPU is not added to the session that started it |
 | Headless sessions with no tools (`--tools=`) are ignored | Plugins such as claude-mem keep helper sessions running |
+
+To go back to the old behaviour, where any open agent process keeps the Mac awake, turn on **Agent watch settings ▸
+Count idle sessions as working** (`agentWatchCountsIdle`). The 5-minute grace before handover is in the same submenu.
+`--diagnose` shows, for each agent, which of these rules decided it.
 
 Check what gets detected on your machine, or add an agent that isn't on the list:
 
@@ -346,15 +352,15 @@ journalctl --user -u bulchimbeon -f      # the daemon's log
 $ bulchimbeon status
 🪖 Bulchimbeon — on duty for 0:35 (agent watch)
 Lock:      blocking auto-suspend via org.gnome.SessionManager · confirmed by the session
-Why:       Claude Code pid 1174857 11.7% (process-tree CPU ≥ 2.0%, 60 s average)
+Why:       Claude Code pid 1174857 11.7% (own + recent processes CPU ≥ 2.0%, 60 s average)
 Agents:    Claude Code ×7 open, 1 working
 Handover:  5 min after the last agent goes quiet (agentGraceMinutes)
 Power:     battery: none · heat: normal (coretemp 49 °C, critical 105 °C) · lid: not handled (closing it still suspends)
 ```
 
 `bulchimbeon run` is the daemon itself; the user unit runs it. It always does agent watch: the
-same detection rules, a 5-second check, engage when an agent's process tree uses at least 2% CPU
-(60-second average; Linux has no `caffeinate` signal), hand over after the grace time.
+same detection rules, a 5-second check, engage when an agent and the processes it started in the last 10 minutes
+use at least 2% CPU (60-second average; Linux has no `caffeinate` signal), hand over after the grace time.
 
 ### Tray icon
 

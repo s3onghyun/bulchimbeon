@@ -790,10 +790,37 @@ import Testing
     }
 
     @Test func idleWithoutCPUDataIsNotBusy() {
-        // 첫 스캔엔 CPU 차분이 없다 → caffeinate 신호만으로 판단
+        // 첫 스캔엔 CPU 차분이 없다 → caffeinate + 최근 시작한 자식(도구 실행)만으로 판단
         let processes = [proc(1, 0, claudePath, ["claude"]), proc(2, 0, claudePath, ["claude"]),
-                         proc(3, 2, "/usr/bin/caffeinate", ["caffeinate"])]
+                         proc(3, 2, "/usr/bin/caffeinate", ["caffeinate"]), proc(4, 2, "/bin/zsh", ["/bin/zsh"])]
         #expect(AgentActivity.evaluate(processes, cpu: [:]).values.first == AgentActivity.Status(present: 2, busy: 1))
+    }
+
+    // 0.12.0 오탐: 몇 시간째 끝나지 않는 Stop hook 아래에서 caffeinate 를 쥔 채 서 있는 세션
+    @Test func parkedTurnIsExplainedWithoutCommandLines() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        func at(_ pid: Int32, _ ppid: Int32, _ path: String, _ args: [String], age: TimeInterval) -> ProcessSnapshot {
+            ProcessSnapshot(pid: pid, ppid: ppid, executablePath: path, arguments: args, startedAt: now.addingTimeInterval(-age))
+        }
+        let processes = [
+            at(1, 0, claudePath, ["claude", "secret-prompt-text"], age: 20000),
+            at(2, 1, "/opt/homebrew/bin/node", ["node", "/x/mcp-server.js", "--token=abc"], age: 19990),
+            at(3, 1, "/bin/sh", ["sh"], age: 7200),
+            at(4, 3, "/bin/bash", ["bash"], age: 7200),
+            at(5, 1, "/usr/bin/caffeinate", ["caffeinate"], age: 100),
+            at(6, 4, claudePath, ["claude", "-p", "summarize"], age: 30),
+        ]
+        let tree = AgentActivity.Tree(processes)
+        let parked = AgentActivity.explain(processes[0], tree: tree, cpu: [1: 0.1, 2: 0.4, 4: 1.6], now: now)
+        #expect(!parked.busy && parked.caffeinate == 5 && parked.freshChild == nil)
+        #expect(abs(parked.recentCPU - 0.1) < 1e-9, "오래된 MCP 서버·hook 감시 루프는 더하지 않는다")
+        #expect(parked.topBackground?.pid == 4)
+        let text = parked.details.joined(separator: "\n")
+        #expect(text.contains("caffeinate pid 5") && text.contains("pid 4 bash 1.6%") && text.contains("2:00:00"))
+        #expect(!text.contains("secret") && !text.contains("token") && !text.contains("mcp-server"), "명령줄은 출력하지 않는다")
+
+        let helper = AgentActivity.explain(processes[5], tree: tree, cpu: [:], now: now)
+        #expect(helper.parentAgent == 1 && !helper.busy)
     }
 
     @Test func cyclicParentLinksDoNotHang() {

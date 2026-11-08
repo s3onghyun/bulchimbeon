@@ -23,13 +23,17 @@ public struct ProcessSnapshot: Sendable {
     /// argv. 에이전트 후보·스크립트 러너만 앞부분 전체, 그 외엔 argv[0] 만 담긴다.
     /// argv 가 판별을 바꾸지 않는다고 이미 확인된 프로세스는 비어 있다 (`ProcessArgumentCache`).
     public let arguments: [String]
+    /// 프로세스 시작 시각. 모르면 nil (그러면 방금 시작한 프로세스처럼 다룬다)
+    public let startedAt: Date?
 
-    public init(pid: Int32 = 0, ppid: Int32 = 0, executablePath: String, arguments: [String], cwd: String? = nil) {
+    public init(pid: Int32 = 0, ppid: Int32 = 0, executablePath: String, arguments: [String], cwd: String? = nil,
+                startedAt: Date? = nil) {
         self.pid = pid
         self.ppid = ppid
         self.cwd = cwd
         self.executablePath = executablePath
         self.arguments = arguments
+        self.startedAt = startedAt
     }
 }
 
@@ -180,9 +184,21 @@ public enum ProcArgs {
 /// 에이전트가 "열려만 있는지" vs "일하는 중인지".
 ///
 /// 실측(2026-10): Claude Code 세션 7개 중 실제 작업 중인 1개만 자식으로 `caffeinate -i -t 300` 을 띄우고 CPU 10%,
-/// 나머지(입력 대기)는 caffeinate 없음·CPU 0~0.1%. 그래서
-/// - 자식 중 caffeinate 가 있으면 작업 중 (Claude Code 가 스스로 내는 신호)
-/// - 아니면 자신 + 자손 프로세스의 CPU 합이 임계값 이상이면 작업 중 (빌드·테스트 같은 도구 실행 포함)
+/// 나머지(입력 대기)는 caffeinate 없음·CPU 0~0.1%.
+///
+/// 오탐(2026-11, 0.12.0): 에이전트를 다 닫았는데도 맥이 깨어 있었다. Firstmate 가 입력 대기로 세워 둔 Claude Code 세션
+/// 19개는 저마다 오래 사는 자손(몇 초마다 폴링하는 Stop hook 감시 루프, MCP 서버)을 두는데,
+/// 1. 자손 전체의 CPU 를 더하니 하나하나는 1% 안팎인 배경 프로세스들이 합쳐서 2% 를 넘었고
+/// 2. Stop hook 은 턴 안에서 돈다. Claude Code(2.1.319 실행 파일에서 확인)는 대화형 세션이 "busy"(턴 진행 중)인 동안
+///    caffeinate 를 4분마다 새로 띄우므로, 몇 시간째 끝나지 않는 Stop hook 아래의 세션도 caffeinate 를 쥐고 있었다.
+/// 3. hook 이 띄운 헤드리스 `claude -p` 도우미는 그 자체로 에이전트로 잡히고 CPU 가 부모 세션에도 더해졌다.
+///
+/// 그래서 "일하는 중"은 에이전트 자신의 최근 활동으로만 본다.
+/// - 자신 + 최근(`backgroundAge` 안에) 시작한 자손의 CPU 합이 `cpuThreshold` 이상 (응답 생성, 빌드·테스트 같은 도구 실행)
+/// - 오래된 자손(MCP 서버, hook 감시 루프)은 하나가 혼자 `backgroundCPUThreshold` 이상 쓸 때만 (긴 빌드)
+/// - caffeinate 자식은 최근 시작한 다른 자식(도구·hook 실행)이 함께 있을 때만. Claude Code 의 Bash 도구와
+///   command hook 은 기본 10분에 끊기므로, 그보다 오래 붙어 있는 자식만 남았다면 턴이 멈춰 서 있는 것이다
+/// - 다른 에이전트 아래에서 뜬 에이전트(도우미 세션)는 따로 판단하고, 부모의 자손 합에는 넣지 않는다
 public enum AgentActivity {
     public struct Status: Equatable, Sendable {
         public var present = 0
@@ -191,34 +207,179 @@ public enum AgentActivity {
     }
 
     public static let cpuThreshold = 2.0 // %
+    /// 이보다 오래 산 자손은 배경 프로세스로 본다 (Claude Code Bash 도구·command hook 의 기본 제한 시간 10분)
+    public static let backgroundAge: TimeInterval = 10 * 60
+    /// 배경 프로세스는 혼자 이만큼 써야 작업으로 본다 (실측: hook 감시 루프 ~1%, MCP 서버 ~0.3%, 빌드 85%)
+    public static let backgroundCPUThreshold = 5.0 // %
     /// 모든 에이전트가 조용해진 뒤 이만큼 기다렸다가 교대 (도구 실행 사이의 짧은 공백·응답 대기 흡수)
     public static let busyGrace: TimeInterval = 5 * 60
+    /// 자손 탐색 한도 (순환 부모 링크에도 멈춘다)
+    static let maxTreeVisit = 512
 
-    public static func evaluate(_ processes: [ProcessSnapshot], cpu: [Int32: Double],
+    /// 왜 일하는 중인지 (첫 번째로 맞은 근거)
+    public enum Reason: String, Sendable {
+        case caffeinate, recentCPU, background
+    }
+
+    /// 자손 하나의 기여 (진단 출력용)
+    public struct Contributor: Equatable, Sendable {
+        public let pid: Int32
+        public let executablePath: String
+        public let cpu: Double
+        /// 실행 시간(초). 시작 시각을 모르면 nil
+        public let age: TimeInterval?
+    }
+
+    /// 에이전트 하나의 판단 근거. 명령줄·환경변수는 담지 않는다.
+    public struct Explanation: Equatable, Sendable {
+        public var busy: Bool { reason != nil }
+        public var reason: Reason?
+        /// caffeinate 자식의 PID
+        public var caffeinate: Int32?
+        /// caffeinate 를 뒷받침하는, 최근 시작한 자식(도구·hook 실행)
+        public var freshChild: Contributor?
+        public var ownCPU: Double = 0
+        /// 자신 + 최근 시작한 자손의 CPU 합
+        public var recentCPU: Double = 0
+        /// 최근 시작한 자손 중 CPU 를 가장 많이 쓴 것
+        public var topRecent: Contributor?
+        /// 오래된 자손 중 CPU 를 가장 많이 쓴 것
+        public var topBackground: Contributor?
+        /// 다른 에이전트 아래에서 떴으면 그 에이전트의 PID
+        public var parentAgent: Int32?
+    }
+
+    public static func evaluate(_ processes: [ProcessSnapshot], cpu: [Int32: Double], now: Date = Date(),
                                 kinds: [AgentKind] = AgentCatalog.builtIn) -> [AgentKind: Status] {
-        var children: [Int32: [ProcessSnapshot]] = [:]
-        for p in processes { children[p.ppid, default: []].append(p) }
-
+        let tree = Tree(processes, kinds: kinds)
         var result: [AgentKind: Status] = [:]
         for p in processes {
-            guard let (kind, _) = AgentCatalog.match(p, kinds: kinds) else { continue }
+            guard let kind = tree.agents[p.pid] else { continue }
             result[kind, default: Status()].present += 1
-            if isBusy(p, children: children, cpu: cpu) { result[kind, default: Status()].busy += 1 }
+            if explain(p, tree: tree, cpu: cpu, now: now).busy { result[kind, default: Status()].busy += 1 }
         }
         return result
     }
 
-    public static func isBusy(_ agent: ProcessSnapshot, children: [Int32: [ProcessSnapshot]], cpu: [Int32: Double]) -> Bool {
-        if children[agent.pid, default: []].contains(where: { AgentCatalog.basename($0.executablePath) == "caffeinate" }) {
-            return true
+    /// 프로세스 목록의 부모-자식 관계와 에이전트 판별 결과
+    public struct Tree: Sendable {
+        public let children: [Int32: [ProcessSnapshot]]
+        public let byPID: [Int32: ProcessSnapshot]
+        public let agents: [Int32: AgentKind]
+
+        public init(_ processes: [ProcessSnapshot], kinds: [AgentKind] = AgentCatalog.builtIn) {
+            var children: [Int32: [ProcessSnapshot]] = [:], byPID: [Int32: ProcessSnapshot] = [:], agents: [Int32: AgentKind] = [:]
+            for p in processes {
+                children[p.ppid, default: []].append(p)
+                byPID[p.pid] = p
+                if let (kind, _) = AgentCatalog.match(p, kinds: kinds) { agents[p.pid] = kind }
+            }
+            self.children = children
+            self.byPID = byPID
+            self.agents = agents
         }
-        var total = cpu[agent.pid] ?? 0
-        var queue = children[agent.pid, default: []], visited: Set<Int32> = [agent.pid]
-        while let next = queue.popLast(), visited.count < 512 {
-            guard visited.insert(next.pid).inserted else { continue }
-            total += cpu[next.pid] ?? 0
-            queue += children[next.pid, default: []]
+    }
+
+    public static func explain(_ agent: ProcessSnapshot, tree: Tree, cpu: [Int32: Double], now: Date) -> Explanation {
+        var e = Explanation()
+        e.parentAgent = parentAgent(of: agent, tree: tree)
+        e.ownCPU = cpu[agent.pid] ?? 0
+        e.recentCPU = e.ownCPU
+
+        func contributor(_ p: ProcessSnapshot) -> Contributor {
+            Contributor(pid: p.pid, executablePath: p.executablePath, cpu: cpu[p.pid] ?? 0,
+                        age: p.startedAt.map { max(0, now.timeIntervalSince($0)) })
         }
-        return total >= cpuThreshold
+        func isRecent(_ c: Contributor) -> Bool { (c.age ?? 0) < backgroundAge }
+        func more(_ c: Contributor, than old: Contributor?) -> Bool { old.map { c.cpu > $0.cpu } ?? (c.cpu > 0) }
+
+        for child in tree.children[agent.pid, default: []] where child.pid != agent.pid {
+            if AgentCatalog.basename(child.executablePath) == "caffeinate" {
+                e.caffeinate = e.caffeinate ?? child.pid
+            } else if e.freshChild == nil, tree.agents[child.pid] == nil, isRecent(contributor(child)) {
+                e.freshChild = contributor(child)
+            }
+        }
+
+        // 자손: 다른 에이전트를 만나면 그 아래로 내려가지 않는다 (그 에이전트는 따로 판단)
+        var queue = tree.children[agent.pid, default: []], visited: Set<Int32> = [agent.pid]
+        while let next = queue.popLast(), visited.count < maxTreeVisit {
+            guard visited.insert(next.pid).inserted, tree.agents[next.pid] == nil else { continue }
+            let c = contributor(next)
+            if isRecent(c) {
+                e.recentCPU += c.cpu
+                if more(c, than: e.topRecent) { e.topRecent = c }
+            } else if more(c, than: e.topBackground) {
+                e.topBackground = c
+            }
+            queue += tree.children[next.pid, default: []]
+        }
+
+        if e.caffeinate != nil && e.freshChild != nil {
+            e.reason = .caffeinate
+        } else if e.recentCPU >= cpuThreshold {
+            e.reason = .recentCPU
+        } else if let b = e.topBackground, b.cpu >= backgroundCPUThreshold {
+            e.reason = .background
+        }
+        return e
+    }
+
+    /// 조상 중 가장 가까운 에이전트
+    static func parentAgent(of agent: ProcessSnapshot, tree: Tree) -> Int32? {
+        var pid = agent.ppid, visited: Set<Int32> = [agent.pid]
+        while visited.count < maxTreeVisit, visited.insert(pid).inserted, let p = tree.byPID[pid] {
+            if tree.agents[pid] != nil { return pid }
+            pid = p.ppid
+        }
+        return nil
+    }
+}
+
+extension AgentActivity.Explanation {
+    /// `--diagnose` 의 한 줄 요약: 작업 중인지와 그 근거
+    public var verdict: String {
+        switch reason {
+        case .caffeinate: L10n.t("작업 중 (caffeinate + 최근 시작한 자식)", "working (caffeinate + a recently started child)", "工作中（caffeinate + 最近启动的子进程）")
+        case .recentCPU: L10n.t("작업 중 (자신과 최근 프로세스의 CPU)", "working (CPU of the agent and its recent processes)", "工作中（代理及其最近进程的 CPU）")
+        case .background: L10n.t("작업 중 (오래 도는 프로세스가 바쁨)", "working (a long-running process is busy)", "工作中（长时间运行的进程很忙）")
+        case nil: L10n.t("대기", "idle", "空闲")
+        }
+    }
+
+    /// `--diagnose` 의 근거 줄들. PID·실행 파일 이름·CPU·실행 시간만 쓴다 (명령줄·환경변수 없음).
+    public var details: [String] {
+        let pct = { (v: Double) in String(format: "%.1f%%", v) }
+        func who(_ c: AgentActivity.Contributor) -> String {
+            "pid \(c.pid) \(AgentCatalog.basename(c.executablePath)) \(pct(c.cpu)), "
+                + L10n.t("실행 ", "running ", "已运行 ") + (c.age.map(DutyClock.format) ?? "?")
+        }
+        var lines = [L10n.t("CPU: 자신 ", "CPU: own ", "CPU：自身 ") + pct(ownCPU)
+                     + L10n.t(" · 최근 프로세스 포함 ", " · with recent processes ", " · 含最近进程 ") + pct(recentCPU)
+                     + L10n.t(" (기준 ", " (needs ≥ ", "（阈值 ") + pct(AgentActivity.cpuThreshold) + L10n.t(" 이상)", ")", "）")]
+        if let caffeinate {
+            if let freshChild {
+                lines.append("caffeinate pid \(caffeinate): " + L10n.t("인정 — 최근 시작한 자식 ", "counted, backed by ", "计入 — 最近启动的子进程 ") + who(freshChild))
+            } else {
+                lines.append("caffeinate pid \(caffeinate): "
+                             + L10n.t("인정 안 함 — 최근 \(Int(AgentActivity.backgroundAge / 60))분 안에 시작한 도구·hook 실행이 없음 (긴 Stop hook 등으로 턴이 멈춰 있음)",
+                                      "not counted, no tool or hook started in the last \(Int(AgentActivity.backgroundAge / 60)) min (a turn held open, e.g. by a long Stop hook)",
+                                      "不计入 — 最近 \(Int(AgentActivity.backgroundAge / 60)) 分钟内没有启动的工具或 hook（回合被长时间的 Stop hook 等挂起）"))
+            }
+        }
+        if let topRecent {
+            lines.append(L10n.t("가장 바쁜 최근 프로세스: ", "busiest recent process: ", "最忙的最近进程：") + who(topRecent))
+        }
+        if let topBackground {
+            lines.append(L10n.t("가장 바쁜 오래된 프로세스: ", "busiest long-running process: ", "最忙的长时间运行进程：") + who(topBackground)
+                         + L10n.t(" (혼자 ", " (counts alone from ", "（单独达到 ") + pct(AgentActivity.backgroundCPUThreshold)
+                         + L10n.t(" 이상일 때만 인정)", ")", " 才计入）"))
+        }
+        if let parentAgent {
+            lines.append(L10n.t("에이전트 pid \(parentAgent) 아래에서 뜬 세션: 따로 판단하고 그 에이전트의 CPU 에는 넣지 않음",
+                                "launched under agent pid \(parentAgent): judged on its own, not added to that agent",
+                                "在代理 pid \(parentAgent) 下启动：单独判断，不计入该代理"))
+        }
+        return lines
     }
 }

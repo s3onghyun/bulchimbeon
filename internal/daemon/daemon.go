@@ -159,7 +159,7 @@ func (d *Daemon) Tick() {
 		d.scanErr = err.Error()
 	}
 	cpu := d.cpu.Add(scan.CPUTimes, now)
-	open, busy := d.observeAgents(scan.Snapshots, cpu, kinds)
+	open, busy := d.observeAgents(scan.Snapshots, cpu, now, kinds)
 
 	d.battery, _ = d.cfg.Platform.Battery.Battery()
 	d.thermal = d.cfg.Platform.Thermal.Thermal()
@@ -218,17 +218,17 @@ func floor(s settings.Settings) *int {
 }
 
 // observeAgents counts open and working agents, and keeps per-process detail for status.
-func (d *Daemon) observeAgents(ps []engine.ProcessSnapshot, cpu map[int32]float64, kinds []engine.AgentKind) (open, busy map[engine.Kind]int) {
+func (d *Daemon) observeAgents(ps []engine.ProcessSnapshot, cpu map[int32]float64, now time.Time, kinds []engine.AgentKind) (open, busy map[engine.Kind]int) {
 	open, busy = map[engine.Kind]int{}, map[engine.Kind]int{}
-	children := engine.Children(ps)
+	tree := engine.NewTree(ps, kinds)
 	byKind := map[engine.Kind]*AgentState{}
 	for _, p := range ps {
 		k, reason, ok := engine.Match(p, kinds)
 		if !ok {
 			continue
 		}
-		total, caffeinate := engine.TreeCPU(p, children, cpu)
-		working := caffeinate || total >= engine.CPUThreshold
+		activity := engine.Explain(p, tree, cpu, now)
+		working := activity.Busy()
 		open[k.Kind]++
 		if working {
 			busy[k.Kind]++
@@ -242,7 +242,8 @@ func (d *Daemon) observeAgents(ps []engine.ProcessSnapshot, cpu map[int32]float6
 		if working {
 			a.Working++
 		}
-		a.Processes = append(a.Processes, ProcessState{PID: p.PID, Working: working, TreeCPU: total, Reason: reason.String()})
+		a.Processes = append(a.Processes, ProcessState{PID: p.PID, Working: working, RecentCPU: activity.RecentCPU,
+			BusyReason: activity.Reason.String(), ParentAgent: activity.ParentAgent, Reason: reason.String()})
 	}
 	d.agents = d.agents[:0]
 	for _, a := range byKind {
@@ -368,10 +369,16 @@ type AgentState struct {
 
 // ProcessState is one agent process.
 type ProcessState struct {
-	PID     int32   `json:"pid"`
-	Working bool    `json:"working"`
-	TreeCPU float64 `json:"treeCPU"`
-	Reason  string  `json:"reason"`
+	PID     int32 `json:"pid"`
+	Working bool  `json:"working"`
+	// RecentCPU is the agent's CPU plus that of its recently started descendants.
+	RecentCPU float64 `json:"recentCPU"`
+	// BusyReason is why it is working (engine.BusyReason), empty when idle.
+	BusyReason string `json:"busyReason,omitempty"`
+	// ParentAgent is the agent this one was launched under (a helper session), 0 if none.
+	ParentAgent int32 `json:"parentAgent,omitempty"`
+	// Reason is the detection rule that matched (engine.Reason).
+	Reason string `json:"reason"`
 }
 
 func (d *Daemon) state(now time.Time, stopped bool) State {

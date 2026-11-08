@@ -267,13 +267,12 @@ func whyLine(st *State, t func(string, string, string) string) string {
 		for _, a := range st.Agents {
 			for _, p := range a.Processes {
 				if p.Working && len(working) < 3 {
-					working = append(working, fmt.Sprintf("%s pid %d %.1f%%", a.Name, p.PID, p.TreeCPU))
+					working = append(working, fmt.Sprintf("%s pid %d ", a.Name, p.PID)+busyReason(p, t))
 				}
 			}
 		}
 		if len(working) > 0 && !st.Settings.AgentWatchCountsIdle {
-			return strings.Join(working, ", ") + t(" (프로세스 트리 CPU ≥ ", " (process-tree CPU ≥ ", "（进程树 CPU ≥ ") +
-				fmt.Sprintf("%.1f%%", engine.CPUThreshold) + t(", 60초 평균)", ", 60 s average)", "，60 秒平均值）")
+			return strings.Join(working, ", ")
 		}
 		return st.WatchDetail
 	}
@@ -281,10 +280,22 @@ func whyLine(st *State, t func(string, string, string) string) string {
 		if st.Settings.AgentWatchCountsIdle {
 			return t("에이전트 세션이 열리면 투입합니다", "engages as soon as an agent session is open", "代理会话一打开就开始值班")
 		}
-		return t("에이전트 프로세스 트리가 CPU ", "engages when an agent's process tree uses ≥ ", "代理进程树 CPU 使用率达到 ") +
+		return t("에이전트와 최근 시작한 자식 프로세스가 CPU ", "engages when an agent and its recently started processes use ≥ ", "代理及其最近启动的进程 CPU 使用率达到 ") +
 			fmt.Sprintf("%.1f%%", engine.CPUThreshold) + t(" 이상 쓰면 투입 (60초 평균)", " CPU (60 s average)", " 时开始值班（60 秒平均值）")
 	}
 	return ""
+}
+
+// busyReason says in a few words why one agent process counts as working.
+func busyReason(p ProcessState, t func(string, string, string) string) string {
+	switch p.BusyReason {
+	case engine.BusyCaffeinate.String():
+		return t("(caffeinate + 최근 시작한 자식)", "(caffeinate + a recently started child)", "（caffeinate + 最近启动的子进程）")
+	case engine.BusyBackground.String():
+		return fmt.Sprintf(t("(오래 도는 프로세스 하나가 CPU ≥ %.1f%%)", "(a long-running process alone at CPU ≥ %.1f%%)", "（一个长时间运行的进程 CPU ≥ %.1f%%）"), engine.BackgroundCPUThreshold)
+	}
+	return fmt.Sprintf("%.1f%% ", p.RecentCPU) + t("(자신+최근 프로세스 CPU ≥ ", "(own + recent processes CPU ≥ ", "（自身 + 最近进程 CPU ≥ ") +
+		fmt.Sprintf("%.1f%%", engine.CPUThreshold) + t(", 60초 평균)", ", 60 s average)", "，60 秒平均值）")
 }
 
 func agentsLine(st *State, t func(string, string, string) string) string {

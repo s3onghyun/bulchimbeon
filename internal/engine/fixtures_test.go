@@ -51,10 +51,16 @@ type procJSON struct {
 	PPID int32    `json:"ppid"`
 	Exe  string   `json:"exe"`
 	Args []string `json:"args"`
+	// Age is seconds before the fixture's `now`; absent means the start time is unknown.
+	Age *float64 `json:"age"`
 }
 
-func (p procJSON) snapshot() ProcessSnapshot {
-	return ProcessSnapshot{PID: p.PID, PPID: p.PPID, ExecutablePath: p.Exe, Arguments: p.Args}
+func (p procJSON) snapshot(now time.Time) ProcessSnapshot {
+	s := ProcessSnapshot{PID: p.PID, PPID: p.PPID, ExecutablePath: p.Exe, Arguments: p.Args}
+	if p.Age != nil {
+		s.StartedAt = now.Add(-time.Duration(*p.Age * float64(time.Second)))
+	}
+	return s
 }
 
 func TestFixtureCatalog(t *testing.T) {
@@ -147,7 +153,7 @@ func TestFixtureCatalog(t *testing.T) {
 	for _, c := range f.Count {
 		var ps []ProcessSnapshot
 		for _, p := range c.Processes {
-			ps = append(ps, p.snapshot())
+			ps = append(ps, p.snapshot(time.Time{}))
 		}
 		got := map[string]int{}
 		for k, n := range Count(ps, fixtureKinds(c.Custom)) {
@@ -171,13 +177,17 @@ func TestFixtureCatalog(t *testing.T) {
 
 func TestFixtureActivity(t *testing.T) {
 	var f struct {
-		CPUThreshold     float64 `json:"cpuThreshold"`
-		BusyGraceSeconds float64 `json:"busyGraceSeconds"`
-		Evaluate         []struct {
+		CPUThreshold           float64 `json:"cpuThreshold"`
+		BackgroundAgeSeconds   float64 `json:"backgroundAgeSeconds"`
+		BackgroundCPUThreshold float64 `json:"backgroundCPUThreshold"`
+		BusyGraceSeconds       float64 `json:"busyGraceSeconds"`
+		Now                    float64 `json:"now"`
+		Evaluate               []struct {
 			Name      string             `json:"name"`
 			Processes []procJSON         `json:"processes"`
 			CPU       map[string]float64 `json:"cpu"`
 			Custom    []string           `json:"custom"`
+			Reasons   map[string]*string `json:"reasons"`
 			Expect    map[string]struct {
 				Present int `json:"present"`
 				Busy    int `json:"busy"`
@@ -185,16 +195,20 @@ func TestFixtureActivity(t *testing.T) {
 		} `json:"evaluate"`
 	}
 	load(t, "activity.json", &f)
-	if CPUThreshold != f.CPUThreshold || BusyGrace.Seconds() != f.BusyGraceSeconds {
-		t.Errorf("constants: threshold %v grace %v", CPUThreshold, BusyGrace)
+	if CPUThreshold != f.CPUThreshold || BusyGrace.Seconds() != f.BusyGraceSeconds ||
+		BackgroundAge.Seconds() != f.BackgroundAgeSeconds || BackgroundCPUThreshold != f.BackgroundCPUThreshold {
+		t.Errorf("constants: threshold %v grace %v background %v / %v", CPUThreshold, BusyGrace, BackgroundAge, BackgroundCPUThreshold)
 	}
+	now := time.Unix(int64(f.Now), 0)
 	for _, c := range f.Evaluate {
 		var ps []ProcessSnapshot
 		for _, p := range c.Processes {
-			ps = append(ps, p.snapshot())
+			ps = append(ps, p.snapshot(now))
 		}
+		cpu := pidMap(t, c.CPU)
+		kinds := fixtureKinds(c.Custom)
 		got := map[string][2]int{}
-		for k, s := range Evaluate(ps, pidMap(t, c.CPU), fixtureKinds(c.Custom)) {
+		for k, s := range Evaluate(ps, cpu, now, kinds) {
 			got[k.ID] = [2]int{s.Present, s.Busy}
 		}
 		want := map[string][2]int{}
@@ -203,6 +217,22 @@ func TestFixtureActivity(t *testing.T) {
 		}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("evaluate %q = %v, want %v", c.Name, got, want)
+		}
+
+		tree := NewTree(ps, kinds)
+		for pid, reason := range pidMap(t, c.Reasons) {
+			agent, ok := tree.ByPID[pid]
+			if _, isAgent := tree.Agents[pid]; !ok || !isAgent {
+				t.Errorf("%q: pid %d is not an agent", c.Name, pid)
+				continue
+			}
+			wantReason := ""
+			if reason != nil {
+				wantReason = *reason
+			}
+			if got := Explain(agent, tree, cpu, now).Reason.String(); got != wantReason {
+				t.Errorf("%q: reason of pid %d = %q, want %q", c.Name, pid, got, wantReason)
+			}
 		}
 	}
 }
