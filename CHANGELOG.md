@@ -10,6 +10,16 @@
   구조라 AppKit으로 할 수 없다. M5 Pro·내장+외부 4K 두 대·AC·순찰 켬에서 `top` 2초 샘플 다섯 번은 변경 전 CPU 2.04%·초당
   context switch 167회, 변경 후 CPU 1.58%·186회였다. 이 버전 `top`은 프로세스별 wakeup 수를 주지 않아 context switch를
   대리 지표로 기록했다. 보이는 정상 애니메이션은 그대로라 그 수치를 절감 효과로 주장하지 않는다
+- 테스트·CI: 2026-10-31 PR #63(문서만 바뀜)의 macOS `swift test` 가 20분 작업 기한까지 멈췄다가 재실행에서 통과한 일을
+  손본다. 로그로 확인한 것: 마지막 줄의 `timedMenuCheck` 는 범인이 아니다. 143개 테스트가 0.7초 안에 모두 시작했고
+  통과 줄은 하나도 없었다 (CI 에서는 출력이 버퍼에 쌓였다가 끝에 한꺼번에 나온다). 끊길 때 남은 프로세스는 테스트 프로세스
+  하나뿐이라 테스트가 띄운 자식은 다 끝난 뒤였다. 기다릴 수 있는 테스트는 자식 프로세스를 띄우는 `LidWatchdogTests` 와
+  `UpdateInstallerTests` 뿐인데, 그 기다림(`waitUntilExit`, 파이프를 끝까지 읽기)에 기한이 없었다. 그중 어느 기다림이
+  멈췄는지는 증명하지 못했다 (추정). 리눅스에서는 재현되지 않았고 macOS 전용 경로는 여기서 돌릴 수 없다. 그래서 두 묶음의
+  자식 프로세스는 이제 스레드를 막지 않고 30초 기한 안에서만 기다리고, 넘기거나 취소되면 SIGKILL 로 끝내고 실패로
+  보고한다. 출력은 파이프 대신 임시 파일로 받는다. 두 묶음에 `.timeLimit(.minutes(1))`, CI 의 `swift test` 단계에
+  `timeout-minutes: 10` 을 둔다. 검사 내용은 그대로다. 덤으로 리눅스에서 30초 걸리던
+  `homebrewScriptAsksToReopenWhenTheOldAppIsStillRunning` 은 SIGTERM 이 막힌 대역을 SIGKILL 로 끝내 1초 남짓으로 준다
 
 ## 0.12.0 — 2026-11-02
 
