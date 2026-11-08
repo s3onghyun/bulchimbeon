@@ -82,7 +82,7 @@
 
 | 신호 | 결론 | 근거 (실측) |
 |------|------|------------|
-| 대화 기록(transcript) 파일 수정 시각 | ❌ 미채택 | 쉬는 Claude Code 세션 4개의 기록 파일이 같은 초에 갱신됨 — 내용은 작업이 아니라 관리용 기록(`atis-latch`, `system/away_summary`, `system/turn_duration`). 구분하려면 기록 내용을 읽어야 해서 "대화 내용은 읽지 않는다" 원칙과 충돌. Claude Code 는 `caffeinate` 신호로 이미 정확 |
+| 대화 기록(transcript) 파일 수정 시각 | ❌ 미채택 | 쉬는 Claude Code 세션 4개의 기록 파일이 같은 초에 갱신됨 — 내용은 작업이 아니라 관리용 기록(`atis-latch`, `system/away_summary`, `system/turn_duration`). 구분하려면 기록 내용을 읽어야 해서 "대화 내용은 읽지 않는다" 원칙과 충돌. 작업 판단은 `caffeinate` 자식·CPU 신호로 한다 (규칙: [README](../README.ko.md)) |
 | Claude Code lifecycle hook | ⏸ 보류 | 사용자 `~/.claude/settings.json` 수정 필요, hook 지연이 에이전트를 방해할 위험. 에디터 내장 에이전트·원격 승인 요청이 생기면 기본 꺼짐 선택 기능으로 재검토 |
 
 ## 5. 구조
