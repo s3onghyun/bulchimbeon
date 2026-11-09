@@ -44,6 +44,11 @@ BULCHIMBEON_DEBUG=1 dist/Bulchimbeon.app/Contents/MacOS/Bulchimbeon   # print en
 With full Xcode installed, plain `swift test` also works; `make test` adds flags that the Command Line Tools'
 testing framework needs. CI runs `swift test`, builds the app bundle, and verifies its signature on macOS for every PR.
 
+To try a build while your installed copy keeps running, give the test copy its own home:
+`CFFIXED_USER_HOME="$(mktemp -d)" dist/Bulchimbeon.app/Contents/MacOS/Bulchimbeon`. Changing only the bundle id
+keeps settings apart but not the duty log (`~/Library/Application Support/Bulchimbeon/duty-log.txt`) or the lid stop-signal
+file next to it, so the test copy would write into your real log.
+
 The Linux daemon is a Go module at the repository root (`cmd/bulchimbeon`, `internal/`). It needs Go 1.27 or later
 and nothing else; it builds and tests on any OS, and its Linux backend tests run on Linux:
 
@@ -223,6 +228,11 @@ BULCHIMBEON_DEBUG=1 dist/Bulchimbeon.app/Contents/MacOS/Bulchimbeon   # 엔진�
 
 Xcode 가 설치돼 있으면 `swift test` 만으로도 됩니다. `make test` 는 Command Line Tools 의 테스트 프레임워크에 필요한
 플래그를 붙여줍니다. CI 는 PR 마다 macOS 에서 `swift test`, 앱 번들 빌드, 서명 검증을 돌립니다.
+
+설치된 앱을 켜 둔 채 빌드를 시험하려면 시험용 사본에 따로 홈을 주세요:
+`CFFIXED_USER_HOME="$(mktemp -d)" dist/Bulchimbeon.app/Contents/MacOS/Bulchimbeon`. bundle id 만 바꾸면 설정은
+분리되지만 근무일지(`~/Library/Application Support/Bulchimbeon/duty-log.txt`)와 그 옆의 덮개 중지 신호 파일은 그대로라,
+시험용 사본이 실제 근무일지에 기록합니다.
 
 리눅스 데몬은 저장소 루트의 Go 모듈입니다 (`cmd/bulchimbeon`, `internal/`). Go 1.27 이상만 있으면 되고, 다른 의존성은
 없습니다. 어느 OS 에서든 빌드·테스트되며 리눅스 백엔드 테스트는 리눅스에서 돕니다:
