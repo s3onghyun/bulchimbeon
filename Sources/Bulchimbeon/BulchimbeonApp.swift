@@ -6,7 +6,6 @@ import SwiftUI
 struct BulchimbeonApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var duty = DutyController.shared
-    @StateObject private var animator = SpriteAnimator()
     @StateObject private var animationEnvironment = MenuBarAnimationEnvironment.shared
     @StateObject private var patrol = PatrolController.shared
     @StateObject private var uniform = UniformSetting.shared
@@ -25,7 +24,7 @@ struct BulchimbeonApp: App {
         MenuBarExtra {
             DutyMenu(duty: duty, patrol: patrol, uniform: uniform, updater: updater)
         } label: {
-            MenuBarLabel(duty: duty, animator: animator, uniform: uniform, environment: animationEnvironment)
+            MenuBarLabel(duty: duty, uniform: uniform, environment: animationEnvironment)
         }
         .menuBarExtraStyle(.menu)
     }
@@ -33,7 +32,9 @@ struct BulchimbeonApp: App {
 
 struct MenuBarLabel: View {
     @ObservedObject var duty: DutyController
-    @ObservedObject var animator: SpriteAnimator
+    // 라벨이 직접 소유해야 프레임마다 App 장면(=메뉴 전체)이 다시 그려지지 않는다. 열린 메뉴가 0.5초마다
+    // 새로 만들어지면 하위 메뉴 클릭이 사라진다 ("근무 서기"가 안 눌리던 0.12.1 버그).
+    @StateObject private var animator = SpriteAnimator()
     @ObservedObject var uniform: UniformSetting
     @ObservedObject var environment: MenuBarAnimationEnvironment
 
