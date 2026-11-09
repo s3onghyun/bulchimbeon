@@ -6,7 +6,6 @@ import SwiftUI
 struct BulchimbeonApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var duty = DutyController.shared
-    @StateObject private var animationEnvironment = MenuBarAnimationEnvironment.shared
     @StateObject private var patrol = PatrolController.shared
     @StateObject private var uniform = UniformSetting.shared
     @StateObject private var updater = UpdateController.shared
@@ -24,7 +23,7 @@ struct BulchimbeonApp: App {
         MenuBarExtra {
             DutyMenu(duty: duty, patrol: patrol, uniform: uniform, updater: updater)
         } label: {
-            MenuBarLabel(duty: duty, uniform: uniform, environment: animationEnvironment)
+            MenuBarLabel(duty: duty, uniform: uniform)
         }
         .menuBarExtraStyle(.menu)
     }
@@ -36,7 +35,9 @@ struct MenuBarLabel: View {
     // 새로 만들어지면 하위 메뉴 클릭이 사라진다 ("근무 서기"가 안 눌리던 0.12.1 버그).
     @StateObject private var animator = SpriteAnimator()
     @ObservedObject var uniform: UniformSetting
-    @ObservedObject var environment: MenuBarAnimationEnvironment
+    // App 이 아니라 라벨이 지켜봐야 한다. 메뉴·하위 메뉴 창이 열릴 때마다 가림 알림이 오는데, App 이 지켜보면
+    // 그때마다 메뉴 전체가 다시 만들어져 하위 메뉴 창이 닫혔다 다시 열리기를 반복한다 (0.12.2 "근무 서기" 깜빡임).
+    @ObservedObject private var environment = MenuBarAnimationEnvironment.shared
 
     private var animationState: MenuBarAnimationState {
         MenuBarAnimationState(frameCount: SpriteImages.frames(duty.pose).count,
@@ -75,31 +76,36 @@ final class MenuBarAnimationEnvironment: ObservableObject {
     private init() {
         let workspace = NSWorkspace.shared.notificationCenter
         workspace.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { MenuBarAnimationEnvironment.shared.displaySleeping = true }
+            MainActor.assumeIsolated { MenuBarAnimationEnvironment.shared.set(\.displaySleeping, true) }
         }
         workspace.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { MenuBarAnimationEnvironment.shared.displaySleeping = false }
+            MainActor.assumeIsolated { MenuBarAnimationEnvironment.shared.set(\.displaySleeping, false) }
         }
         let distributed = DistributedNotificationCenter.default()
         distributed.addObserver(forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { MenuBarAnimationEnvironment.shared.screenLocked = true }
+            MainActor.assumeIsolated { MenuBarAnimationEnvironment.shared.set(\.screenLocked, true) }
         }
         distributed.addObserver(forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { MenuBarAnimationEnvironment.shared.screenLocked = false }
+            MainActor.assumeIsolated { MenuBarAnimationEnvironment.shared.set(\.screenLocked, false) }
         }
         let center = NotificationCenter.default
         center.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated {
                 let statusWindows = NSApp.windows.filter { $0.className.contains("StatusBarWindow") }
-                MenuBarAnimationEnvironment.shared.statusItemVisible = MenuBarAnimationPolicy.statusItemVisible(
-                    windowsVisible: statusWindows.map { $0.occlusionState.contains(.visible) })
+                MenuBarAnimationEnvironment.shared.set(\.statusItemVisible, MenuBarAnimationPolicy.statusItemVisible(
+                    windowsVisible: statusWindows.map { $0.occlusionState.contains(.visible) }))
             }
         }
         center.addObserver(forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated {
-                MenuBarAnimationEnvironment.shared.lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+                MenuBarAnimationEnvironment.shared.set(\.lowPowerMode, ProcessInfo.processInfo.isLowPowerModeEnabled)
             }
         }
+    }
+
+    /// 값이 실제로 바뀔 때만 알린다. 가림 알림은 메뉴 창이 열고 닫힐 때마다 같은 값으로도 온다.
+    private func set(_ keyPath: ReferenceWritableKeyPath<MenuBarAnimationEnvironment, Bool>, _ value: Bool) {
+        if self[keyPath: keyPath] != value { self[keyPath: keyPath] = value }
     }
 }
 
