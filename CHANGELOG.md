@@ -5,6 +5,10 @@
 
 ## 다음 버전
 
+- 릴리스: Developer ID 서명·Apple 공증(notarytool)·staple 단계를 릴리스 워크플로에 준비했다. 서명 비밀값이 없으면 아무 일도 하지
+  않고 지금처럼 ad-hoc 서명으로 낸다 (로그에 "Notarization skipped" 한 줄). 비밀값 이름과 가입 후 할 일은
+  [docs/release.md](docs/release.md). 수동 실행(workflow_dispatch)으로 Release 없이 빌드·공증만 점검할 수 있다
+
 ## 0.12.3 — 2026-11-09
 
 - 메뉴 수정: 0.12.2 에서도 "🪖 근무 서기" 하위 메뉴가 깜빡이다 메뉴째 닫혀 시간을 고를 수 없던 문제. 메뉴 막대 아이콘이

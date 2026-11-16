@@ -175,6 +175,9 @@ git tag vX.Y.Z && git push origin vX.Y.Z   # CI builds universal, signs, attests
 # Fedora COPR, once set up: copr-cli buildscm ... --commit vX.Y.Z (packaging/rpm/README.md)
 ```
 
+Developer ID signing and Apple notarization switch on only when the signing secrets exist; without them the release is
+ad-hoc signed as before. Secret names, the post-enrolment steps and a dry run: [docs/release.md](docs/release.md).
+
 The release workflow does not touch the Homebrew tap or the AUR. After tagging, both steps are required:
 
 - [ ] `./scripts/bump-cask.sh X.Y.Z` (tap cask and Linux formula; otherwise `brew upgrade` stays on the old version)
@@ -352,6 +355,9 @@ git tag vX.Y.Z && git push origin vX.Y.Z   # CI 가 universal 빌드·서명·�
 ./scripts/bump-aur.sh X.Y.Z                # 같은 검증 후 AUR 용 packaging/aur 갱신 (packaging/aur/README.md)
 # Fedora COPR (설정한 뒤): copr-cli buildscm ... --commit vX.Y.Z (packaging/rpm/README.md)
 ```
+
+Developer ID 서명과 Apple 공증은 서명 비밀값이 있을 때만 켜지고, 없으면 지금처럼 ad-hoc 서명으로 나갑니다. 비밀값 이름,
+가입 후 할 일, 수동 점검 실행은 [docs/release.md](docs/release.md) 에 있습니다.
 
 릴리스 워크플로는 Homebrew tap 과 AUR 을 건드리지 않습니다. 태그를 올린 뒤 두 단계는 꼭 해야 합니다:
 
