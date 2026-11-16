@@ -221,15 +221,6 @@ func (e *Engine) LidEngagedByUs() bool      { return e.lidEngagedByUs }
 // ShiftReason is why this watch falls back from lid mode ("" when it does not).
 func (e *Engine) ShiftReason() ShiftReason { return e.shiftReason }
 
-// BatteryResumeUntil is when charger power stops resuming the watch a battery retreat ended; nil when none is remembered.
-func (e *Engine) BatteryResumeUntil() *time.Time {
-	if e.retreated == nil {
-		return nil
-	}
-	t := e.retreated.at.Add(BatteryResumeWindow)
-	return &t
-}
-
 // EffectiveMode is the mode this watch actually keeps.
 func (e *Engine) EffectiveMode() DutyMode {
 	if e.shiftMode != "" {
@@ -472,11 +463,11 @@ func (e *Engine) check(o Observation) []Effect {
 		return effects
 	}
 
-	// charger power after a battery retreat: resume within the window, forget after it
+	// charger power after a battery retreat: resume within the window, forget after it; wait while overheated
 	if r := e.retreated; r != nil {
 		if now.Sub(r.at) > BatteryResumeWindow {
 			e.retreated = nil
-		} else if onPower {
+		} else if onPower && o.Heat < HeatAlert {
 			effects = append(effects, e.resumeOnPower(*r, now)...)
 		}
 	}

@@ -260,7 +260,6 @@ import Testing
             "mode": .string(mode.rawValue), "effectiveMode": .string(mode.rawValue), "heat": .string("normal"), "quote": .string("off"), "dutyStartedAt": .null,
             "watchDetail": .null, "lidEngagedByUs": .bool(config["lidEngagedByUs"].bool ?? false),
             "lidSleepDisabled": .bool(config["lidSleepDisabled"].bool ?? false), "shiftReason": .null,
-            "batteryResumeUntil": .null,
         ]
 
         for (i, step) in scenario["steps"].array.enumerated() {
@@ -316,7 +315,6 @@ import Testing
                 "dutyStartedAt": relative(engine.dutyStartedAt), "watchDetail": engine.watchDetail.map(JSONValue.string) ?? .null,
                 "lidEngagedByUs": .bool(engine.lidEngagedByUs), "lidSleepDisabled": .bool(engine.lidSleepDisabled),
                 "shiftReason": engine.shiftReason.map { .string($0.rawValue) } ?? .null,
-                "batteryResumeUntil": relative(engine.batteryResumeUntil),
             ]
             switch engine.order {
             case .off: state["order"] = .string("off"); state["orderUntil"] = .null

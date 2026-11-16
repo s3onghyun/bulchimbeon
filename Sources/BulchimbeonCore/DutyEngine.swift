@@ -106,8 +106,6 @@ public struct DutyEngine: Sendable {
     public private(set) var shiftMode: DutyMode?
     /// 대체한 까닭 (메뉴 안내용). `shiftMode` 와 함께 정해지고 함께 지워진다
     public private(set) var shiftReason: ShiftReason?
-    /// 배터리 철수 뒤 전원이 연결되면 같은 근무를 다시 서는 마감 시각 (메뉴 안내용). 기억한 근무가 없으면 nil
-    public var batteryResumeUntil: Date? { retreated.map { $0.at.addingTimeInterval(BatteryPolicy.resumeWindow) } }
 
     /// 지금 실제로 서는 근무 방식
     public var effectiveMode: DutyMode { shiftMode ?? mode }
@@ -334,11 +332,11 @@ public struct DutyEngine: Sendable {
             return effects
         }
 
-        // 배터리 철수 뒤 전원 연결: 기다리는 시간 안이면 같은 근무로 복귀, 지나면 잊는다
+        // 배터리 철수 뒤 전원 연결: 기다리는 시간 안이면 같은 근무로 복귀, 지나면 잊는다. 과열 중이면 식을 때까지 기다린다
         if let retreat = retreated {
             if now.timeIntervalSince(retreat.at) > BatteryPolicy.resumeWindow {
                 retreated = nil
-            } else if onPower {
+            } else if onPower, o.heat < .alert {
                 effects += resumeOnPower(retreat, now: now)
             }
         }

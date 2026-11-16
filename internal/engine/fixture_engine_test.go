@@ -152,7 +152,6 @@ func TestFixtureEngineScenarios(t *testing.T) {
 				"effectiveMode": string(cfg.Mode),
 				"heat":          "normal", "quote": "off", "dutyStartedAt": nil, "watchDetail": nil,
 				"lidEngagedByUs": cfg.LidEngagedByUs, "lidSleepDisabled": cfg.LidSleepDisabled, "shiftReason": nil,
-				"batteryResumeUntil": nil,
 			}
 
 			for i, st := range sc.Steps {
@@ -251,7 +250,7 @@ func TestFixtureEngineScenarios(t *testing.T) {
 					"resting": e.Resting(), "mode": string(e.Mode), "effectiveMode": string(e.EffectiveMode()), "heat": e.Heat().String(), "quote": e.Quote().String(),
 					"dutyStartedAt": rel(e.DutyStartedAt()), "watchDetail": detail,
 					"lidEngagedByUs": e.LidEngagedByUs(), "lidSleepDisabled": e.LidSleepDisabled(),
-					"shiftReason": nil, "batteryResumeUntil": rel(e.BatteryResumeUntil()),
+					"shiftReason": nil,
 				}
 				if r := e.ShiftReason(); r != "" {
 					state["shiftReason"] = string(r)

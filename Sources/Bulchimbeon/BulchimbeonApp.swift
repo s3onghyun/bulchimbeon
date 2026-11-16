@@ -235,7 +235,6 @@ struct DutyMenu: View {
 
         Text(duty.agentLine)
         if let batteryLine = duty.batteryLine { Text(batteryLine) }
-        if let batteryResumeLine = duty.batteryResumeLine { Text(batteryResumeLine) }
         if let heatLine = duty.heatLine { Text(heatLine) }
         if !duty.otherHolders.display.isEmpty {
             Text(L10n.t("🖥️ 화면을 막는 다른 앱: ", "🖥️ Also keeping the display on: ", "🖥️ 同样保持屏幕常亮的应用：") + duty.otherHolders.display.joined(separator: ", "))
