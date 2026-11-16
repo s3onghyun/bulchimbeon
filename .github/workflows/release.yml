@@ -1,9 +1,11 @@
 name: Release
 
-# v* 태그 푸시 → universal 빌드 → 빌드 출처 증명(attestation) → GitHub Release
+# v* 태그 푸시 → universal 빌드 → (비밀값이 있으면) Developer ID 서명·공증 → 빌드 출처 증명(attestation) → GitHub Release
+# 수동 실행(workflow_dispatch)은 점검용: 빌드·서명·공증까지만 하고 Release 는 만들지 않는다 (docs/release.md)
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -11,11 +13,14 @@ permissions:
 jobs:
   release:
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 60    # 공증 대기 포함
     permissions:
       contents: write      # Release 생성
       id-token: write      # attestation 서명 (Sigstore OIDC)
       attestations: write
+    env:
+      # 비밀값은 if: 에 바로 못 쓰므로 있는지만 넘긴다 (값이 아니라 true/false). 없으면 지금처럼 ad-hoc 서명으로 낸다
+      HAS_SIGNING: ${{ secrets.APPLE_DEVELOPER_ID_P12 != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -24,15 +29,47 @@ jobs:
         run: swift test
       - name: Build universal app
         run: UNIVERSAL=1 VERSION="${GITHUB_REF_NAME#v}" ./scripts/build-app.sh
+      - name: Notarization skipped
+        if: env.HAS_SIGNING != 'true'
+        run: echo "Notarization skipped - no APPLE_DEVELOPER_ID_P12 secret, releasing the ad-hoc signed app (docs/release.md)"
+      - name: Sign with Developer ID and notarize
+        if: env.HAS_SIGNING == 'true'
+        timeout-minutes: 40
+        env:
+          APPLE_DEVELOPER_ID_P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+          APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: VERSION="${GITHUB_REF_NAME#v}" ./scripts/notarize-app.sh
       - name: Verify
         run: |
           codesign --verify --strict --verbose=2 dist/Bulchimbeon.app
           lipo -archs dist/Bulchimbeon.app/Contents/MacOS/Bulchimbeon
+          if [[ "$HAS_SIGNING" == true ]]; then
+            xcrun stapler validate dist/Bulchimbeon.app
+            spctl --assess --type execute --verbose=2 dist/Bulchimbeon.app
+          fi
           cd dist && shasum -a 256 -c ./*.sha256
+      # 수동 점검 실행: 결과 zip 을 7일 보관 (Release·출처 증명은 만들지 않음)
+      - name: Keep the dry-run build
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bulchimbeon-dry-run
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          retention-days: 7
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        if: github.event_name == 'push'
         with:
           subject-path: dist/*.zip
       - name: Publish release
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -44,6 +81,7 @@ jobs:
   # `rpm` package (scripts/package-rpm.sh, repackaging the tarball's binary), no third-party packaging action.
   linux:
     needs: release
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
