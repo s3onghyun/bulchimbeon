@@ -200,11 +200,15 @@ struct DutyMenu: View {
 
         Divider()
 
-        Picker(L10n.t("근무 형태", "Watch mode", "值班模式"), selection: Binding(
-            get: { duty.mode },
-            set: { mode in Task { await duty.setMode(mode) } }
-        )) {
-            ForEach(DutyMode.allCases) { Text($0.title).tag($0) }
+        // 근무 형태는 하위 메뉴 없이 한 번에 고른다 (실사용: 낮에는 -d, 밤에는 -i, 들고 나갈 땐 덮개로 18일 동안 27번 바꿈).
+        // "근무 서기"처럼 체크 표시 Toggle 이고, 항목 정체성은 DutyMode 로 고정이라 메뉴가 다시 그려져도 같은 항목이다.
+        Text(L10n.t("근무 형태", "Watch mode", "值班模式"))
+        ForEach(DutyMode.allCases) { mode in
+            // 체크된 항목을 다시 눌러도 그대로 (엔진이 같은 방식이면 아무것도 하지 않는다)
+            Toggle(mode.title, isOn: Binding(
+                get: { duty.mode == mode },
+                set: { _ in Task { await duty.setMode(mode) } }
+            ))
         }
         if let shiftLine = duty.shiftLine {
             Text(shiftLine)

@@ -71,6 +71,8 @@ Samples are added in order to one history; `expect` (`{pid: percent}`, exact key
 | Key | Case shape |
 |-----|-----------|
 | `batteryRetreat` | `{battery: {percent, onBattery} \| null, floor: n \| null, expect}` |
+| `batteryWarningMargin`, `batteryResumeWindowSeconds` | the pre-warning band above the floor, and how long after a battery retreat charger power resumes the same watch |
+| `batteryWarn` | `{name, battery, floor, expect}`: the one-time pre-warning (on battery, above the floor, at most the margin over it) |
 | `agentWatchDecide` | `{busyNow, quietFor, grace, onDuty, lowBattery, expect: engage\|handover\|none}` |
 | `quietFor` | `{now, lastBusyAt \| null, watchStartedAt, expect}` |
 | `heatCoolDownSeconds` | the cool-down constant |
@@ -124,7 +126,7 @@ Each step runs one operation at time `at`, then checks the result:
 |-------|---------|
 | `op` | `startTimed` (`seconds` \| null, `label`), `startAgentWatch`, `stop`, `setMode` (`mode`), `resume` (`resume: {action, until?}`, `action` as in `dutyResume`), `lidEnableResult` (`ok`; when false, an optional `failure: {cause: stopSignal \| launch \| interrupted \| error, signal?, code?}` makes it a failed approval instead of a cancelled one), `lidRestoreResult` (`ok`), `lidSleepRestoredExternally`, or `tick` |
 | tick inputs | `open` and `busy` (`{id: n}`), `battery` (`{percent, onBattery}`), `heat` (default `normal`), `assertionHeld` (default `true`) |
-| `effects` | the exact effect list, in order: `{type: acquire, mode}`, `release`, `reacquire`, `enableLid`, `restoreLid`, `{type: notify, line, args?}` (a `lines.json` function; `args` may be `{ko, en}`), `{type: log, kind, ko, en}` |
+| `effects` | the exact effect list, in order: `{type: acquire, mode}`, `release`, `reacquire`, `enableLid`, `restoreLid`, `{type: notify, line, args?}` (a `lines.json` function; `args` may be `{ko, en}`), `{type: log, kind, ko, en}`. `enableLid` is always last: the macOS app waits for the admin prompt in place and runs `lidEnableResult` right there, so anything after it would be logged after the approval's outcome |
 | `state` | fields that change at this step. Runners keep the full expected state and compare all of it after every step: `isOnDuty`, `order` (`off`, `timed`, `agentWatch`), `orderUntil`, `resting`, `mode` (the user's pick), `effectiveMode` (what this watch keeps after a lid fallback), `shiftReason` (why: `restarted`, `approvalCancelled`, `approvalFailed`, `heat`, `lidRestoredExternally`, or null), `heat`, `quote`, `dutyStartedAt`, `watchDetail` (`{ko, en}` or null), `lidEngagedByUs`, `lidSleepDisabled` |
 | `checks` | `{at, pose}` and `{at, speech: lines.json speech function \| null}`, evaluated after the step |
 

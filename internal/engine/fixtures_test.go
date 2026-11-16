@@ -298,6 +298,14 @@ func TestFixturePolicies(t *testing.T) {
 			Floor   *int           `json:"floor"`
 			Expect  bool           `json:"expect"`
 		} `json:"batteryRetreat"`
+		BatteryWarningMargin       int     `json:"batteryWarningMargin"`
+		BatteryResumeWindowSeconds float64 `json:"batteryResumeWindowSeconds"`
+		BatteryWarn                []struct {
+			Name    string         `json:"name"`
+			Battery *BatteryStatus `json:"battery"`
+			Floor   *int           `json:"floor"`
+			Expect  bool           `json:"expect"`
+		} `json:"batteryWarn"`
 		AgentWatchDecide []struct {
 			BusyNow    bool    `json:"busyNow"`
 			QuietFor   float64 `json:"quietFor"`
@@ -351,6 +359,14 @@ func TestFixturePolicies(t *testing.T) {
 	for _, c := range f.BatteryRetreat {
 		if got := ShouldRetreat(c.Battery, c.Floor); got != c.Expect {
 			t.Errorf("batteryRetreat %q = %v", c.Name, got)
+		}
+	}
+	if BatteryWarningMargin != f.BatteryWarningMargin || BatteryResumeWindow != seconds(f.BatteryResumeWindowSeconds) {
+		t.Errorf("battery constants = %d, %v", BatteryWarningMargin, BatteryResumeWindow)
+	}
+	for _, c := range f.BatteryWarn {
+		if got := ShouldWarn(c.Battery, c.Floor); got != c.Expect {
+			t.Errorf("batteryWarn %q = %v", c.Name, got)
 		}
 	}
 	for _, c := range f.AgentWatchDecide {

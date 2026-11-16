@@ -15,6 +15,19 @@ public enum BatteryPolicy {
         guard let status, let floor, status.onBattery else { return false }
         return status.percent <= floor
     }
+
+    /// 철수 예고: 기준보다 이만큼 높을 때부터 한 번 알린다
+    public static let warningMargin = 5
+
+    /// 철수 뒤 이 시간 안에 전원이 연결되면 같은 근무를 다시 선다.
+    /// 실사용 일지(2026-10-13~11-16): 배터리 철수 7회 중 3회를 15~93초 뒤 충전기를 꽂고 손으로 다시 켰다.
+    public static let resumeWindow: TimeInterval = 600
+
+    /// 배터리 사용 중이고 철수 기준 바로 위(기준 초과, 기준 + `warningMargin` 이하)이면 예고. floor 가 nil 이면 예고하지 않는다.
+    public static func shouldWarn(_ status: BatteryStatus?, floor: Int?) -> Bool {
+        guard let status, let floor, status.onBattery else { return false }
+        return status.percent > floor && status.percent <= floor + warningMargin
+    }
 }
 
 /// 에이전트 근무 모드의 교대 판단.

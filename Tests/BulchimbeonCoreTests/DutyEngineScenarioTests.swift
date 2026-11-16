@@ -211,7 +211,7 @@ import Testing
 
     @Test func lidModeRoundTrip() {
         var engine = DutyEngine(mode: .lid, now: t0)
-        #expect(engine.startTimed(seconds: nil, label: "무기한", now: t0).first == .enableLid)
+        #expect(engine.startTimed(seconds: nil, label: "무기한", now: t0).last == .enableLid)
         #expect(engine.lidEnableResult(.approved, now: t0) == [.acquire(.lid)])
         #expect(engine.lidEngagedByUs && engine.lidSleepDisabled)
         let stop = engine.stop(now: at(10))
@@ -283,7 +283,7 @@ import Testing
         #expect(engine.effectiveMode == .system && engine.mode == .lid, "메뉴 체크는 덮개, 이번 근무는 시스템")
         _ = engine.stop(now: at(60))
         #expect(engine.mode == .lid && engine.effectiveMode == .lid, "근무가 끝나면 고른 덮개 근무로 돌아온다")
-        #expect(engine.startTimed(seconds: nil, label: "무기한", now: at(70)).first == .enableLid, "다음 근무는 다시 덮개 근무")
+        #expect(engine.startTimed(seconds: nil, label: "무기한", now: at(70)).last == .enableLid, "다음 근무는 다시 덮개 근무")
     }
 
     @Test func lidDeniedKeepsLidPreference() {
@@ -410,7 +410,7 @@ import Testing
         _ = engine.lidEnableResult(.failed(.interrupted(signal: 15)), now: at(56))
         #expect(engine.mode == .lid)
         let retry = engine.setMode(.lid, now: at(14_852))                           // 10:07:29
-        #expect(retry.first == .enableLid)
+        #expect(retry.last == .enableLid)
         _ = engine.lidEnableResult(.failed(.interrupted(signal: 15)), now: at(14_852))
         #expect(engine.mode == .lid && engine.effectiveMode == .system && engine.shiftReason == .approvalFailed)
         // 그 뒤 메뉴에서 caffeinate -i 를 고르면 저장값이 system 이 되고, 이제 일지에 남는다
@@ -418,10 +418,38 @@ import Testing
         #expect(engine.mode == .system && engine.shiftLine(.ko) == nil)
     }
 
+    /// 앱(`DutyController.run`)처럼 효과를 차례로 실행하되, `enableLid` 는 그 자리에서 승인 결과까지 실행하고 일지 줄을 모은다.
+    private func appLog(_ engine: inout DutyEngine, _ effects: [DutyEffect], approval: LidApproval.Outcome, now: Date) -> [String] {
+        var lines: [String] = []
+        for effect in effects {
+            switch effect {
+            case .enableLid: lines += appLog(&engine, engine.lidEnableResult(approval, now: now), approval: approval, now: now)
+            case .log(let text, _): lines.append(text)
+            default: break
+            }
+        }
+        return lines
+    }
+
+    /// 실측 근무일지 (2026-10-28): 덮개 승인을 거부하면 "승인 거부 — 시스템 근무로 대체" 뒤에 "근무 방식 변경 — 덮개"가 찍혀,
+    /// 실제로는 시스템 근무인데 마지막 줄은 덮개라고 말했다. 앱이 실행하는 순서대로 일지의 마지막 줄이 실제 근무여야 한다.
+    @Test func refusedLidApprovalLeavesTheRealModeLast() {
+        let denied = L10n.t("덮개 근무 승인 거부 — 시스템 근무로 대체", "Lid-closed watch denied — switched to system watch", "合盖值班未获授权 — 已切换为系统值班")
+        var engine = DutyEngine(mode: .system, now: t0)
+        _ = engine.startTimed(seconds: nil, label: "무기한", now: t0)
+        let switched = appLog(&engine, engine.setMode(.lid, now: at(10)), approval: .cancelled, now: at(10))
+        #expect(switched.count == 2 && switched.last == denied, "\(switched)")
+        #expect(engine.effectiveMode == .system && engine.mode == .lid)
+
+        var fresh = DutyEngine(mode: .lid, now: t0)
+        let started = appLog(&fresh, fresh.startTimed(seconds: nil, label: "무기한", now: t0), approval: .cancelled, now: t0)
+        #expect(started.count == 2 && started.last == denied, "근무 투입 줄도 승인 결과 앞에: \(started)")
+    }
+
     @Test func choosingLidAgainEndsFallback() {
         var engine = DutyEngine(mode: .lid, lidSleepDisabled: false, now: t0)
         _ = engine.resume(.timed(until: nil), now: t0)
-        #expect(engine.setMode(.lid, now: at(10)).first == .enableLid, "메뉴에서 덮개를 다시 고르면 이번 근무도 덮개로")
+        #expect(engine.setMode(.lid, now: at(10)).last == .enableLid, "메뉴에서 덮개를 다시 고르면 이번 근무도 덮개로")
         #expect(engine.effectiveMode == .lid)
     }
 
@@ -430,7 +458,7 @@ import Testing
         _ = engine.resume(.agentWatch, now: t0)
         #expect(engine.effectiveMode == .system)
         let effects = engine.startTimed(seconds: nil, label: "무기한", now: at(10))
-        #expect(effects.first == .enableLid && engine.effectiveMode == .lid, "새 근무는 새 교대: 다시 덮개 승인")
+        #expect(effects.last == .enableLid && engine.effectiveMode == .lid, "새 근무는 새 교대: 다시 덮개 승인")
     }
 
     @Test func newTimedWatchReplacingHeatDowngradeAsksForLid() {
@@ -444,14 +472,14 @@ import Testing
         _ = engine.tick(idle(141))
         #expect(engine.effectiveMode == .system && engine.isOnDuty)
         let effects = engine.startTimed(seconds: 600, label: "10분", now: at(200))
-        #expect(effects.first == .enableLid && engine.effectiveMode == .lid)
+        #expect(effects.last == .enableLid && engine.effectiveMode == .lid)
     }
 
     @Test func agentWatchStartedDuringFallbackReengagesAsLid() {
         var engine = DutyEngine(mode: .lid, lidSleepDisabled: false, now: t0)
         _ = engine.resume(.timed(until: nil), now: t0)
         let effects = engine.startAgentWatch(now: at(10))
-        #expect(effects.first == .enableLid && engine.effectiveMode == .lid, "시스템 assertion 을 든 채 덮개라고 표시하지 않는다")
+        #expect(effects.last == .enableLid && engine.effectiveMode == .lid, "시스템 assertion 을 든 채 덮개라고 표시하지 않는다")
     }
 
     @Test func resumeExpiredStaysOff() {

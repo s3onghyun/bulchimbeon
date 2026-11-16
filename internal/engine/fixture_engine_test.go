@@ -229,6 +229,12 @@ func TestFixtureEngineScenarios(t *testing.T) {
 				if !reflect.DeepEqual(got, want) {
 					t.Errorf("%s: effects\n got  %+v\n want %+v", label, got, want)
 				}
+				// the macOS app runs the admin approval in place, so nothing may follow it
+				for i, ef := range effects {
+					if ef.Type == EffectEnableLid && i != len(effects)-1 {
+						t.Errorf("%s: enableLid must be the last effect", label)
+					}
+				}
 
 				for k, raw := range st.State {
 					var v any
