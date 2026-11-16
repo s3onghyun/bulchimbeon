@@ -127,7 +127,7 @@ and he stays out of full-screen apps (presentations, screen sharing, video). Siz
 | On watch | "Won't doze off! …probably." · "Sleep tight. I've got this!" |
 | Standing by | "Polishing my rifle… standing by." |
 | Mac heating up | "Heat advisory! Hydrating 🥵" → "Combat rest! Cooling down 🧊" |
-| Low battery | "Reporting to the duty officer 🔋 Battery at 15%… out of strength, standing down." |
+| Low battery | "Reporting to the duty officer 🔋 Battery at 15%… out of strength, standing down. Plug in within 10 minutes and I'll stand watch again." |
 | Sleep block lost | "Not AWOL! Back on post! 🫡" |
 | You come back | "Handover report! 📋" |
 
