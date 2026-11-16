@@ -101,9 +101,9 @@ public enum Lines {
 
     public static func lidLeftOn(_ lang: Language = L10n.language) -> Notice {
         switch lang {
-        case .ko: return ("덮개 잠자기가 꺼진 채 남아 있습니다 ⚠️", "지난 근무가 비정상 종료됐습니다. 메뉴에서 '덮개 잠자기 복구'를 눌러주십시오.")
-        case .en: return ("Lid sleep is still disabled ⚠️", "The last watch ended abnormally. Choose 'Restore lid sleep' from the menu.")
-        case .zh: return ("合盖休眠仍被禁用 ⚠️", "上次值班异常结束。请在菜单中选择“恢复合盖休眠”。")
+        case .ko: return ("덮개 잠자기가 꺼진 채 남아 있습니다 ⚠️", "지난 근무가 덮개 잠자기를 되돌리지 못하고 끝나, 덮개를 닫아도 맥이 잠들지 않습니다. 메뉴에서 '⚠️ 덮개 잠자기 복구'를 눌러주십시오 (관리자 암호 필요).")
+        case .en: return ("Lid sleep is still disabled ⚠️", "The last watch ended without restoring lid sleep, so the Mac won't sleep even with the lid closed. Choose '⚠️ Restore lid sleep' from the menu (admin password needed).")
+        case .zh: return ("合盖休眠仍被禁用 ⚠️", "上次值班结束时未能恢复合盖休眠，合盖后 Mac 也不会休眠。请在菜单中选择“⚠️ 恢复合盖休眠”（需要管理员密码）。")
         }
     }
 

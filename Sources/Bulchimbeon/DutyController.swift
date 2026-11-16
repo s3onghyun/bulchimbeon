@@ -73,6 +73,8 @@ final class DutyController: ObservableObject {
     @Published private var demoPose: Sprites.Pose?
     private var quoteKind: DutyEngine.QuoteKind = .off
     private var ticking = false
+    /// 저장된 근무를 이어받기 전에는 점검하지 않는다 (점검의 persist() 가 저장된 근무를 지운다)
+    private var started = false
     /// 진행 중인 덮개 켜기·복구 수와, 지금까지 시작한 횟수 (점검이 그 사이의 pmset 값을 믿지 않도록)
     private var lidCommandsInFlight = 0
     private var lidCommandsStarted = 0
@@ -100,13 +102,9 @@ final class DutyController: ObservableObject {
                             batteryFloor: floor, countIdleSessions: countIdle, graceMinutes: grace,
                             lidSleepDisabled: lidDisabled, lidEngagedByUs: lidByUs, now: Date())
         // 주의: 여기서 persist() 를 부르면 아직 "근무 없음"인 엔진 상태로 저장된 근무를 지워버린다.
-        // 근무 상태 저장은 resume() 이후 run() 이 맡는다. 덮개 플래그 정리만 바로 저장.
+        // 근무 상태 저장은 시작 작업이 저장된 근무를 이어받은 뒤 run() 이 맡는다. 덮개 플래그 정리만 바로 저장.
         defaults.set(lidByUs, forKey: Keys.lidEngagedByUs)
-
-        if lidDisabled && lidByUs {
-            writeLog(L10n.t("⚠️ 지난 근무 비정상 종료 — 덮개 잠자기가 꺼진 채 남아 있음", "⚠️ Last watch ended abnormally — lid sleep still disabled", "⚠️ 上次值班异常结束 — 合盖休眠仍被禁用"))
-            notifier.send(Lines.lidLeftOn())
-        }
+        // 덮개 플래그가 남아 있으면 "비정상 종료" 판단은 옛 감시병을 기다린 뒤 시작 작업에서 한다 (settleLeftoverLid)
 
         let center = DistributedNotificationCenter.default()
         center.addObserver(forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main) { _ in
@@ -115,12 +113,18 @@ final class DutyController: ObservableObject {
         center.addObserver(forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main) { _ in
             MainActor.assumeIsolated { DutyController.shared.screenUnlocked() }
         }
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.willPowerOffNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { DutyController.shared.prepareForPowerOff() }
+        }
 
         timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.tick() }
         }
         Task {
-            await resume()
+            let action = resumeAction() // 아래 run() 의 persist() 가 저장된 근무를 지우기 전에 읽는다
+            await settleLeftoverLid()
+            if let action { await run(engine.resume(action, now: Date())) }
+            started = true
             await tick()
         }
     }
@@ -309,6 +313,15 @@ final class DutyController: ObservableObject {
         objectWillChange.send()
     }
 
+    /// 로그아웃·재시동·시스템 종료 직전. 감시병에 원복을 청하고 `pmset -g` 로 확인될 때까지 (최장 약 7초) 기다린다.
+    /// 감시병이 없으면 아무것도 하지 않는다: 이때 관리자 암호 창을 띄우지 않는다.
+    /// 종료가 취소되면 다음 점검이 "밖에서 복구됨"으로 보고 이번 근무를 시스템 근무로 잇는다.
+    func prepareForPowerOff() {
+        guard engine.lidEngagedByUs, SystemProbes.requestLidSleepRestore() else { return }
+        for case let .log(text, kind) in engine.lidRestoreResult(true) { writeLog(text, kind: kind) }
+        persist()
+    }
+
     /// 앱 종료 시 동기 정리. 덮개 플래그는 반드시 되돌린다.
     func shutdown() {
         assertion.release()
@@ -360,14 +373,26 @@ final class DutyController: ObservableObject {
 
     // MARK: - 재시작 복귀
 
-    /// 앱 재시작·업데이트·재부팅 후 저장된 근무를 이어간다. 새 설치의 첫 실행이면 에이전트 근무를 켠다.
-    private func resume() async {
-        guard !CommandLine.arguments.contains("--demo") else { return }
+    /// 앱 재시작·업데이트·재부팅 후 이어갈 저장된 근무. 새 설치의 첫 실행이면 에이전트 근무를 켠다.
+    private func resumeAction() -> DutyResume.Action? {
+        guard !CommandLine.arguments.contains("--demo") else { return nil }
         let firstLaunch = DutyResume.isFirstLaunch { defaults.object(forKey: $0.rawValue) != nil }
-        let action = DutyResume.decide(stored: defaults.string(forKey: Keys.order),
-                                       until: defaults.object(forKey: Keys.orderUntil) as? Double,
-                                       now: Date(), firstLaunch: firstLaunch)
-        await run(engine.resume(action, now: Date()))
+        return DutyResume.decide(stored: defaults.string(forKey: Keys.order),
+                                 until: defaults.object(forKey: Keys.orderUntil) as? Double,
+                                 now: Date(), firstLaunch: firstLaunch)
+    }
+
+    /// 이 앱이 끈 덮개 잠자기가 남아 있을 때. 옛 실행의 감시병이 아직 살아 있으면 원복을 (최장 약 7초) 기다린 뒤 판단한다.
+    /// 실측 (2026-10-28): 빠른 재실행이 옛 감시병의 5초 점검보다 먼저 플래그를 읽어 "⚠️ 비정상 종료"를 잘못 알렸다.
+    /// 끝내 남아 있으면 엔진이 덮개 근무로 이어받지 않고, 메뉴의 복구 버튼이 보인다 (실측 2026-11-13).
+    private func settleLeftoverLid() async {
+        guard engine.lidSleepDisabled && engine.lidEngagedByUs else { return }
+        if await lidCommand({ SystemProbes.waitForPreviousLidWatchdog() }) {
+            await run(engine.lidRestoreResult(true))
+            return
+        }
+        writeLog(L10n.t("⚠️ 지난 근무 비정상 종료 — 덮개 잠자기가 꺼진 채 남아 있음", "⚠️ Last watch ended abnormally — lid sleep still disabled", "⚠️ 上次值班异常结束 — 合盖休眠仍被禁用"))
+        notifier.send(Lines.lidLeftOn())
     }
 
     // MARK: - 근무 사이클 (5초마다)
@@ -375,7 +400,7 @@ final class DutyController: ObservableObject {
     private var claimsLid: Bool { engine.lidSleepDisabled || (engine.isOnDuty && engine.effectiveMode == .lid) }
 
     private func tick() async {
-        guard !ticking, demoPose == nil else { return }
+        guard started, !ticking, demoPose == nil else { return }
         ticking = true
         defer { ticking = false }
 

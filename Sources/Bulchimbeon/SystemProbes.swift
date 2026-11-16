@@ -109,7 +109,8 @@ enum SystemProbes {
         return FileManager.default.createFile(atPath: signal.path, contents: nil)
     }
 
-    private static func requestLidSleepRestore() -> Bool {
+    /// 감시병에 원복을 청하고 `pmset -g` 로 확인될 때까지 (최장 약 7초) 기다린다. 관리자 암호 창은 띄우지 않는다.
+    static func requestLidSleepRestore() -> Bool {
         guard signalLidWatchdogStop(), let signal = lidStopSignalURL() else { return false }
         for _ in 0..<29 { // 5초 감시 주기 + `pmset -g` 확인 여유, 최장 약 7초
             // `pmset -g`가 실패한 것을 "0"으로 오인하면 플래그를 너무 빨리 지워 감시병을 못 깨운다.
@@ -117,6 +118,17 @@ enum SystemProbes {
                 try? FileManager.default.removeItem(at: signal)
                 return true
             }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        return false
+    }
+
+    /// 재실행 직후: 옛 실행(다른 PID)의 감시병이 아직 살아 있으면, 그 감시병이 원복할 때까지 (최장 약 7초) 기다린다.
+    /// 원복이 확인되면 true. 감시병이 없거나(재부팅 등) 시간 안에 원복되지 않으면 false.
+    static func waitForPreviousLidWatchdog() -> Bool {
+        guard run("/usr/bin/pgrep", ["-f", LidCommands.anyWatchdogPattern]) != nil else { return false }
+        for _ in 0..<29 { // 5초 감시 주기 + `pmset -g` 확인 여유
+            if lidSleepDisabledState() == false { return true }
             Thread.sleep(forTimeInterval: 0.25)
         }
         return false

@@ -177,6 +177,9 @@ type Engine struct {
 	coolSince      *time.Time
 	// awaitingLid: the admin prompt for lid mode is open and nothing is held yet.
 	awaitingLid bool
+	// lidLeftOver: lid sleep was disabled by a previous run of the app and no watchdog of this
+	// process guards it (Swift `lidLeftOver`). Such a flag is never adopted as a lid watch.
+	lidLeftOver bool
 }
 
 // New creates an engine.
@@ -188,6 +191,7 @@ func New(cfg Config, now time.Time) *Engine {
 		Lang: cfg.Lang, Mode: cfg.Mode, BatteryFloor: cfg.BatteryFloor,
 		CountIdleSessions: cfg.CountIdleSessions, GraceMinutes: cfg.GraceMinutes,
 		lidSleepDisabled: cfg.LidSleepDisabled, lidEngagedByUs: cfg.LidEngagedByUs,
+		lidLeftOver:    cfg.LidSleepDisabled && cfg.LidEngagedByUs,
 		watchStartedAt: now,
 	}
 }
@@ -330,7 +334,9 @@ func (e *Engine) Resume(action ResumeAction, now time.Time) []Effect {
 	}
 	var effects []Effect
 	// An unannounced admin prompt right after login looks like phishing → lid becomes system.
-	if e.EffectiveMode() == ModeLid && !e.lidSleepDisabled {
+	// A lid flag left by a previous run is not adopted either (no watchdog guards it); it stays
+	// set so the menu offers Restore lid sleep.
+	if e.EffectiveMode() == ModeLid && e.lidNeedsApproval() {
 		e.fallBack(ShiftRestarted)
 		effects = append(effects, notify(LidResumeFallback(e.Lang)),
 			logEffect(e.t("덮개 근무 → 시스템 근무로 복귀 (관리자 재승인 필요)",
@@ -374,6 +380,7 @@ func (e *Engine) LidEnableResult(outcome LidOutcome, now time.Time) []Effect {
 	case LidApproved:
 		e.lidEngagedByUs = true
 		e.lidSleepDisabled = true
+		e.lidLeftOver = false
 		return []Effect{{Type: EffectAcquire, Mode: ModeLid}}
 	case LidFailed:
 		f := outcome.Failure
@@ -398,6 +405,7 @@ func (e *Engine) LidRestoreResult(ok bool) []Effect {
 	}
 	e.lidEngagedByUs = false
 	e.lidSleepDisabled = false
+	e.lidLeftOver = false
 	return []Effect{logEffect(e.t("덮개 잠자기 복구 완료", "Lid sleep restored", "已恢复合盖休眠"), LogOther)}
 }
 
@@ -550,12 +558,16 @@ func (e *Engine) engage(now time.Time) []Effect {
 	}
 	e.onDuty = true
 	e.quote = QuoteOnDuty
-	if e.EffectiveMode() == ModeLid && !e.lidSleepDisabled { // LidEnableResult acquires
+	if e.EffectiveMode() == ModeLid && e.lidNeedsApproval() { // LidEnableResult acquires
 		e.awaitingLid = true
 		return []Effect{{Type: EffectEnableLid}}
 	}
 	return []Effect{{Type: EffectAcquire, Mode: e.EffectiveMode()}}
 }
+
+// lidNeedsApproval: lid mode needs the admin prompt (and a watchdog for this process).
+// Lid sleep disabled outside the app is used as it is.
+func (e *Engine) lidNeedsApproval() bool { return !e.lidSleepDisabled || e.lidLeftOver }
 
 func (e *Engine) disengage() []Effect {
 	e.onDuty = false

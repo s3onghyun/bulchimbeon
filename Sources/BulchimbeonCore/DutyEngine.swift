@@ -116,6 +116,10 @@ public struct DutyEngine: Sendable {
     private var coolSince: Date?
     /// 덮개 해제 관리자 암호 창이 떠 있는 중 (아직 assertion 을 걸기 전)
     private var awaitingLid = false
+    /// 이전 실행이 끈 덮개 잠자기가 남아 있는데, 그것을 지키는 이 프로세스의 감시병이 없다.
+    /// 감시병은 앱 PID 하나에 묶이므로 새로 뜬 앱에는 아직 없다 (재부팅·SIGTERM 으로 옛 감시병이 원복 없이 죽은 경우).
+    /// 이 상태로는 덮개 근무를 이어받지 않는다: 앱이 죽으면 아무도 원복하지 않는다 (실측 2026-11-13, 28시간 40분).
+    private var lidLeftOver: Bool
 
     public init(mode: DutyMode = .system, batteryFloor: Int = 20, countIdleSessions: Bool = false, graceMinutes: Int = 5,
                 lidSleepDisabled: Bool = false, lidEngagedByUs: Bool = false, now: Date = Date()) {
@@ -125,6 +129,7 @@ public struct DutyEngine: Sendable {
         self.graceMinutes = graceMinutes
         self.lidSleepDisabled = lidSleepDisabled
         self.lidEngagedByUs = lidEngagedByUs
+        self.lidLeftOver = lidSleepDisabled && lidEngagedByUs
         self.watchStartedAt = now
     }
 
@@ -207,8 +212,9 @@ public struct DutyEngine: Sendable {
             break
         }
         var effects: [DutyEffect] = []
-        // 로그인 직후 예고 없는 관리자 암호 창은 피싱처럼 보인다 → 덮개 근무는 시스템 근무로 복귀
-        if effectiveMode == .lid && !lidSleepDisabled {
+        // 로그인 직후 예고 없는 관리자 암호 창은 피싱처럼 보인다 → 덮개 근무는 시스템 근무로 복귀.
+        // 이전 실행이 남긴 덮개 플래그도 이어받지 않는다 (지킬 감시병이 없다). 플래그는 남겨 두어 메뉴의 복구 버튼이 보인다
+        if effectiveMode == .lid && lidNeedsApproval {
             fallBack(.restarted)
             let notice = Lines.lidResumeFallback()
             effects += [.notify(title: notice.title, body: notice.body),
@@ -251,6 +257,7 @@ public struct DutyEngine: Sendable {
         case .approved:
             lidEngagedByUs = true
             lidSleepDisabled = true
+            lidLeftOver = false
             return [.acquire(.lid)]
         case .cancelled:
             notice = Lines.lidFallback()
@@ -271,6 +278,7 @@ public struct DutyEngine: Sendable {
         guard ok else { return [] }
         lidEngagedByUs = false
         lidSleepDisabled = false
+        lidLeftOver = false
         return [.log(L10n.t("덮개 잠자기 복구 완료", "Lid sleep restored", "已恢复合盖休眠"), .other)]
     }
 
@@ -404,12 +412,15 @@ public struct DutyEngine: Sendable {
         if !isOnDuty { dutyStartedAt = now }
         isOnDuty = true
         quote = .onDuty
-        if effectiveMode == .lid && !lidSleepDisabled { // 결과에 따라 lidEnableResult 가 acquire
+        if effectiveMode == .lid && lidNeedsApproval { // 결과에 따라 lidEnableResult 가 acquire
             awaitingLid = true
             return [.enableLid]
         }
         return [.acquire(effectiveMode)]
     }
+
+    /// 덮개 근무에 관리자 승인(+ 이 프로세스의 감시병)이 필요한가. 밖에서 끈 덮개 잠자기는 그대로 쓴다
+    private var lidNeedsApproval: Bool { !lidSleepDisabled || lidLeftOver }
 
     private mutating func disengage() -> [DutyEffect] {
         isOnDuty = false
