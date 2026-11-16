@@ -5,6 +5,8 @@
 
 ## 다음 버전
 
+## 0.12.4 — 2026-11-17
+
 - 릴리스: Developer ID 서명·Apple 공증(notarytool)·staple 단계를 릴리스 워크플로에 준비했다. 서명 비밀값이 없으면 아무 일도 하지
   않고 지금처럼 ad-hoc 서명으로 낸다 (로그에 "Notarization skipped" 한 줄). 비밀값 이름과 가입 후 할 일은
   [docs/release.md](docs/release.md). 수동 실행(workflow_dispatch)으로 Release 없이 빌드·공증만 점검할 수 있다
