@@ -213,13 +213,18 @@ public enum LidCommands {
     /// 정지 플래그는 감시병이 내용물을 읽지 않고 `stat`으로 존재만 확인한다. BSD `stat`은
     /// `-L` 없이 lstat을 사용하므로 심볼릭 링크를 따라 다른 경로를 보지 않는다.
     /// 근무 시간은 앱이 관리하고, 근무가 끝나면 앱이 플래그를 만든다. 같은 앱 PID로 다시 켜면 먼저
-    /// 기존 감시병을 종료하고 하나만 새로 띄워 중첩하지 않는다.
+    /// 기존 감시병을 SIGKILL 로 끝내고 하나만 새로 띄워 중첩하지 않는다. SIGKILL 은 아래 신호 처리를 거치지 않으므로,
+    /// 옛 감시병이 방금 켠 `disablesleep 1` 을 되돌리지 않는다.
+    /// 재부팅·시스템 종료는 모든 프로세스에 SIGTERM 을 보낸다. 감시병은 TERM·HUP·INT 를 받으면 원복하고 끝난다
+    /// (실측 2026-11-13: 신호 처리가 없어 원복 없이 죽었다). 5초 쉬는 `sleep` 을 백그라운드로 돌리고 `wait` 해야
+    /// 쉬는 중에도 신호를 바로 처리한다. trap 문구는 셸 전체를 감싼 작은따옴표 안이라 큰따옴표로 묶는다.
     /// 감시병의 표식은 `$0`(실행 중 인자)에만 있고 명령 원문에는 없다 (`markerWord`).
     public static func enable(pid: Int32, stopSignal: String, pmset: String = "/usr/bin/pmset") -> String {
-        let watch = "while :; do if /usr/bin/stat -f %z \"$1\" >/dev/null 2>&1 || ! /bin/kill -0 \(pid) 2>/dev/null; then \(pmset) -a disablesleep 0; exit 0; fi; /bin/sleep 5; done"
+        let watch = "trap \"\(pmset) -a disablesleep 0; exit 0\" TERM HUP INT; "
+            + "while :; do if /usr/bin/stat -f %z \"$1\" >/dev/null 2>&1 || ! /bin/kill -0 \(pid) 2>/dev/null; then \(pmset) -a disablesleep 0; exit 0; fi; /bin/sleep 5 & wait $!; done"
         let detach = "pipe(my $r, my $w); my $p = fork(); die unless defined $p; "
             + "if ($p) { close $w; <$r>; exit 0 } close $r; POSIX::setsid(); close $w; exec @ARGV"
-        return "\(pmset) -a disablesleep 1 && { /usr/bin/pkill -f '\(markerPattern(pid))' || true; /usr/bin/perl -MPOSIX -e '\(detach)' /bin/sh -c '\(watch)' \(markerWord(pid)) \(shellQuote(stopSignal)) </dev/null >/dev/null 2>&1; }"
+        return "\(pmset) -a disablesleep 1 && { /usr/bin/pkill -KILL -f '\(markerPattern(pid))' || true; /usr/bin/perl -MPOSIX -e '\(detach)' /bin/sh -c '\(watch)' \(markerWord(pid)) \(shellQuote(stopSignal)) </dev/null >/dev/null 2>&1; }"
     }
 
     public static func disable(pid: Int32, pmset: String = "/usr/bin/pmset") -> String {
@@ -228,6 +233,9 @@ public enum LidCommands {
 
     /// 감시병이 살아 있는지 확인할 때 쓰는 `pgrep -f` 패턴
     public static func watchdogPattern(pid: Int32) -> String { markerPattern(pid) }
+
+    /// 어느 앱 PID 의 감시병이든 찾는 `pgrep -f` 패턴. 재실행 직후 옛 실행의 감시병이 아직 원복하는 중인지 볼 때 쓴다.
+    public static let anyWatchdogPattern = "bulchimbeon-watchdo[g]-"
 
     private static func shellQuote(_ string: String) -> String {
         "'" + string.replacingOccurrences(of: "'", with: "'\\''") + "'"

@@ -150,12 +150,12 @@ Bulchimbeon stays awake **only while an agent is working** and hands the Mac bac
 | 🪖 Timed watch | 30 min / 1 h / 2 h / 4 h / indefinitely |
 | Watch modes | Keep display on (`caffeinate -d`) · Display may sleep, Mac stays awake (`caffeinate -i`) · **Stay awake with the lid closed** (admin) |
 | 🔋 Battery stand-down | Stands down when running on battery below your threshold (default 20%) |
-| ⚠️ Lid safety net | Restores normal lid sleep (`disablesleep` back to off) when the watch ends or the app quits; after a crash, the next launch offers **Restore lid sleep** in the menu |
+| ⚠️ Lid safety net | Restores normal lid sleep (`disablesleep` back to off) when the watch ends, the app quits, or the Mac restarts, shuts down or logs out. If it is still off when the app next starts (after a power loss, say), that watch carries on as a system watch and the menu offers **Restore lid sleep** (one admin password) |
 | 🌡️ Heat advisory → 🔥 combat rest | Warns when the Mac heats up; when it gets critical, pauses the watch to cool down and **resumes automatically** once it cools (no more cooking a closed Mac in a bag) |
 | ⚠️ Abandoned-post check | If the sleep block disappears for any reason, it is re-engaged immediately |
-| 🕵️ Watchdog | In lid-closed mode, restores normal sleep within 5 s when the app quits or the watch ends (including a timed watch running out) — no second password prompt needed; re-enabling replaces rather than stacks it |
+| 🕵️ Watchdog | In lid-closed mode, restores normal sleep within 5 s when the app quits or the watch ends (including a timed watch running out), and at once when macOS stops it for a restart or shutdown — no second password prompt needed; re-enabling replaces rather than stacks it |
 | 📋 Night-watch handover | Come back after 10+ minutes away and get a report of what happened while you were gone |
-| 🔁 Survives restarts | Remaining watch time carries over app restarts, updates and reboots (for security, a lid-closed watch comes back as a system watch for that watch only; lid mode stays selected in the menu and asks for approval again on the next watch) |
+| 🔁 Survives restarts | Remaining watch time carries over app restarts, updates and reboots (for security, a lid-closed watch comes back as a system watch for that watch only, also when lid sleep was left off; lid mode stays selected in the menu and asks for approval again on the next watch) |
 | 🖥️ Who else is holding the Mac awake | The menu shows other apps blocking sleep, e.g. "Vivaldi (video)" |
 | 🌐 Korean / English / Simplified Chinese | Follows the system language by default; pick one from **언어 / Language / 语言** in the menu |
 | 📒 Duty log | `~/Library/Application Support/Bulchimbeon/duty-log.txt` |

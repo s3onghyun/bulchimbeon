@@ -538,6 +538,24 @@ import Testing
         #expect(script.contains(regex) == false, "osascript 인자 전체도 패턴에 걸리면 안 된다")
     }
 
+    /// 재실행 직후 옛 실행의 감시병(다른 PID)을 찾는 패턴도 감시병 표식에만 걸리고 관리자 명령 원문에는 걸리지 않는다.
+    @Test func anyWatchdogPatternFindsOnlyWatchdogs() throws {
+        let regex = try Regex(LidCommands.anyWatchdogPattern)
+        #expect("/bin/sh -c while :; do … bulchimbeon-watchdog-4321 /tmp/lid-stop-4321".contains(regex))
+        #expect(LidCommands.enable(pid: 4321, stopSignal: "/tmp/lid-stop-4321").contains(regex) == false)
+        #expect(LidCommands.disable(pid: 4321).contains(regex) == false)
+    }
+
+    /// 감시병 명령은 root 로 돈다. 신호 처리·`sleep` 대기·교체 방식이 바뀌지 않게 원문의 핵심을 고정한다.
+    @Test func watchdogCommandRestoresOnTerminationSignals() {
+        let command = LidCommands.enable(pid: 4321, stopSignal: "/tmp/lid-stop-4321")
+        #expect(command.contains(#"trap "/usr/bin/pmset -a disablesleep 0; exit 0" TERM HUP INT; while :; do"#))
+        #expect(command.contains("/bin/sleep 5 & wait $!; done"))
+        #expect(command.contains("/usr/bin/pkill -KILL -f 'bulchimbeon-watchdo[g]-4321' || true;"),
+                "교체는 신호 처리를 거치지 않는 SIGKILL 이어야 방금 켠 disablesleep 1 이 되돌려지지 않는다")
+        #expect(command.hasPrefix("/usr/bin/pmset -a disablesleep 1 && { "))
+    }
+
     private static let watchdogTools = ["/bin/sh", "/bin/sleep", "/bin/kill", "/usr/bin/perl", "/usr/bin/pkill", "/usr/bin/pgrep", "/usr/bin/stat"]
         .allSatisfy { FileManager.default.isExecutableFile(atPath: $0) }
 
@@ -588,6 +606,88 @@ import Testing
             if (try? String(contentsOf: log, encoding: .utf8))?.contains("disablesleep 0") == true { restored = true; break }
         }
         #expect(restored, "앱이 죽으면 감시병이 원복해야 한다")
+    }
+
+    /// 권한 셸 대역을 띄운다. 리눅스 Foundation 은 자식의 SIGTERM 을 막아 둔 채 띄우므로 막힌 신호를 풀고,
+    /// authtrampoline 처럼 표준 입출력 말고는 fd 를 물려주지 않는다. 감시병은 이 셸의 신호 상태를 물려받는다.
+    private static func adminShell(_ command: String) throws -> Child {
+        try Child("/usr/bin/perl", ["-MPOSIX", "-e", "sigprocmask(SIG_SETMASK, POSIX::SigSet->new); POSIX::close($_) for 3..1023; exec @ARGV",
+                                    "/bin/sh", "-c", command])
+    }
+
+    private static func fakePmset(in dir: URL) throws -> (pmset: URL, log: URL) {
+        let log = dir.appendingPathComponent("pmset.log")
+        let pmset = dir.appendingPathComponent("pmset")
+        try "#!/bin/sh\necho \"$@\" >> '\(log.path)'\n".write(to: pmset, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: pmset.path)
+        return (pmset, log)
+    }
+
+    /// 실측 (2026-11-13): 재부팅·시스템 종료는 모든 프로세스에 SIGTERM 을 보낸다. 신호 처리가 없던 감시병은 5초 점검 전에
+    /// 원복 없이 죽었고, `disablesleep 1` 이 남아 28시간 40분 동안 덮개를 닫아도 잠들지 않았다.
+    /// 앱이 살아 있고 정지 플래그도 없으니, 원복이 있었다면 신호 처리가 한 것이다. 리눅스에서도 돈다.
+    @Test(.enabled(if: watchdogTools)) func watchdogRestoresWhenTerminated() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let (fakePmset, log) = try Self.fakePmset(in: dir)
+
+        let app = try Child("/bin/sleep", ["60"])
+        defer { app.forceKill() }
+
+        let shell = try Self.adminShell(LidCommands.enable(pid: app.pid, stopSignal: dir.appendingPathComponent("lid-stop").path,
+                                                           pmset: fakePmset.path))
+        try await shell.wait()
+        #expect(shell.status == 0)
+        try await Task.sleep(for: .seconds(1))
+        #expect(try String(contentsOf: log, encoding: .utf8) == "-a disablesleep 1\n", "켜기만 실행됨")
+
+        let pids = try await Child.run("/usr/bin/pgrep", ["-f", LidCommands.watchdogPattern(pid: app.pid)]).output
+            .split(separator: "\n").compactMap { Int32($0) }
+        #expect(!pids.isEmpty, "감시병 프로세스가 떠 있어야 한다")
+        for pid in pids { kill(pid, SIGTERM) }
+
+        var restored = false
+        for _ in 0..<8 { // 5초 점검 주기보다 짧게: `sleep` 을 기다리는 중에도 신호에 바로 원복해야 한다
+            try await Task.sleep(for: .milliseconds(250))
+            if (try? String(contentsOf: log, encoding: .utf8))?.contains("disablesleep 0") == true { restored = true; break }
+        }
+        #expect(restored, "SIGTERM 을 받은 감시병은 죽기 전에 disablesleep 0 을 실행해야 한다")
+        try await Task.sleep(for: .milliseconds(300))
+        let left = try await Child.run("/usr/bin/pgrep", ["-f", LidCommands.watchdogPattern(pid: app.pid)]).output
+        #expect(left.isEmpty, "원복한 감시병은 끝나야 한다")
+    }
+
+    /// 같은 앱이 덮개를 다시 켜면 켜기 명령이 옛 감시병을 끝낸다. 옛 감시병이 신호를 받고 원복하면 방금 켠
+    /// `disablesleep 1` 을 되돌려 버리므로, 교체는 원복 없이 끝내야 한다. 리눅스에서도 돈다.
+    @Test(.enabled(if: watchdogTools)) func replacingTheWatchdogDoesNotRestoreLidSleep() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let (fakePmset, log) = try Self.fakePmset(in: dir)
+
+        let app = try Child("/bin/sleep", ["60"])
+        defer { app.forceKill() }
+
+        let command = LidCommands.enable(pid: app.pid, stopSignal: dir.appendingPathComponent("lid-stop").path, pmset: fakePmset.path)
+        for _ in 0..<2 {
+            let shell = try Self.adminShell(command)
+            try await shell.wait()
+            #expect(shell.status == 0)
+            try await Task.sleep(for: .milliseconds(500))
+        }
+        try await Task.sleep(for: .seconds(1))
+        #expect(try String(contentsOf: log, encoding: .utf8) == "-a disablesleep 1\n-a disablesleep 1\n",
+                "교체된 옛 감시병이 disablesleep 0 을 실행하면 안 된다")
+
+        app.forceKill()
+        try await app.wait()
+        var restored = false
+        for _ in 0..<16 {
+            try await Task.sleep(for: .milliseconds(500))
+            if (try? String(contentsOf: log, encoding: .utf8))?.contains("disablesleep 0") == true { restored = true; break }
+        }
+        #expect(restored, "새 감시병은 앱이 죽으면 원복해야 한다")
     }
 
     #if os(macOS) // 감시병은 macOS 의 pmset 덮개 닫힘용이다
