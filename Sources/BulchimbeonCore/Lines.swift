@@ -65,11 +65,30 @@ public enum Lines {
         }
     }
 
-    public static func batteryRetreat(_ percent: Int, _ lang: Language = L10n.language) -> Notice {
+    /// 철수 기준 바로 위에서 한 번만 보내는 예고
+    public static func batteryLow(_ percent: Int, floor: Int, _ lang: Language = L10n.language) -> Notice {
         switch lang {
-        case .ko: return ("당직사관님께 보고드립니다 🔋", "배터리 \(percent)%… 기력이 다해 근무 철수합니다.")
-        case .en: return ("Reporting to the duty officer 🔋", "Battery at \(percent)%… out of strength, standing down.")
-        case .zh: return ("向值班长报告 🔋", "电量剩余 \(percent)%……体力不支，结束值班。")
+        case .ko: return ("배터리 \(percent)% 🪫", "\(floor)%가 되면 근무를 철수합니다. 계속 지키려면 충전기를 꽂아주십시오.")
+        case .en: return ("Battery at \(percent)% 🪫", "I'll stand down at \(floor)%. Plug in the charger to keep the watch going.")
+        case .zh: return ("电量 \(percent)% 🪫", "电量降至 \(floor)% 时将结束值班。请接上充电器以继续值班。")
+        }
+    }
+
+    public static func batteryRetreat(_ percent: Int, _ lang: Language = L10n.language) -> Notice {
+        let minutes = Int(BatteryPolicy.resumeWindow / 60)
+        switch lang {
+        case .ko: return ("당직사관님께 보고드립니다 🔋", "배터리 \(percent)%… 기력이 다해 근무 철수합니다. \(minutes)분 안에 충전기를 꽂으면 다시 서겠습니다.")
+        case .en: return ("Reporting to the duty officer 🔋", "Battery at \(percent)%… out of strength, standing down. Plug in within \(minutes) minutes and I'll stand watch again.")
+        case .zh: return ("向值班长报告 🔋", "电量剩余 \(percent)%……体力不支，结束值班。\(minutes) 分钟内接上充电器，我会继续值班。")
+        }
+    }
+
+    /// 배터리 철수 뒤 충전기가 연결돼 같은 근무로 돌아옴
+    public static func powerResume(_ lang: Language = L10n.language) -> Notice {
+        switch lang {
+        case .ko: return ("충전기 연결 확인 🔌", "전원이 들어와 근무에 복귀합니다!")
+        case .en: return ("Charger connected 🔌", "Power is back, so I'm back on watch!")
+        case .zh: return ("已接通电源 🔌", "电源已恢复，继续值班！")
         }
     }
 

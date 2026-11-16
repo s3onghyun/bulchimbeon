@@ -148,8 +148,8 @@ Bulchimbeon stays awake **only while an agent is working** and hands the Mac bac
 |---------|--------------|
 | 🤖 Agent watch | Detects Claude Code, Codex, Gemini CLI, Cursor Agent, Copilot CLI, Aider, OpenCode (plus your own). **Only counts agents that are actually working**, not sessions that are merely open. Clocks in when one starts working and hands over 5 minutes (adjustable) after everything goes quiet |
 | 🪖 Timed watch | 30 min / 1 h / 2 h / 4 h / indefinitely |
-| Watch modes | Keep display on (`caffeinate -d`) · Display may sleep, Mac stays awake (`caffeinate -i`) · **Stay awake with the lid closed** (admin) |
-| 🔋 Battery stand-down | Stands down when running on battery below your threshold (default 20%) |
+| Watch modes | Keep display on (`caffeinate -d`) · Display may sleep, Mac stays awake (`caffeinate -i`) · **Stay awake with the lid closed** (admin) — all three sit right in the menu, one click to switch |
+| 🔋 Battery stand-down | Stands down when running on battery below your threshold (default 20%), with one heads-up 5% before it. **Plug in within 10 minutes and the same watch resumes** (a lid-closed watch asks for admin approval again) |
 | ⚠️ Lid safety net | Restores normal lid sleep (`disablesleep` back to off) when the watch ends, the app quits, or the Mac restarts, shuts down or logs out. If it is still off when the app next starts (after a power loss, say), that watch carries on as a system watch and the menu offers **Restore lid sleep** (one admin password) |
 | 🌡️ Heat advisory → 🔥 combat rest | Warns when the Mac heats up; when it gets critical, pauses the watch to cool down and **resumes automatically** once it cools (no more cooking a closed Mac in a bag) |
 | ⚠️ Abandoned-post check | If the sleep block disappears for any reason, it is re-engaged immediately |

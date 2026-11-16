@@ -152,6 +152,7 @@ func TestFixtureEngineScenarios(t *testing.T) {
 				"effectiveMode": string(cfg.Mode),
 				"heat":          "normal", "quote": "off", "dutyStartedAt": nil, "watchDetail": nil,
 				"lidEngagedByUs": cfg.LidEngagedByUs, "lidSleepDisabled": cfg.LidSleepDisabled, "shiftReason": nil,
+				"batteryResumeUntil": nil,
 			}
 
 			for i, st := range sc.Steps {
@@ -229,6 +230,12 @@ func TestFixtureEngineScenarios(t *testing.T) {
 				if !reflect.DeepEqual(got, want) {
 					t.Errorf("%s: effects\n got  %+v\n want %+v", label, got, want)
 				}
+				// the macOS app runs the admin approval in place, so nothing may follow it
+				for i, ef := range effects {
+					if ef.Type == EffectEnableLid && i != len(effects)-1 {
+						t.Errorf("%s: enableLid must be the last effect", label)
+					}
+				}
 
 				for k, raw := range st.State {
 					var v any
@@ -244,7 +251,7 @@ func TestFixtureEngineScenarios(t *testing.T) {
 					"resting": e.Resting(), "mode": string(e.Mode), "effectiveMode": string(e.EffectiveMode()), "heat": e.Heat().String(), "quote": e.Quote().String(),
 					"dutyStartedAt": rel(e.DutyStartedAt()), "watchDetail": detail,
 					"lidEngagedByUs": e.LidEngagedByUs(), "lidSleepDisabled": e.LidSleepDisabled(),
-					"shiftReason": nil,
+					"shiftReason": nil, "batteryResumeUntil": rel(e.BatteryResumeUntil()),
 				}
 				if r := e.ShiftReason(); r != "" {
 					state["shiftReason"] = string(r)

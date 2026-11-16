@@ -20,6 +20,22 @@ func ShouldRetreat(status *BatteryStatus, floor *int) bool {
 	return status.Percent <= *floor
 }
 
+// BatteryWarningMargin: the pre-warning starts this many points above the floor.
+const BatteryWarningMargin = 5
+
+// BatteryResumeWindow: after a battery retreat, charger power within this window resumes the same watch.
+// Real use (2026-10-13..11-16): 3 of 7 retreats were re-engaged by hand 15-93 s later, after plugging in.
+const BatteryResumeWindow = 10 * time.Minute
+
+// ShouldWarn: on battery and just above the floor (above it, at most BatteryWarningMargin over it).
+// A nil floor never warns.
+func ShouldWarn(status *BatteryStatus, floor *int) bool {
+	if status == nil || floor == nil || !status.OnBattery {
+		return false
+	}
+	return status.Percent > *floor && status.Percent <= *floor+BatteryWarningMargin
+}
+
 // WatchAction is the agent-watch decision (Swift `AgentWatchPolicy.Action`).
 type WatchAction int
 

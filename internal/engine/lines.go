@@ -3,6 +3,7 @@ package engine
 import (
 	"math/rand/v2"
 	"strconv"
+	"time"
 )
 
 // The private's lines (Swift `Lines`). Tone: earnest and cute, never hazing.
@@ -77,10 +78,25 @@ func TimeUp(lang Lang) Notice {
 		"Watch is over! ⏰", "Waking the next guard. Good work!", "值班时间到！⏰", "去叫下一位哨兵了，辛苦啦！")
 }
 
+// BatteryLow is the one-time warning just above the battery floor.
+func BatteryLow(percent, floor int, lang Lang) Notice {
+	p, f := strconv.Itoa(percent), strconv.Itoa(floor)
+	return notice(lang, "배터리 "+p+"% 🪫", f+"%가 되면 근무를 철수합니다. 계속 지키려면 충전기를 꽂아주십시오.",
+		"Battery at "+p+"% 🪫", "I'll stand down at "+f+"%. Plug in the charger to keep the watch going.",
+		"电量 "+p+"% 🪫", "电量降至 "+f+"% 时将结束值班。请接上充电器以继续值班。")
+}
+
 func BatteryRetreat(percent int, lang Lang) Notice {
-	p := strconv.Itoa(percent)
-	return notice(lang, "당직사관님께 보고드립니다 🔋", "배터리 "+p+"%… 기력이 다해 근무 철수합니다.",
-		"Reporting to the duty officer 🔋", "Battery at "+p+"%… out of strength, standing down.", "向值班长报告 🔋", "电量剩余 "+p+"%……体力不支，结束值班。")
+	p, m := strconv.Itoa(percent), strconv.Itoa(int(BatteryResumeWindow/time.Minute))
+	return notice(lang, "당직사관님께 보고드립니다 🔋", "배터리 "+p+"%… 기력이 다해 근무 철수합니다. "+m+"분 안에 충전기를 꽂으면 다시 서겠습니다.",
+		"Reporting to the duty officer 🔋", "Battery at "+p+"%… out of strength, standing down. Plug in within "+m+" minutes and I'll stand watch again.",
+		"向值班长报告 🔋", "电量剩余 "+p+"%……体力不支，结束值班。"+m+" 分钟内接上充电器，我会继续值班。")
+}
+
+// PowerResume: charger power came back after a battery retreat, so the same watch resumes.
+func PowerResume(lang Lang) Notice {
+	return notice(lang, "충전기 연결 확인 🔌", "전원이 들어와 근무에 복귀합니다!",
+		"Charger connected 🔌", "Power is back, so I'm back on watch!", "已接通电源 🔌", "电源已恢复，继续值班！")
 }
 
 func LidFallback(lang Lang) Notice {

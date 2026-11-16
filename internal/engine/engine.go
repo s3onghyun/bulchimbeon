@@ -67,7 +67,7 @@ const (
 	EffectAcquire    EffectType = iota // take the sleep block
 	EffectRelease                      // drop it
 	EffectReacquire                    // the block vanished: take the same kind again
-	EffectEnableLid                    // macOS lid mode: ask for admin approval, answer with LidEnableResult
+	EffectEnableLid                    // macOS lid mode: ask for admin approval, answer with LidEnableResult. Always the last effect (approvalLast)
 	EffectRestoreLid                   // macOS lid mode: restore lid sleep, answer with LidRestoreResult
 	EffectNotify
 	EffectLog
@@ -180,6 +180,17 @@ type Engine struct {
 	// lidLeftOver: lid sleep was disabled by a previous run of the app and no watchdog of this
 	// process guards it (Swift `lidLeftOver`). Such a flag is never adopted as a lid watch.
 	lidLeftOver bool
+	// batteryWarned: the pre-warning was sent in this discharge (re-armed on charger power).
+	batteryWarned bool
+	// retreated is the watch a battery retreat ended; charger power within BatteryResumeWindow resumes it.
+	retreated *retreat
+}
+
+type retreat struct {
+	order       DutyOrder
+	shiftMode   DutyMode
+	shiftReason ShiftReason
+	at          time.Time
 }
 
 // New creates an engine.
@@ -209,6 +220,15 @@ func (e *Engine) LidEngagedByUs() bool      { return e.lidEngagedByUs }
 
 // ShiftReason is why this watch falls back from lid mode ("" when it does not).
 func (e *Engine) ShiftReason() ShiftReason { return e.shiftReason }
+
+// BatteryResumeUntil is when charger power stops resuming the watch a battery retreat ended; nil when none is remembered.
+func (e *Engine) BatteryResumeUntil() *time.Time {
+	if e.retreated == nil {
+		return nil
+	}
+	t := e.retreated.at.Add(BatteryResumeWindow)
+	return &t
+}
 
 // EffectiveMode is the mode this watch actually keeps.
 func (e *Engine) EffectiveMode() DutyMode {
@@ -269,13 +289,14 @@ func (e *Engine) StartTimed(seconds *time.Duration, label string, now time.Time)
 		order.Until = &until
 	}
 	e.order = order
+	e.retreated = nil
 	e.endFallback()
 	effects := e.engage(now)
 	effects = append(effects, notify(ReportForDuty(e.Lang)))
 	e.say(SpeechReporting(e.Lang), now, 4*time.Second)
 	title := e.EffectiveMode().Title(e.Lang)
 	effects = append(effects, logEffect(e.t("근무 투입 — "+label+", "+title, "On duty — "+label+", "+title, "开始值班 — "+label+"，"+title), LogOnDuty))
-	return effects
+	return approvalLast(effects)
 }
 
 // StartAgentWatch waits for agents and keeps watch while they work.
@@ -283,17 +304,19 @@ func (e *Engine) StartAgentWatch(now time.Time) []Effect {
 	e.watchStartedAt = now
 	e.order = DutyOrder{Kind: OrderAgentWatch}
 	e.quote = QuoteStandby
+	e.retreated = nil
 	before := e.EffectiveMode()
 	e.endFallback()
 	var effects []Effect
 	if e.onDuty && e.EffectiveMode() != before {
 		effects = e.engage(now)
 	}
-	return append(effects, logEffect(e.t("에이전트 근무 대기 시작", "Started waiting for agents", "开始等待代理"), LogOther))
+	return approvalLast(append(effects, logEffect(e.t("에이전트 근무 대기 시작", "Started waiting for agents", "开始等待代理"), LogOther)))
 }
 
 // Stop ends any watch.
 func (e *Engine) Stop(now time.Time) []Effect {
+	e.retreated = nil
 	return e.standDown(nil, e.t("근무 종료 (수동)", "Off duty (manual)", "结束值班（手动）"))
 }
 
@@ -302,6 +325,9 @@ func (e *Engine) SetMode(newMode DutyMode, now time.Time) []Effect {
 	before, picked := e.EffectiveMode(), e.Mode
 	e.Mode = newMode
 	e.endFallback()
+	if e.retreated != nil { // a watch resumed after a battery retreat uses the new pick, not the old fallback
+		e.retreated.shiftMode, e.retreated.shiftReason = "", ""
+	}
 	if !e.onDuty {
 		return nil
 	}
@@ -320,7 +346,8 @@ func (e *Engine) SetMode(newMode DutyMode, now time.Time) []Effect {
 		effects = append(effects, Effect{Type: EffectRestoreLid})
 	}
 	effects = append(effects, e.engage(now)...)
-	return append(effects, changed)
+	// a refused lid approval then logs "changed — lid" before "denied — switched to system": the last line is the real mode
+	return approvalLast(append(effects, changed))
 }
 
 // Resume continues a stored order after a restart.
@@ -425,13 +452,41 @@ func (e *Engine) LidSleepRestoredExternally(now time.Time) []Effect {
 
 // Tick runs one check.
 func (e *Engine) Tick(o Observation) []Effect {
-	now := o.Now
+	return approvalLast(e.check(o))
+}
+
+func (e *Engine) check(o Observation) []Effect {
+	now, wasOnDuty := o.Now, e.onDuty
 	var effects []Effect
+	onPower := o.Battery != nil && !o.Battery.OnBattery
+	if onPower {
+		e.batteryWarned = false
+	}
 
 	if e.onDuty && ShouldRetreat(o.Battery, e.floor()) && o.Battery != nil {
+		r := &retreat{order: e.order, shiftMode: e.shiftMode, shiftReason: e.shiftReason, at: now}
 		p := itoa(o.Battery.Percent)
 		n := BatteryRetreat(o.Battery.Percent, e.Lang)
-		return e.standDown(&n, e.t("배터리 "+p+"% — 근무 철수", "Battery "+p+"% — stood down", "电量 "+p+"% — 结束值班"))
+		effects = e.standDown(&n, e.t("배터리 "+p+"% — 근무 철수", "Battery "+p+"% — stood down", "电量 "+p+"% — 结束值班"))
+		e.retreated = r
+		return effects
+	}
+
+	// charger power after a battery retreat: resume within the window, forget after it
+	if r := e.retreated; r != nil {
+		if now.Sub(r.at) > BatteryResumeWindow {
+			e.retreated = nil
+		} else if onPower {
+			effects = append(effects, e.resumeOnPower(*r, now)...)
+		}
+	}
+
+	// pre-warning just above the floor, once per discharge (the check only runs while awake, so it can skip past)
+	if f := e.floor(); e.onDuty && !e.batteryWarned && ShouldWarn(o.Battery, f) {
+		e.batteryWarned = true
+		p, fl := itoa(o.Battery.Percent), itoa(*f)
+		effects = append(effects, notify(BatteryLow(o.Battery.Percent, *f, e.Lang)),
+			logEffect(e.t("배터리 "+p+"% — "+fl+"%에서 근무 철수 예고", "Battery "+p+"% — will stand down at "+fl+"%", "电量 "+p+"% — 将在 "+fl+"% 结束值班"), LogOther))
 	}
 
 	// heat
@@ -473,8 +528,9 @@ func (e *Engine) Tick(o Observation) []Effect {
 		return effects
 	}
 
-	// abandoned post (while the admin prompt is open, nothing is held yet, which is fine)
-	if e.onDuty && !e.awaitingLid && o.AssertionLost {
+	// abandoned post (while the admin prompt is open, nothing is held yet, which is fine). A watch
+	// engaged in this very tick (charger power, end of combat rest) was observed before it held anything.
+	if wasOnDuty && e.onDuty && !e.awaitingLid && o.AssertionLost {
 		effects = append(effects, Effect{Type: EffectReacquire}, notify(PostAbandoned(e.Lang)),
 			logEffect(e.t("⚠️ 근무지 이탈 감지 — 즉시 재투입", "⚠️ Post abandoned — re-engaged", "⚠️ 防休眠失效 — 已立即恢复"), LogAWOL))
 		e.say(SpeechNotAWOL(e.Lang), now, 6*time.Second)
@@ -550,6 +606,53 @@ func (e *Engine) agentWatchTick(o Observation) []Effect {
 }
 
 // MARK: internals
+
+// resumeOnPower stands the watch a battery retreat ended again: the same order (a timed watch keeps its
+// end), the same fallback. A lid watch restored lid sleep when it retreated, so engage normally asks for
+// admin approval again (EffectEnableLid).
+func (e *Engine) resumeOnPower(r retreat, now time.Time) []Effect {
+	e.retreated = nil
+	n := PowerResume(e.Lang)
+	switch r.order.Kind {
+	case OrderTimed:
+		if r.order.Until != nil && !now.Before(*r.order.Until) {
+			return nil // the watch time ran out meanwhile
+		}
+		e.order = r.order
+		e.shiftMode, e.shiftReason = r.shiftMode, r.shiftReason
+		effects := e.engage(now)
+		e.say(SpeechResumed(e.Lang), now, 4*time.Second)
+		title := e.EffectiveMode().Title(e.Lang)
+		return append(effects, notify(n),
+			logEffect(e.t("전원 연결 — 근무 재투입, "+title, "Power connected — back on watch, "+title, "已接通电源 — 恢复值班，"+title), LogOnDuty))
+	case OrderAgentWatch: // the agent-watch check below engages when an agent works
+		e.watchStartedAt = now
+		e.order = DutyOrder{Kind: OrderAgentWatch}
+		e.quote = QuoteStandby
+		e.shiftMode, e.shiftReason = r.shiftMode, r.shiftReason
+		return []Effect{notify(n), logEffect(e.t("전원 연결 — 에이전트 근무 재개", "Power connected — agent watch resumed", "已接通电源 — 恢复代理值班"), LogOther)}
+	}
+	return nil
+}
+
+// approvalLast moves EffectEnableLid to the end. The macOS app waits for the admin prompt in place and runs
+// LidEnableResult's effects right there, so anything after it would be logged after the approval's outcome
+// (duty log 2026-10-28: "denied — switched to system" followed by "mode changed — lid").
+func approvalLast(effects []Effect) []Effect {
+	out := make([]Effect, 0, len(effects))
+	lid := false
+	for _, ef := range effects {
+		if ef.Type == EffectEnableLid {
+			lid = true
+			continue
+		}
+		out = append(out, ef)
+	}
+	if !lid {
+		return effects
+	}
+	return append(out, Effect{Type: EffectEnableLid})
+}
 
 func (e *Engine) engage(now time.Time) []Effect {
 	if !e.onDuty {

@@ -126,6 +126,13 @@ import Testing
                 : BatteryStatus(percent: c["battery"]["percent"].int ?? 0, onBattery: c["battery"]["onBattery"].bool ?? false)
             #expect(BatteryPolicy.shouldRetreat(battery, floor: c["floor"].int) == c["expect"].bool, "batteryRetreat: \(c)")
         }
+        #expect(BatteryPolicy.warningMargin == f["batteryWarningMargin"].int)
+        #expect(BatteryPolicy.resumeWindow == f["batteryResumeWindowSeconds"].double)
+        for c in f["batteryWarn"].array {
+            let battery = c["battery"].isNull ? nil
+                : BatteryStatus(percent: c["battery"]["percent"].int ?? 0, onBattery: c["battery"]["onBattery"].bool ?? false)
+            #expect(BatteryPolicy.shouldWarn(battery, floor: c["floor"].int) == c["expect"].bool, "batteryWarn: \(c)")
+        }
         for c in f["agentWatchDecide"].array {
             let action = AgentWatchPolicy.decide(busyNow: c["busyNow"].bool ?? false, quietFor: c["quietFor"].double ?? 0,
                                                  grace: c["grace"].double ?? 0, onDuty: c["onDuty"].bool ?? false,
@@ -253,6 +260,7 @@ import Testing
             "mode": .string(mode.rawValue), "effectiveMode": .string(mode.rawValue), "heat": .string("normal"), "quote": .string("off"), "dutyStartedAt": .null,
             "watchDetail": .null, "lidEngagedByUs": .bool(config["lidEngagedByUs"].bool ?? false),
             "lidSleepDisabled": .bool(config["lidSleepDisabled"].bool ?? false), "shiftReason": .null,
+            "batteryResumeUntil": .null,
         ]
 
         for (i, step) in scenario["steps"].array.enumerated() {
@@ -297,6 +305,8 @@ import Testing
 
             let want = try step["effects"].array.map(resolve)
             #expect(effects.map(encode) == want, "\(label): effects")
+            // 앱은 덮개 승인을 그 자리에서 기다려 결과까지 실행하므로, 승인 요청 뒤의 효과는 승인 결과보다 늦게 실행된다
+            if let i = effects.firstIndex(of: .enableLid) { #expect(i == effects.count - 1, "\(label): enableLid must be the last effect") }
 
             for (key, value) in step["state"].object { expected[key] = pick(value) }
             var state: [String: JSONValue] = [
@@ -306,6 +316,7 @@ import Testing
                 "dutyStartedAt": relative(engine.dutyStartedAt), "watchDetail": engine.watchDetail.map(JSONValue.string) ?? .null,
                 "lidEngagedByUs": .bool(engine.lidEngagedByUs), "lidSleepDisabled": .bool(engine.lidSleepDisabled),
                 "shiftReason": engine.shiftReason.map { .string($0.rawValue) } ?? .null,
+                "batteryResumeUntil": relative(engine.batteryResumeUntil),
             ]
             switch engine.order {
             case .off: state["order"] = .string("off"); state["orderUntil"] = .null
@@ -384,7 +395,9 @@ import Testing
         case "agentArrived": return notice(Lines.agentArrived(args[0].string ?? "", l))
         case "handover": return notice(Lines.handover(args[0].string ?? "", l))
         case "timeUp": return notice(Lines.timeUp(l))
+        case "batteryLow": return notice(Lines.batteryLow(args[0].int ?? 0, floor: args[1].int ?? 0, l))
         case "batteryRetreat": return notice(Lines.batteryRetreat(args[0].int ?? 0, l))
+        case "powerResume": return notice(Lines.powerResume(l))
         case "lidFallback": return notice(Lines.lidFallback(l))
         case "lidApprovalFailed": return notice(Lines.lidApprovalFailed(lidFailure(args[0]), l))
         case "lidResumeFallback": return notice(Lines.lidResumeFallback(l))

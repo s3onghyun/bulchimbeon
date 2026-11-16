@@ -175,6 +175,13 @@ final class DutyController: ObservableObject {
         battery.map { "🔋 \($0.percent)%" + ($0.onBattery ? "" : L10n.t(" (전원 연결)", " (charging)", "（已接通电源）")) }
     }
 
+    /// 배터리 철수 뒤 충전기를 꽂으면 같은 근무로 돌아오는 동안 보이는 안내
+    var batteryResumeLine: String? {
+        guard let until = engine.batteryResumeUntil, until > now else { return nil }
+        let left = DutyClock.format(until.timeIntervalSince(now))
+        return L10n.t("🔌 충전기를 꽂으면 근무 재개 (\(left) 안에)", "🔌 Plug in to resume the watch (within \(left))", "🔌 接上充电器即可恢复值班（\(left) 内）")
+    }
+
     var heatLine: String? {
         switch heat {
         case .advisory: L10n.t("🌡️ 폭염 주의보", "🌡️ Heat advisory", "🌡️ 高温提醒")

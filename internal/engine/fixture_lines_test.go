@@ -59,8 +59,12 @@ func lineValue(fn string, args json.RawMessage, lang Lang) (any, error) {
 		return n(Handover(str(0), lang)), nil
 	case "timeUp":
 		return n(TimeUp(lang)), nil
+	case "batteryLow":
+		return n(BatteryLow(num(0), num(1), lang)), nil
 	case "batteryRetreat":
 		return n(BatteryRetreat(num(0), lang)), nil
+	case "powerResume":
+		return n(PowerResume(lang)), nil
 	case "lidFallback":
 		return n(LidFallback(lang)), nil
 	case "lidApprovalFailed":

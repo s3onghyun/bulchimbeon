@@ -52,7 +52,9 @@ public enum DutyEffect: Equatable, Sendable {
     case acquire(DutyMode)   // 잠자기 방지 걸기 (display 면 화면까지)
     case release
     case reacquire           // 근무지 이탈: 같은 종류로 다시 걸기
-    case enableLid           // 관리자 권한으로 덮개 잠자기 해제 → 결과는 lidEnableResult 로
+    /// 관리자 권한으로 덮개 잠자기 해제 → 결과는 lidEnableResult 로. 앱은 승인 창을 그 자리에서 기다려 결과까지 실행하므로
+    /// 엔진은 이 효과를 늘 목록 맨 끝에 둔다 (`approvalLast`). 앞에 두면 그 뒤의 일지 줄이 승인 결과보다 늦게 찍힌다.
+    case enableLid
     case restoreLid          // 덮개 잠자기 원복 → 결과는 lidRestoreResult 로
     case notify(title: String, body: String)
     case log(String, DutyLogEntry.Kind)
@@ -104,6 +106,8 @@ public struct DutyEngine: Sendable {
     public private(set) var shiftMode: DutyMode?
     /// 대체한 까닭 (메뉴 안내용). `shiftMode` 와 함께 정해지고 함께 지워진다
     public private(set) var shiftReason: ShiftReason?
+    /// 배터리 철수 뒤 전원이 연결되면 같은 근무를 다시 서는 마감 시각 (메뉴 안내용). 기억한 근무가 없으면 nil
+    public var batteryResumeUntil: Date? { retreated.map { $0.at.addingTimeInterval(BatteryPolicy.resumeWindow) } }
 
     /// 지금 실제로 서는 근무 방식
     public var effectiveMode: DutyMode { shiftMode ?? mode }
@@ -120,6 +124,17 @@ public struct DutyEngine: Sendable {
     /// 감시병은 앱 PID 하나에 묶이므로 새로 뜬 앱에는 아직 없다 (재부팅·SIGTERM 으로 옛 감시병이 원복 없이 죽은 경우).
     /// 이 상태로는 덮개 근무를 이어받지 않는다: 앱이 죽으면 아무도 원복하지 않는다 (실측 2026-11-13, 28시간 40분).
     private var lidLeftOver: Bool
+    /// 이번 방전에서 철수 예고를 이미 보냈다 (전원이 연결되면 다시 준비)
+    private var batteryWarned = false
+
+    /// 배터리 철수로 끝난 근무. `BatteryPolicy.resumeWindow` 안에 전원이 연결되면 그대로 다시 선다
+    private struct Retreat: Sendable {
+        var order: DutyOrder
+        var shiftMode: DutyMode?
+        var shiftReason: ShiftReason?
+        var at: Date
+    }
+    private var retreated: Retreat?
 
     public init(mode: DutyMode = .system, batteryFloor: Int = 20, countIdleSessions: Bool = false, graceMinutes: Int = 5,
                 lidSleepDisabled: Bool = false, lidEngagedByUs: Bool = false, now: Date = Date()) {
@@ -160,28 +175,31 @@ public struct DutyEngine: Sendable {
 
     public mutating func startTimed(seconds: TimeInterval?, label: String, now: Date) -> [DutyEffect] {
         order = .timed(until: seconds.map { now.addingTimeInterval($0) })
+        retreated = nil
         endFallback()
         var effects = engage(now: now)
         let notice = Lines.reportForDuty()
         effects.append(.notify(title: notice.title, body: notice.body))
         say(Lines.Speech.reporting(), now: now)
         effects.append(.log(L10n.t("근무 투입 — \(label), \(effectiveMode.title)", "On duty — \(label), \(effectiveMode.title)", "开始值班 — \(label)，\(effectiveMode.title)"), .onDuty))
-        return effects
+        return Self.approvalLast(effects)
     }
 
     public mutating func startAgentWatch(now: Date) -> [DutyEffect] {
         watchStartedAt = now
         order = .agentWatch
         quote = .standby
+        retreated = nil
         let before = effectiveMode
         endFallback()
         var effects = isOnDuty && effectiveMode != before ? engage(now: now) : []
         effects.append(.log(L10n.t("에이전트 근무 대기 시작", "Started waiting for agents", "开始等待代理"), .other))
-        return effects
+        return Self.approvalLast(effects)
     }
 
     public mutating func stop(now: Date) -> [DutyEffect] {
-        standDown(notice: nil, log: L10n.t("근무 종료 (수동)", "Off duty (manual)", "结束值班（手动）"))
+        retreated = nil
+        return standDown(notice: nil, log: L10n.t("근무 종료 (수동)", "Off duty (manual)", "结束值班（手动）"))
     }
 
     /// 사용자가 고른 방식. 대체 근무 중이면 대체를 끝내고 고른 방식으로 선다.
@@ -189,6 +207,9 @@ public struct DutyEngine: Sendable {
         let before = effectiveMode, picked = mode
         mode = newMode
         endFallback()
+        // 배터리 철수 뒤 이어 설 근무도 대체 근무가 아니라 새로 고른 방식으로 선다
+        retreated?.shiftMode = nil
+        retreated?.shiftReason = nil
         guard isOnDuty else { return [] }
         let changed = DutyEffect.log(L10n.t("근무 방식 변경 — \(newMode.title)", "Watch mode changed — \(newMode.title)", "值班模式已更改 — \(newMode.title)"), .other)
         // 대체 근무와 같은 방식을 고르면 다시 걸 것은 없지만, 저장되는 방식이 바뀌므로 일지에 남긴다
@@ -197,7 +218,8 @@ public struct DutyEngine: Sendable {
         var effects: [DutyEffect] = leavingLid && lidEngagedByUs ? [.restoreLid] : []
         effects += engage(now: now)
         effects.append(changed)
-        return effects
+        // 덮개 승인이 거부되면 일지가 "변경 — 덮개" 다음에 "승인 거부 — 시스템 근무로 대체" 순서가 되어 마지막 줄이 실제와 맞는다
+        return Self.approvalLast(effects)
     }
 
     /// 앱 재시작 후 저장된 근무 이어가기
@@ -295,12 +317,39 @@ public struct DutyEngine: Sendable {
     // MARK: - 점검 (5초마다)
 
     public mutating func tick(_ o: DutyObservation) -> [DutyEffect] {
-        let now = o.now
+        Self.approvalLast(check(o))
+    }
+
+    private mutating func check(_ o: DutyObservation) -> [DutyEffect] {
+        let now = o.now, wasOnDuty = isOnDuty
         var effects: [DutyEffect] = []
+        let onPower = o.battery?.onBattery == false
+        if onPower { batteryWarned = false }
 
         if isOnDuty, BatteryPolicy.shouldRetreat(o.battery, floor: floor), let battery = o.battery {
-            return standDown(notice: Lines.batteryRetreat(battery.percent),
-                             log: L10n.t("배터리 \(battery.percent)% — 근무 철수", "Battery \(battery.percent)% — stood down", "电量 \(battery.percent)% — 结束值班"))
+            let retreat = Retreat(order: order, shiftMode: shiftMode, shiftReason: shiftReason, at: now)
+            effects = standDown(notice: Lines.batteryRetreat(battery.percent),
+                                log: L10n.t("배터리 \(battery.percent)% — 근무 철수", "Battery \(battery.percent)% — stood down", "电量 \(battery.percent)% — 结束值班"))
+            retreated = retreat
+            return effects
+        }
+
+        // 배터리 철수 뒤 전원 연결: 기다리는 시간 안이면 같은 근무로 복귀, 지나면 잊는다
+        if let retreat = retreated {
+            if now.timeIntervalSince(retreat.at) > BatteryPolicy.resumeWindow {
+                retreated = nil
+            } else if onPower {
+                effects += resumeOnPower(retreat, now: now)
+            }
+        }
+
+        // 철수 예고: 근무 중 기준 바로 위로 내려오면 한 번만 (점검은 깨어 있을 때만 돌아 기준 아래로 건너뛸 수 있다)
+        if isOnDuty, !batteryWarned, BatteryPolicy.shouldWarn(o.battery, floor: floor), let battery = o.battery, let floor {
+            batteryWarned = true
+            let notice = Lines.batteryLow(battery.percent, floor: floor)
+            effects += [.notify(title: notice.title, body: notice.body),
+                        .log(L10n.t("배터리 \(battery.percent)% — \(floor)%에서 근무 철수 예고", "Battery \(battery.percent)% — will stand down at \(floor)%",
+                                    "电量 \(battery.percent)% — 将在 \(floor)% 结束值班"), .other)]
         }
 
         // 폭염 대응
@@ -339,8 +388,9 @@ public struct DutyEngine: Sendable {
         }
         if resting { return effects }
 
-        // 근무지 이탈 감지 (암호 창이 떠 있는 동안은 아직 안 걸린 게 정상)
-        if isOnDuty && !awaitingLid && !o.assertionHeld {
+        // 근무지 이탈 감지 (암호 창이 떠 있는 동안은 아직 안 걸린 게 정상).
+        // 이번 점검에서 막 투입했으면(전원 연결 복귀, 전투휴식 종료) 관찰값은 투입 전의 것이라 이탈로 보지 않는다.
+        if wasOnDuty && isOnDuty && !awaitingLid && !o.assertionHeld {
             let notice = Lines.postAbandoned()
             effects += [.reacquire, .notify(title: notice.title, body: notice.body),
                         .log(L10n.t("⚠️ 근무지 이탈 감지 — 즉시 재투입", "⚠️ Post abandoned — re-engaged", "⚠️ 防休眠失效 — 已立即恢复"), .awol)]
@@ -407,6 +457,43 @@ public struct DutyEngine: Sendable {
     }
 
     // MARK: - 내부
+
+    /// 배터리 철수한 근무를 그대로 다시 선다: 같은 명령(시간제는 같은 끝 시각), 같은 대체 근무.
+    /// 덮개 근무는 철수 때 덮개 잠자기를 복구했으므로 `engage` 가 보통 승인 경로(`enableLid`)로 다시 묻는다.
+    private mutating func resumeOnPower(_ retreat: Retreat, now: Date) -> [DutyEffect] {
+        retreated = nil
+        let notice = Lines.powerResume()
+        switch retreat.order {
+        case .off:
+            return []
+        case .timed(let until):
+            if let until, now >= until { return [] } // 그사이 근무 시간이 끝났다
+            order = retreat.order
+            shiftMode = retreat.shiftMode
+            shiftReason = retreat.shiftReason
+            var effects = engage(now: now)
+            say(Lines.Speech.resumed(), now: now)
+            effects += [.notify(title: notice.title, body: notice.body),
+                        .log(L10n.t("전원 연결 — 근무 재투입, \(effectiveMode.title)", "Power connected — back on watch, \(effectiveMode.title)",
+                                    "已接通电源 — 恢复值班，\(effectiveMode.title)"), .onDuty)]
+            return effects
+        case .agentWatch: // 투입은 아래 에이전트 근무 점검이 일하는 에이전트를 보고 정한다
+            watchStartedAt = now
+            order = .agentWatch
+            quote = .standby
+            shiftMode = retreat.shiftMode
+            shiftReason = retreat.shiftReason
+            return [.notify(title: notice.title, body: notice.body),
+                    .log(L10n.t("전원 연결 — 에이전트 근무 재개", "Power connected — agent watch resumed", "已接通电源 — 恢复代理值班"), .other)]
+        }
+    }
+
+    /// `enableLid` 를 맨 뒤로 (`DutyEffect.enableLid` 참고). 실사용 일지(2026-10-28): 덮개 승인을 거부하면 "근무 방식 변경 — 덮개"가
+    /// "승인 거부 — 시스템 근무로 대체" 뒤에 찍혀, 실제로는 시스템 근무인데 마지막 줄은 덮개 근무라고 말했다.
+    private static func approvalLast(_ effects: [DutyEffect]) -> [DutyEffect] {
+        guard effects.contains(.enableLid) else { return effects }
+        return effects.filter { $0 != .enableLid } + [.enableLid]
+    }
 
     private mutating func engage(now: Date) -> [DutyEffect] {
         if !isOnDuty { dutyStartedAt = now }

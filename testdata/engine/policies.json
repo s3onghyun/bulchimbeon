@@ -7,6 +7,17 @@
     {"name": "desktop without a battery", "battery": null, "floor": 20, "expect": false},
     {"name": "empty battery", "battery": {"percent": 0, "onBattery": true}, "floor": 10, "expect": true}
   ],
+  "batteryWarningMargin": 5,
+  "batteryResumeWindowSeconds": 600,
+  "batteryWarn": [
+    {"name": "top of the warning band", "battery": {"percent": 25, "onBattery": true}, "floor": 20, "expect": true},
+    {"name": "just above the floor", "battery": {"percent": 21, "onBattery": true}, "floor": 20, "expect": true},
+    {"name": "above the band", "battery": {"percent": 26, "onBattery": true}, "floor": 20, "expect": false},
+    {"name": "at the floor is a retreat, not a warning", "battery": {"percent": 20, "onBattery": true}, "floor": 20, "expect": false},
+    {"name": "charging never warns", "battery": {"percent": 22, "onBattery": false}, "floor": 20, "expect": false},
+    {"name": "floor off", "battery": {"percent": 22, "onBattery": true}, "floor": null, "expect": false},
+    {"name": "desktop without a battery", "battery": null, "floor": 20, "expect": false}
+  ],
   "agentWatchDecide": [
     {"busyNow": true, "quietFor": 0, "grace": 300, "onDuty": false, "lowBattery": false, "expect": "engage"},
     {"name": "low battery or heat blocks engaging", "busyNow": true, "quietFor": 0, "grace": 300, "onDuty": false, "lowBattery": true, "expect": "none"},
