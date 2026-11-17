@@ -58,7 +58,8 @@
 
 ## 알려진 한계
 
-- ad-hoc 서명이라 공증(notarization)되지 않았다. 다른 맥에서는 Gatekeeper 경고가 뜬다.
+- 0.12.5 이하는 ad-hoc 서명이라 공증(notarization)되지 않았다. 다른 맥에서는 Gatekeeper 가 첫 실행을 막는다. 0.12.6 부터는
+  Developer ID 서명·Apple 공증·staple 을 거쳐 이 한계가 없다.
 - 같은 사용자 권한으로 이름이 `claude` 인 프로세스를 띄우면 근무를 유지시킬 수 있다 (잠자기 방지 외 영향 없음).
 - Docker 컨테이너·원격(SSH) 서버에서 도는 에이전트는 이 맥의 프로세스가 아니므로 감지하지 않는다.
 

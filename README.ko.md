@@ -16,7 +16,14 @@
 
 설치: `brew install --cask s3onghyun/tap/bulchimbeon` — 또는 [최신 macOS zip을 내려받아](https://github.com/s3onghyun/bulchimbeon/releases) `/Applications`로 옮긴다.
 
-**첫 실행:** 아직 Apple 공증(notarization)을 받지 않은 ad-hoc 서명 앱이라 macOS가 한 번 막는다.
+**첫 실행:** 0.12.6부터 Developer ID로 서명하고 Apple 공증(notarization)을 받은 앱이라 그냥 열린다. 기껏해야 macOS가
+인터넷에서 내려받은 앱을 열지 한 번 묻는데, **열기**를 누르면 된다. 불침번이 알림을 보내도 되는지 물으면 허용한다. 알림은
+불침번 이름으로 온다.
+
+<details>
+<summary>0.12.5 이하 버전은 그래도 열기(Open Anyway)가 필요</summary>
+
+이 버전들은 공증을 받지 않은 ad-hoc 서명 앱이라 macOS가 한 번 막는다.
 
 1. 불침번을 연다. 열 수 없다는 창이 뜨면 **완료**를 누른다.
 2. **시스템 설정 → 개인정보 보호 및 보안**에서 아래 **보안** 항목까지 내린다.
@@ -25,21 +32,24 @@
 
 ![시스템 설정 개인정보 보호 및 보안: "Bulchimbeon"이(가) 차단되었다는 안내와 그래도 열기 버튼](docs/media/gatekeeper-open-anyway.png)
 
-알림이 **"스크립트 편집기"** 이름으로 표시되는 건 정상이다. 공증 전에는 macOS가 앱 자체의 알림 권한을 주지 않기 때문이다.
+이 버전들의 알림은 **"스크립트 편집기"** 이름으로 표시된다. 공증 전에는 macOS가 앱 자체의 알림 권한을 주지 않기
+때문이다. 0.12.6 이상으로 올리면 둘 다 없어진다.
+
+</details>
 
 **지원 에이전트:** Claude Code · Codex · Gemini CLI · Cursor Agent · Copilot CLI · Aider · OpenCode (사용자 지정 에이전트도 가능).
 
 ### AI 에이전트로 설치하기
 
 Claude Code, Codex, Gemini CLI 같은 코딩 에이전트에 아래를 붙여 넣는다. 에이전트가
-[docs/install-for-agents.md](docs/install-for-agents.md)를 따라 설치하고, **그래도 열기**를 눌러야 할 때는 멈추고 기다린다.
+[docs/install-for-agents.md](docs/install-for-agents.md)를 따라 설치하고, 첫 실행 때 macOS가 묻는 창은 사용자에게 맡긴다.
 
 ```text
 https://github.com/s3onghyun/bulchimbeon 의 불침번(Bulchimbeon)을 이 컴퓨터에 설치해줘.
 https://raw.githubusercontent.com/s3onghyun/bulchimbeon/main/docs/install-for-agents.md 를 한 단계씩 따라 하고, 명령은 실행하기 전에 먼저 보여줘.
 규칙: Homebrew cask s3onghyun/tap/bulchimbeon 이나 github.com/s3onghyun/bulchimbeon 릴리스에서만 설치하고,
 내려받은 파일은 SHA-256을 확인해. Mac 앱 설치에 sudo는 쓰지 마. 격리 속성(xattr)을 지우거나 Gatekeeper(spctl)를 끄지 마.
-macOS가 첫 실행을 막으면 멈추고 내가 직접 "그래도 열기"를 누르게 해줘.
+macOS가 첫 실행을 묻거나 막으면 멈추고 내가 직접 답하게 해줘.
 마지막에 메뉴에서 에이전트 근무가 켜졌는지 나와 함께 확인해줘.
 ```
 
@@ -167,7 +177,7 @@ sudo pmset disablesleep 1     # 되돌리는 걸 잊으면 배터리 0%
 | 덮개 닫고 깨어 있기 | 켤 때마다 관리자 암호, 감시병이 원상 복구 보장 | 설치 때 한 번 승인, 이후 암호 없음 |
 | 에이전트가 직접 근무 요청 (긴 빌드 등) | — | CLI·MCP 도구 |
 | 발열 | 덮개 열려 있어도 경고, 너무 뜨거우면 쉬었다가 **식으면 자동 복귀** | 덮개 닫혔을 때 과열 시 강제 해제 |
-| 배포 | ad-hoc 서명 (공증 준비 중), 개인 Homebrew tap | 공증, Homebrew 공식 cask |
+| 배포 | Developer ID 서명·공증 (0.12.6부터), 개인 Homebrew tap | 공증, Homebrew 공식 cask |
 
 **이럴 땐 Adrafinil**: macOS 26.4 이상이고, hook으로 정확하게 맞물리거나 에이전트가 직접 근무를 요청하게 하고 싶을 때.
 **이럴 땐 불침번**: macOS 13~15를 쓰거나, 에이전트 설정·시스템에 아무것도 설치하고 싶지 않거나, 이등병이 지켜주는 게 좋을 때.
@@ -326,7 +336,8 @@ CPU 2.04%·초당 context switch 167회, 변경 후 CPU 1.58%·186회였다. 이
 - [x] 치비 이등병 픽셀아트, 순찰 모드, 한국어·영어·중국어(간체)
 - [x] 에이전트 **작업 중 / 대기 구분** (열려만 있는 세션은 세지 않음)
 - [x] Homebrew cask (개인 tap)
-- [ ] Apple 공증 + Homebrew 공식 cask (Developer ID 필요)
+- [x] Apple 공증 (0.12.6)
+- [ ] Homebrew 공식 cask
 - [ ] Privileged helper 로 덮개 모드 암호 프롬프트 제거
 - [ ] 해금 스킨: 순라꾼(조선시대 불침번), 선비(현량자고)
 

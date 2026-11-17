@@ -5,6 +5,12 @@
 
 ## 다음 버전
 
+## 0.12.6 — 2026-11-18
+
+- 배포: 첫 공증 릴리스. macOS 앱을 Developer ID 로 서명하고 Apple 공증을 받아 티켓을 staple 했다 (GitHub zip 과 Homebrew
+  cask 모두). 첫 실행에 더 이상 "그래도 열기(Open Anyway)" 가 필요 없고, 알림은 "스크립트 편집기" 대신 앱 이름으로 온다.
+  zip 으로 설치해 앱 안에서 업데이트하는 경우는 서명 팀이 바뀌어 이번 한 번만 거절되니 zip 을 직접 내려받는다 (Homebrew 는
+  영향 없음). README 들의 첫 실행 안내, docs/install-for-agents.md, llms.txt, SECURITY.md 도 공증된 앱 기준으로 고쳤다
 - 릴리스: 공증 대기를 고쳤다. 첫 CI 공증 점검(2026-11-17)에서 Apple 처리가 30분을 넘기자 `notarytool submit --wait` 가 시간
   초과로 끝났고, 스크립트는 빈 결과를 읽어 제출 id 대신 오류 문구를 `notarytool log` 에 넘기고 실패했다. 이제 기다리지 않고 제출해
   id 를 바로 출력하고, 30초마다 상태를 물어 최대 `NOTARY_WAIT_MINUTES` 분(기본 90, 수동 실행에서 10~300 으로 바꿀 수 있음)

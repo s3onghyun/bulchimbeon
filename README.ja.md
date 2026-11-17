@@ -20,7 +20,14 @@
 
 インストール: `brew install --cask s3onghyun/tap/bulchimbeon` — または [最新の macOS 用 zip をダウンロード](https://github.com/s3onghyun/bulchimbeon/releases)して `/Applications` に移動します。
 
-**初回起動:** まだ Apple の公証を受けていない ad-hoc 署名のため、macOS が一度ブロックします。
+**初回起動:** 0.12.6 から Developer ID で署名し Apple の公証を受けているので、そのまま開きます。macOS が
+インターネットからダウンロードしたアプリを開くか一度確認することがあり、その場合は **開く** を押します。通知の許可を
+求められたら許可してください。通知は Bulchimbeon 自身の名前で届きます。
+
+<details>
+<summary>0.12.5 以前のバージョンは「このまま開く」が必要</summary>
+
+これらのバージョンは公証を受けていない ad-hoc 署名のため、macOS が一度ブロックします。
 
 1. Bulchimbeon を開きます。開けないと表示されたら **完了** を押します。
 2. **システム設定 → プライバシーとセキュリティ** を開き、**セキュリティ** までスクロールします。
@@ -29,21 +36,24 @@
 
 ![システム設定のプライバシーとセキュリティ:「Bulchimbeon」がブロックされた旨の表示と「このまま開く」ボタン](docs/media/gatekeeper-open-anyway.png)
 
-通知が **「スクリプトエディタ」** の名前で表示されるのは正常です。公証前は macOS がアプリ自身の通知権限を与えないためです。
+これらのバージョンの通知は **「スクリプトエディタ」** の名前で表示されます。公証前は macOS がアプリ自身の通知権限を
+与えないためです。0.12.6 以降に更新すると、どちらもなくなります。
+
+</details>
 
 **対応エージェント:** Claude Code · Codex · Gemini CLI · Cursor Agent · Copilot CLI · Aider · OpenCode（独自のカスタムエージェントも可）。
 
 ### AI エージェントでインストール
 
 Claude Code、Codex、Gemini CLI などのコーディングエージェントに次を貼り付けます。エージェントは
-[docs/install-for-agents.md](docs/install-for-agents.md)（英語）に沿ってインストールし、**このまま開く** を押す場面では止まって待ちます。
+[docs/install-for-agents.md](docs/install-for-agents.md)（英語）に沿ってインストールし、初回起動時に macOS が表示する確認はあなたに任せます。
 
 ```text
 https://github.com/s3onghyun/bulchimbeon の Bulchimbeon をこのコンピュータにインストールしてください。
 https://raw.githubusercontent.com/s3onghyun/bulchimbeon/main/docs/install-for-agents.md の手順に一つずつ従い、コマンドは実行する前に見せてください。
 ルール: Homebrew cask s3onghyun/tap/bulchimbeon か github.com/s3onghyun/bulchimbeon のリリースからのみインストールし、
 ダウンロードしたものは SHA-256 を確認すること。Mac アプリに sudo は使わないこと。隔離属性（xattr）を消したり
-Gatekeeper（spctl）を無効にしたりしないこと。macOS が初回起動をブロックしたら止まり、「このまま開く」は私が押します。
+Gatekeeper（spctl）を無効にしたりしないこと。macOS が初回起動を確認またはブロックしたら止まり、私が自分で答えます。
 最後に、メニューで Agent watch がオンになっているか私と一緒に確認してください。
 ```
 
@@ -151,7 +161,7 @@ Bulchimbeon は**エージェントが作業している間だけ**起きてい�
 | macOS | **13 以降** | 26.4 以降 |
 | 蓋を閉じても起動 | 有効化のたびに管理者パスワード、見張りが復元を保証 | インストール時に一度だけ承認 |
 | エージェントからの要求 | — | CLI・MCP ツール |
-| 配布 | ad-hoc 署名（公証準備中） | 公証済み、Homebrew 公式 cask |
+| 配布 | Developer ID 署名・公証済み（0.12.6 から） | 公証済み、Homebrew 公式 cask |
 
 **Adrafinil 向き**: macOS 26.4 以降で、hook による正確な連動やエージェントからの要求が欲しい場合。
 **Bulchimbeon 向き**: macOS 13〜15 を使っている、エージェント設定やシステムに何も入れたくない、二等兵に見張ってほしい場合。
