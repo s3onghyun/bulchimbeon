@@ -1,64 +1,95 @@
 name: Release
 
-# v* 태그 푸시 → universal 빌드 → (비밀값이 있으면) Developer ID 서명·공증 → 빌드 출처 증명(attestation) → GitHub Release
-# 수동 실행(workflow_dispatch)은 점검용: 빌드·서명·공증까지만 하고 Release 는 만들지 않는다 (docs/release.md)
+# Apple 공증이 몇 시간 걸려도 서명한 앱과 제출을 버리지 않도록 두 단계로 나눈다 (docs/release.md)
+#   1단계 — v* 태그 푸시, 또는 수동 실행 + tag(이미 있는 태그를 다시 만들 때):
+#     시험 → universal 빌드 → Developer ID 서명 → 공증 제출(기다리지 않음) → 서명된 zip·체크섬·제출 id 와
+#     리눅스 패키지를 artifact 로 90일 보관. 아무것도 게시하지 않는다
+#   2단계 — 수동 실행 + run_id(1단계 실행):
+#     그 artifact 를 받아 Apple 이 Accepted 면 같은 앱에 staple·확인 → 빌드 출처 증명 → GitHub Release.
+#     아직 진행 중이면 아무것도 바꾸지 않고 실패로 끝난다 (나중에 같은 명령으로 다시)
+#   점검 — 수동 실행, 입력 없음: 1단계만 (버전 = 브랜치 이름, 리눅스 없음, artifact 7일).
+#     그 run_id 로 2단계를 돌리면 staple·확인까지만 하고 게시하지 않는다
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
     inputs:
-      NOTARY_WAIT_MINUTES:
-        description: 'Apple 공증 결과를 기다릴 최대 시간 (분, 10-300). 첫 제출이 느리면 늘린다'
-        type: number
-        default: 90
+      run_id:
+        description: '2단계: 게시할 1단계 실행의 run id (gh run list -R s3onghyun/bulchimbeon -w release.yml)'
+        type: string
+        default: ''
+      submission_id:
+        description: '2단계, 선택: 공증 제출 id 를 직접 지정 (비우면 1단계 artifact 의 submission.json)'
+        type: string
+        default: ''
+      tag:
+        description: '1단계 다시 만들기: 이미 있는 태그 (예: v0.12.6). run_id 와 함께 쓰지 않는다'
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
 jobs:
-  release:
+  # ── 1단계: 빌드·서명·공증 제출 ──────────────────────────────────────────────
+  sign-and-submit:
+    if: github.event_name == 'push' || inputs.run_id == ''
     runs-on: macos-15
-    # 공증 대기 포함: 기본(태그 푸시·기본값 90분)은 시험·빌드 ~25분 + 공증 단계 105분.
-    # 수동 실행에서 대기 시간을 바꾸면 식으로 더할 수 없어 공증 단계 최대치(300+15)보다 큰 345분
-    timeout-minutes: ${{ (!inputs.NOTARY_WAIT_MINUTES || inputs.NOTARY_WAIT_MINUTES == 90) && 130 || 345 }}
+    timeout-minutes: 60
     permissions:
-      contents: write      # Release 생성
-      id-token: write      # attestation 서명 (Sigstore OIDC)
-      attestations: write
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
     env:
-      # 비밀값은 if: 에 바로 못 쓰므로 있는지만 넘긴다 (값이 아니라 true/false). 없으면 지금처럼 ad-hoc 서명으로 낸다
+      # 비밀값은 if: 에 바로 못 쓰므로 있는지만 넘긴다 (값이 아니라 true/false)
       HAS_SIGNING: ${{ secrets.APPLE_DEVELOPER_ID_P12 != '' }}
     steps:
+      # 입력값은 run 에 끼워 넣지 않고 환경 변수로만 받아 형식을 확인한다
+      - name: Release version
+        id: version
+        env:
+          TAG_INPUT: ${{ inputs.tag }}
+        run: |
+          if [[ "$HAS_SIGNING" != true ]]; then
+            echo "Developer ID 서명 비밀값이 없습니다 (APPLE_DEVELOPER_ID_P12). 공증 없이는 릴리스하지 않습니다 (docs/release.md)" >&2
+            exit 1
+          fi
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then tag="$GITHUB_REF_NAME"; else tag="$TAG_INPUT"; fi
+          if [[ -n "$tag" ]]; then
+            [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "태그는 vX.Y.Z 여야 합니다 (tag must be vX.Y.Z)" >&2; exit 1; }
+            version="${tag#v}" ref="refs/tags/$tag" retention=90
+          else
+            version="${GITHUB_REF_NAME//\//-}" ref="$GITHUB_SHA" retention=7
+            [[ "$version" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || { echo "브랜치 이름을 버전으로 쓸 수 없습니다" >&2; exit 1; }
+          fi
+          { echo "tag=$tag"; echo "version=$version"; echo "ref=$ref"; echo "retention=$retention"; } >> "$GITHUB_OUTPUT"
+          echo "버전 $version (태그 ${tag:-없음, 점검 실행}), 소스 $ref"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ steps.version.outputs.ref }}
+          persist-credentials: false
+      # 공증 스크립트는 언제나 이 워크플로의 커밋 것을 쓴다. 옛 태그를 다시 만들 때 태그 안의 스크립트는 예전 방식이다
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: .release-tools
+          sparse-checkout: scripts/notarize-app.sh
+          sparse-checkout-cone-mode: false
           persist-credentials: false
       - name: Test
         run: swift test
       - name: Build universal app
-        run: UNIVERSAL=1 VERSION="${GITHUB_REF_NAME#v}" ./scripts/build-app.sh
-      - name: Notarization skipped
-        if: env.HAS_SIGNING != 'true'
-        run: echo "Notarization skipped - no APPLE_DEVELOPER_ID_P12 secret, releasing the ad-hoc signed app (docs/release.md)"
-      # 입력값은 run 에 끼워 넣지 않고 환경 변수로만 받아 숫자인지 확인한다. 공증 단계 제한 = 대기 + 15분 (서명·staple 여유)
-      - name: Notarization wait budget
-        id: notary-budget
-        if: env.HAS_SIGNING == 'true'
         env:
-          WAIT_INPUT: ${{ inputs.NOTARY_WAIT_MINUTES }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          minutes="${WAIT_INPUT:-90}"
-          if ! [[ "$minutes" =~ ^[1-9][0-9]*$ ]] || ((minutes < 10 || minutes > 300)); then
-            echo "NOTARY_WAIT_MINUTES must be a whole number from 10 to 300" >&2
-            exit 1
-          fi
-          echo "minutes=$minutes" >> "$GITHUB_OUTPUT"
-          echo "step-timeout=$((minutes + 15))" >> "$GITHUB_OUTPUT"
-          echo "Notarization wait: up to $minutes min (step timeout $((minutes + 15)) min)"
-      - name: Sign with Developer ID and notarize
-        if: env.HAS_SIGNING == 'true'
-        timeout-minutes: ${{ fromJSON(steps.notary-budget.outputs.step-timeout || '105') }}
+          UNIVERSAL=1 ./scripts/build-app.sh
+          lipo -archs dist/Bulchimbeon.app/Contents/MacOS/Bulchimbeon
+      - name: Sign with Developer ID and submit for notarization
+        timeout-minutes: 30
         env:
-          NOTARY_WAIT_MINUTES: ${{ steps.notary-budget.outputs.minutes }}
+          RELEASE_ROOT: ${{ github.workspace }}
+          VERSION: ${{ steps.version.outputs.version }}
           APPLE_DEVELOPER_ID_P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
           APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -67,53 +98,56 @@ jobs:
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-        run: VERSION="${GITHUB_REF_NAME#v}" ./scripts/notarize-app.sh
-      - name: Verify
-        run: |
-          codesign --verify --strict --verbose=2 dist/Bulchimbeon.app
-          lipo -archs dist/Bulchimbeon.app/Contents/MacOS/Bulchimbeon
-          if [[ "$HAS_SIGNING" == true ]]; then
-            xcrun stapler validate dist/Bulchimbeon.app
-            spctl --assess --type execute --verbose=2 dist/Bulchimbeon.app
-          fi
-          cd dist && shasum -a 256 -c ./*.sha256
-      # 수동 점검 실행: 결과 zip 을 7일 보관 (Release·출처 증명은 만들지 않음)
-      - name: Keep the dry-run build
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        run: .release-tools/scripts/notarize-app.sh submit
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: bulchimbeon-dry-run
-          path: |
-            dist/*.zip
-            dist/*.sha256
-          retention-days: 7
-      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        if: github.event_name == 'push'
-        with:
-          subject-path: dist/*.zip
-      - name: Publish release
-        if: github.event_name == 'push'
+          name: bulchimbeon-signed-${{ steps.version.outputs.version }}
+          path: dist/notary/
+          if-no-files-found: error
+          retention-days: ${{ fromJSON(steps.version.outputs.retention) }}
+      - name: Phase 2 command
         env:
-          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/*.sha256 \
-            --title "불침번 $GITHUB_REF_NAME" --generate-notes --verify-tag
+          id="$(plutil -extract id raw -o - dist/notary/submission.json)"
+          sha="$(plutil -extract sha256 raw -o - dist/notary/submission.json)"
+          cmd="gh workflow run release.yml -R $GITHUB_REPOSITORY --ref $DEFAULT_BRANCH -f run_id=$GITHUB_RUN_ID"
+          echo "2단계 (Apple 이 Accepted 한 뒤): $cmd"
+          {
+            echo "### 공증 제출됨 (notarization submitted) — 아직 게시하지 않았다"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| 제출 id | \`$id\` |"
+            echo "| 서명된 zip sha256 | \`$sha\` |"
+            echo "| 1단계 run id | \`$GITHUB_RUN_ID\` |"
+            echo
+            echo "이 실행이 모두 끝나고 Apple 이 Accepted 하면 2단계 (아직 진행 중이면 아무것도 바꾸지 않고 실패한다, 나중에 다시):"
+            echo
+            echo '```sh'
+            echo "$cmd"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
-  # Linux daemon: tar.gz, .deb and .rpm for amd64 and arm64, attached to the release above.
+  # Linux daemon: tar.gz, .deb and .rpm for amd64 and arm64, kept as an artifact for phase 2 to attach.
   # Plain `go build`, `dpkg-deb` (scripts/package-linux.sh) and `rpmbuild` from Ubuntu's own
   # `rpm` package (scripts/package-rpm.sh, repackaging the tarball's binary), no third-party packaging action.
   linux:
-    needs: release
-    if: github.event_name == 'push'
+    needs: sign-and-submit
+    if: needs.sign-and-submit.outputs.tag != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
-      contents: write      # Release 에 파일 추가
+      contents: read
       id-token: write      # attestation 서명 (Sigstore OIDC)
       attestations: write
+    env:
+      TAG: ${{ needs.sign-and-submit.outputs.tag }}
+      VERSION: ${{ needs.sign-and-submit.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: refs/tags/${{ needs.sign-and-submit.outputs.tag }}
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -130,8 +164,8 @@ jobs:
       - name: Build
         run: |
           for arch in amd64 arm64; do
-            ./scripts/package-linux.sh "${GITHUB_REF_NAME#v}" "$arch"
-            ./scripts/package-rpm.sh "${GITHUB_REF_NAME#v}" "$arch"
+            ./scripts/package-linux.sh "$VERSION" "$arch"
+            ./scripts/package-rpm.sh "$VERSION" "$arch"
           done
           cd dist/linux && sha256sum ./*.tar.gz ./*.deb ./*.rpm > SHA256SUMS && cat SHA256SUMS
       - name: Verify
@@ -140,7 +174,7 @@ jobs:
           sha256sum -c SHA256SUMS
           for deb in ./*.deb; do dpkg-deb --info "$deb"; done
           for rpm in ./*.rpm; do rpm -qip "$rpm" && rpm -qlp "$rpm"; done
-          tar -xzOf "bulchimbeon_${GITHUB_REF_NAME#v}_linux_amd64.tar.gz" "bulchimbeon_${GITHUB_REF_NAME#v}_linux_amd64/bulchimbeon" > bulchimbeon
+          tar -xzOf "bulchimbeon_${VERSION}_linux_amd64.tar.gz" "bulchimbeon_${VERSION}_linux_amd64/bulchimbeon" > bulchimbeon
           chmod +x bulchimbeon && ./bulchimbeon version && rm bulchimbeon
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
@@ -148,9 +182,181 @@ jobs:
             dist/linux/*.tar.gz
             dist/linux/*.deb
             dist/linux/*.rpm
-      - name: Upload to the release
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bulchimbeon-linux-${{ needs.sign-and-submit.outputs.version }}
+          path: |
+            dist/linux/*.tar.gz
+            dist/linux/*.deb
+            dist/linux/*.rpm
+            dist/linux/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 90
+
+  # ── 2단계: 공증 확인·staple ─────────────────────────────────────────────────
+  notarized:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_id != ''
+    runs-on: macos-15
+    timeout-minutes: 20
+    concurrency:
+      group: release-phase2-${{ inputs.run_id }}
+    permissions:
+      contents: read
+      actions: read        # 1단계 실행의 artifact 조회·내려받기
+      id-token: write      # attestation 서명 (Sigstore OIDC)
+      attestations: write
+    outputs:
+      version: ${{ steps.phase1.outputs.version }}
+      publish: ${{ steps.phase1.outputs.publish }}
+      commit: ${{ steps.submission.outputs.commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Find the phase-1 artifacts
+        id: phase1
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+          SUBMISSION_INPUT: ${{ inputs.submission_id }}
+          TAG_INPUT: ${{ inputs.tag }}
+        run: |
+          fail() { echo "$*" >&2; exit 1; }
+          [[ -z "$TAG_INPUT" ]] || fail "tag 와 run_id 는 함께 쓰지 않는다 (phase 1 takes tag, phase 2 takes run_id)"
+          [[ "$RUN_ID" =~ ^[1-9][0-9]{0,19}$ ]] || fail "run_id 는 숫자여야 한다"
+          [[ -z "$SUBMISSION_INPUT" || "$SUBMISSION_INPUT" =~ ^[0-9A-Fa-f]{8}-([0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}$ ]] \
+            || fail "submission_id 는 UUID 여야 한다"
+          workflow="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq .path)"
+          [[ "$workflow" == .github/workflows/release.yml ]] || fail "run $RUN_ID 은 release.yml 실행이 아니다"
+          names="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" --paginate \
+            --jq '.artifacts[] | select(.expired | not) | .name')"
+          signed="$(grep -E '^bulchimbeon-signed-[A-Za-z0-9][A-Za-z0-9._-]*$' <<< "$names" || true)"
+          [[ -n "$signed" && "$(wc -l <<< "$signed")" -eq 1 ]] \
+            || fail "run $RUN_ID 에 bulchimbeon-signed-* artifact 가 하나 있어야 한다 (만료되었거나 1단계가 끝나지 않음)"
+          version="${signed#bulchimbeon-signed-}"
+          publish=false
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            publish=true
+            grep -qx "bulchimbeon-linux-$version" <<< "$names" \
+              || fail "run $RUN_ID 에 bulchimbeon-linux-$version artifact 가 없다 (리눅스 작업이 끝나지 않았거나 실패)"
+          fi
+          { echo "signed=$signed"; echo "version=$version"; echo "publish=$publish"; } >> "$GITHUB_OUTPUT"
+          echo "1단계 run $RUN_ID: $signed (게시 $publish)"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ steps.phase1.outputs.signed }}
+          path: dist/notary
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Read the submission
+        id: submission
+        env:
+          VERSION: ${{ steps.phase1.outputs.version }}
+        run: |
+          [[ "$(plutil -extract version raw -o - dist/notary/submission.json)" == "$VERSION" ]] \
+            || { echo "submission.json 의 버전이 artifact 이름과 다르다" >&2; exit 1; }
+          commit="$(plutil -extract commit raw -o - dist/notary/submission.json)"
+          [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || commit=""
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+      - name: Staple when Apple has accepted
+        env:
+          SUBMISSION_INPUT: ${{ inputs.submission_id }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          rc=0
+          ./scripts/notarize-app.sh finish ${SUBMISSION_INPUT:+"$SUBMISSION_INPUT"} || rc=$?
+          if ((rc == 75)); then
+            msg="Apple 공증이 아직 진행 중이다 (still in progress). 아무것도 게시하지 않았다. 나중에 같은 명령으로 2단계를 다시 실행한다"
+            echo "::error title=Notarization still in progress::$msg"
+            echo "### ⏳ $msg" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$rc"
+      - name: Verify
+        run: |
+          codesign --verify --strict --verbose=2 dist/Bulchimbeon.app
+          lipo -archs dist/Bulchimbeon.app/Contents/MacOS/Bulchimbeon
+          xcrun stapler validate dist/Bulchimbeon.app
+          spctl --assess --type execute --verbose=2 dist/Bulchimbeon.app
+          cd dist && shasum -a 256 -c ./*.sha256
+      # 점검 실행의 2단계: staple 된 zip 을 7일 보관 (Release·출처 증명은 만들지 않음)
+      - name: Keep the dry-run build
+        if: steps.phase1.outputs.publish != 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bulchimbeon-dry-run
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        if: steps.phase1.outputs.publish == 'true'
+        with:
+          subject-path: dist/Bulchimbeon-${{ steps.phase1.outputs.version }}.zip
+      - if: steps.phase1.outputs.publish == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bulchimbeon-notarized-${{ steps.phase1.outputs.version }}
+          path: |
+            dist/Bulchimbeon-${{ steps.phase1.outputs.version }}.zip
+            dist/Bulchimbeon-${{ steps.phase1.outputs.version }}.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  # ── 2단계: GitHub Release (contents: write 는 이 작업만, 공증 비밀값 없음) ──────
+  publish:
+    needs: notarized
+    if: needs.notarized.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write      # Release 생성
+      actions: read        # 1단계 실행의 리눅스 artifact 내려받기
+    env:
+      VERSION: ${{ needs.notarized.outputs.version }}
+      COMMIT: ${{ needs.notarized.outputs.commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bulchimbeon-notarized-${{ needs.notarized.outputs.version }}
+          path: assets
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bulchimbeon-linux-${{ needs.notarized.outputs.version }}
+          path: assets
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Check the assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload "$GITHUB_REF_NAME" dist/linux/*.tar.gz dist/linux/*.deb dist/linux/*.rpm dist/linux/SHA256SUMS \
-            --repo "$GITHUB_REPOSITORY"
+          tag="v$VERSION"
+          # 1단계가 빌드한 커밋이 지금 태그가 가리키는 커밋이어야 한다
+          tagged="$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)"
+          [[ -n "$COMMIT" && "$tagged" == "$COMMIT" ]] \
+            || { echo "태그 $tag 의 커밋($tagged)이 1단계가 빌드한 커밋(${COMMIT:-없음})과 다르다" >&2; exit 1; }
+          cd assets
+          sha256sum -c "Bulchimbeon-$VERSION.zip.sha256"
+          sha256sum -c SHA256SUMS
+          for f in "bulchimbeon_${VERSION}_linux_amd64.tar.gz" "bulchimbeon_${VERSION}_linux_arm64.tar.gz"; do
+            [[ -f "$f" ]] || { echo "$f 이 없다" >&2; exit 1; }
+          done
+          ls -l
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$VERSION"
+          notes=(--generate-notes)
+          [[ -f "docs/release-notes/$tag.md" ]] && notes=(--notes-file "docs/release-notes/$tag.md")
+          gh release create "$tag" assets/*.zip assets/*.sha256 assets/*.tar.gz assets/*.deb assets/*.rpm assets/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --title "불침번 $tag" --verify-tag "${notes[@]}"
+          echo "### ✅ 게시: $tag — 다음은 ./scripts/bump-cask.sh $VERSION 과 ./scripts/bump-aur.sh $VERSION" >> "$GITHUB_STEP_SUMMARY"
