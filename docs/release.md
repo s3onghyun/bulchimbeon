@@ -19,7 +19,9 @@
 2. 팀 ID 가 `APPLE_TEAM_ID` 인 "Developer ID Application" 인증서로 `codesign --force --options runtime --timestamp` 서명.
    서명 식별자(`io.github.s3onghyun.bulchimbeon`)는 ad-hoc 때와 같다. 앱은 entitlements 가 필요 없다 (관리자 명령·알림은
    별도 프로세스인 `/usr/bin/osascript` 가 보낸다).
-3. `xcrun notarytool submit --wait` 로 제출하고 결과를 기다린다. `Accepted` 가 아니면 공증 로그를 출력하고 실패한다.
+3. `xcrun notarytool submit` 로 제출하고 (`--wait` 없이) 받은 제출 id 를 바로 출력한다. 그 뒤 30초마다
+   `xcrun notarytool info <id>` 로 상태를 물어 `Accepted` 나 `Invalid` 가 될 때까지 최대 `NOTARY_WAIT_MINUTES` 분(기본 90)
+   기다린다. `Accepted` 가 아니면 공증 로그(`notarytool log <id>`)를 출력하고 실패한다. 아래 "공증이 오래 걸릴 때" 참고.
 4. `xcrun stapler staple` → `stapler validate` → `codesign --verify --deep --strict` → `spctl --assess` 가
    `source=Notarized Developer ID` 인지 확인.
 5. staple 된 앱으로 zip·체크섬을 다시 만든다. 다음 `Verify` 단계가 서명·staple·Gatekeeper·체크섬을 한 번 더 본다.
@@ -86,9 +88,11 @@ Apple Developer Program 가입이 승인된 맥에서 한다. 개인 가입이�
 6. **수동 점검 실행 (dry run)**: Actions → Release → Run workflow (브랜치 `main`), 또는
 
    ```sh
-   gh workflow run release.yml -R s3onghyun/bulchimbeon --ref main
+   gh workflow run release.yml -R s3onghyun/bulchimbeon --ref main -f NOTARY_WAIT_MINUTES=90
    ```
 
+   `NOTARY_WAIT_MINUTES`(10~300, 기본 90)는 공증 결과를 기다릴 최대 시간이다. 새 계정의 첫 제출들은 Apple 처리가 오래 걸릴 수
+   있으니 첫 실행에서는 늘려도 된다. 태그 푸시 릴리스는 늘 90분이다.
    수동 실행은 빌드·서명·공증·확인까지만 하고 Release·출처 증명·리눅스 패키지는 만들지 않는다. 로그에서
    `공증 인증 방식: api-key`(또는 `apple-id`), `공증 결과: Accepted`, `source=Notarized Developer ID` 를 확인한다. 결과 zip 은
    실행 페이지의 artifact `bulchimbeon-dry-run` 에 7일 남는다 (버전 이름은 브랜치 이름, 예: `Bulchimbeon-main.zip`). 내려받아 풀고
@@ -97,6 +101,41 @@ Apple Developer Program 가입이 승인된 맥에서 한다. 개인 가입이�
 7. 그 뒤로는 평소처럼 `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
 비밀값을 지우면 (`APPLE_DEVELOPER_ID_P12` 만 지워도) 다시 ad-hoc 길로 돌아간다.
+
+## 공증이 오래 걸릴 때 (slow notarization)
+
+Apple 공증은 보통 몇 분이면 끝나지만, 새 개발자 계정의 첫 제출들은 몇 시간이 걸리기도 한다. 2026-11-17 첫 CI 점검 실행은
+예전 스크립트의 `submit --wait --timeout 30m` 이 30분을 넘겨 제출 id 도 남기지 못하고 실패했다. 지금 로그는 이렇게 보인다.
+
+```text
+공증 인증 방식: api-key
+공증 제출: 2f1c9d3e-4b5a-4c6d-8e7f-0123456789ab
+공증 대기 중 (waiting): 0분 00초 경과, 상태 In Progress - submission 2f1c9d3e-…
+공증 대기 중 (waiting): 5분 01초 경과, 상태 In Progress - submission 2f1c9d3e-…     ← 5분마다 한 줄
+공증 결과: Accepted (submission 2f1c9d3e-…, 7분 32초)
+```
+
+| 마지막 줄 | 뜻 | 할 일 |
+|---|---|---|
+| `공증 결과: Accepted …` 다음 `✅ 공증·staple 완료` | 성공 | 없음 |
+| `공증 결과: Invalid …` | Apple 이 거절. 바로 아래에 공증 로그(JSON)가 있다 | 로그의 `issues` 를 고친 뒤 다시 실행 |
+| `공증이 아직 진행 중입니다 (still in progress) - submission <id>; …` | 기다린 시간 안에 Apple 이 끝내지 않았다. 제출은 Apple 쪽에서 계속 처리된다 | 아래처럼 맥에서 그 id 의 상태를 보고, 끝난 뒤 `NOTARY_WAIT_MINUTES` 를 늘려 다시 실행 |
+| `공증 제출 실패: 제출 id 를 받지 못했습니다 …` | 업로드·인증 실패. 아래에 notarytool 오류 끝부분 | 비밀값(특히 API 키·Issuer ID)과 Apple 계약 동의 상태 확인 |
+| `공증 상태를 5번 연속 조회하지 못했습니다 …` | 상태 조회가 연속 실패 (네트워크·Apple 장애) | 맥에서 그 id 를 조회하고 나중에 다시 실행 |
+
+다시 실행하면 새로 서명하고 새로 제출한다. 앞 제출을 이어 기다리지는 않는다.
+
+**맥에서 제출 id 조회하기.** API 키(A)를 쓰면 `.p8` 을 저장소 밖에 두고:
+
+```sh
+xcrun notarytool info <id> --key ~/keys/AuthKey_XXXXXXXXXX.p8 --key-id <키 ID> --issuer <Issuer ID>
+xcrun notarytool log  <id> --key ~/keys/AuthKey_XXXXXXXXXX.p8 --key-id <키 ID> --issuer <Issuer ID>   # 끝난 뒤 상세
+xcrun notarytool history  --key ~/keys/AuthKey_XXXXXXXXXX.p8 --key-id <키 ID> --issuer <Issuer ID>   # 최근 제출 목록
+```
+
+자주 본다면 한 번 `xcrun notarytool store-credentials bulchimbeon --key … --key-id … --issuer …` 로 키체인에 넣고
+`xcrun notarytool info <id> --keychain-profile bulchimbeon` 으로 줄인다. Apple ID(B)면 `--apple-id <이메일> --team-id <팀 ID>`
+를 쓰고 암호는 물을 때 입력한다 (명령줄에 적지 않는다).
 
 ## 첫 공증 릴리스 때 알아둘 것
 
