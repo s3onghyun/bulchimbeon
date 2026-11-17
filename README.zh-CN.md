@@ -20,7 +20,13 @@
 
 安装：`brew install --cask s3onghyun/tap/bulchimbeon` —— 或[下载最新的 macOS zip](https://github.com/s3onghyun/bulchimbeon/releases) 并移动到 `/Applications`。
 
-**首次启动：** 应用目前为 ad-hoc 签名，尚未经过 Apple 公证，macOS 会拦截一次：
+**首次启动：** 从 0.12.6 起，应用使用 Developer ID 签名并经过 Apple 公证，可以直接打开。macOS 最多会询问一次是否打开
+从互联网下载的应用，点击 **打开** 即可。询问 Bulchimbeon 能否发送通知时请允许，之后通知以 Bulchimbeon 自己的名义显示。
+
+<details>
+<summary>0.12.5 及更早版本需要点击“仍要打开”</summary>
+
+这些版本为 ad-hoc 签名，未经过 Apple 公证，macOS 会拦截一次：
 
 1. 打开 Bulchimbeon。macOS 提示无法打开时，点击 **完成**。
 2. 前往 **系统设置 → 隐私与安全性**，向下滚动到 **安全性**。
@@ -29,21 +35,24 @@
 
 ![系统设置“隐私与安全性”：已阻止“Bulchimbeon”的提示和“仍要打开”按钮](docs/media/gatekeeper-open-anyway.png)
 
-通知显示为 **「脚本编辑器」** 是正常的：公证之前，macOS 不会给应用本身授予通知权限。
+这些版本的通知显示为 **「脚本编辑器」**：公证之前，macOS 不会给应用本身授予通知权限。升级到 0.12.6 或更高版本后，
+这两点都不再需要。
+
+</details>
 
 **支持的代理：** Claude Code · Codex · Gemini CLI · Cursor Agent · Copilot CLI · Aider · OpenCode（也可添加自定义代理）。
 
 ### 用 AI 代理安装
 
 把下面这段粘贴给 Claude Code、Codex、Gemini CLI 或其他编程代理。代理会按
-[docs/install-for-agents.md](docs/install-for-agents.md)（英文）安装，需要你点击 **仍要打开** 时会停下等你。
+[docs/install-for-agents.md](docs/install-for-agents.md)（英文）安装，首次启动时 macOS 弹出的询问交给你处理。
 
 ```text
 请按照 https://raw.githubusercontent.com/s3onghyun/bulchimbeon/main/docs/install-for-agents.md
 一步一步把 Bulchimbeon（https://github.com/s3onghyun/bulchimbeon）安装到这台电脑上，每条命令运行前先给我看。
 规则：只从 Homebrew cask s3onghyun/tap/bulchimbeon 或 github.com/s3onghyun/bulchimbeon 的 Releases 安装，
 下载的文件要校验 SHA-256。安装 Mac 应用不要用 sudo。不要删除隔离属性（xattr），也不要关闭 Gatekeeper（spctl）：
-macOS 拦截首次启动时，停下来让我自己点击“仍要打开”。
+macOS 询问或拦截首次启动时，停下来让我自己处理。
 最后和我一起确认菜单里已勾选代理值班。
 ```
 
@@ -150,7 +159,7 @@ Bulchimbeon **只在代理干活时**保持唤醒，干完了自动换岗。
 | macOS | **13 及以上** | 26.4 及以上 |
 | 合盖保持唤醒 | 每次开启需管理员密码，哨兵保证恢复设置 | 安装时授权一次 |
 | 代理主动请求保持唤醒 | — | CLI、MCP 工具 |
-| 分发 | ad-hoc 签名（公证准备中） | 已公证，Homebrew 官方 cask |
+| 分发 | Developer ID 签名并已公证（从 0.12.6 起） | 已公证，Homebrew 官方 cask |
 
 **适合 Adrafinil**：macOS 26.4 及以上，想用 hook 精确联动或让代理主动请求。
 **适合 Bulchimbeon**：使用 macOS 13–15，不想往代理配置或系统里安装任何东西，或者想要一个小兵站岗。

@@ -20,7 +20,14 @@ A pixel-art private takes that shift for your Mac.
 
 Install: `brew install --cask s3onghyun/tap/bulchimbeon` — or [download the latest macOS zip](https://github.com/s3onghyun/bulchimbeon/releases) and move it to `/Applications`.
 
-**First launch:** the app is ad-hoc signed and not notarized by Apple yet, so macOS blocks it once:
+**First launch:** from 0.12.6 the app is signed with a Developer ID and notarized by Apple, so it just opens.
+At most, macOS asks once whether to open an app downloaded from the internet: click **Open**. When it asks whether
+Bulchimbeon may send notifications, allow it; notifications then come from Bulchimbeon itself.
+
+<details>
+<summary>0.12.5 and earlier: Open Anyway is needed once</summary>
+
+Those versions are ad-hoc signed and not notarized, so macOS blocks them once:
 
 1. Open Bulchimbeon. macOS says it can't be opened; click **Done**.
 2. Go to **System Settings → Privacy & Security** and scroll down to **Security**.
@@ -29,22 +36,24 @@ Install: `brew install --cask s3onghyun/tap/bulchimbeon` — or [download the la
 
 ![System Settings, Privacy & Security: "Bulchimbeon" was blocked to protect your Mac, with the Open Anyway button](docs/media/gatekeeper-open-anyway.png)
 
-Notifications show up as **"Script Editor"**. That is normal: until the app is notarized, macOS won't grant it
-notification permission of its own.
+Their notifications show up as **"Script Editor"**, because macOS won't grant an unnotarized app notification
+permission of its own. Updating to 0.12.6 or later removes both.
+
+</details>
 
 **Supported agents:** Claude Code · Codex · Gemini CLI · Cursor Agent · Copilot CLI · Aider · OpenCode (and your own custom agents).
 
 ### Install with your AI agent
 
 Paste this into Claude Code, Codex, Gemini CLI or another coding agent. The agent follows
-[docs/install-for-agents.md](docs/install-for-agents.md) and stops when you need to click **Open Anyway**.
+[docs/install-for-agents.md](docs/install-for-agents.md) and leaves any first-launch prompt from macOS to you.
 
 ```text
 Install Bulchimbeon (https://github.com/s3onghyun/bulchimbeon) on this computer by following
 https://raw.githubusercontent.com/s3onghyun/bulchimbeon/main/docs/install-for-agents.md step by step. Show me each command before you run it.
 Rules: install only from the Homebrew cask s3onghyun/tap/bulchimbeon or github.com/s3onghyun/bulchimbeon releases,
 and check the SHA-256 of anything you download. No sudo for the Mac app. Never remove the quarantine attribute
-(xattr) or turn off Gatekeeper (spctl): when macOS blocks the first launch, stop and let me click Open Anyway myself.
+(xattr) or turn off Gatekeeper (spctl): if macOS asks about or blocks the first launch, stop and let me answer it myself.
 Finish by checking with me that Agent watch is ticked in the menu.
 ```
 
@@ -173,7 +182,7 @@ approaches, so pick the one that fits. (As of October 2026.)
 | Awake with the lid closed | Admin password each time you turn it on; a watchdog guarantees the setting is restored | Approved once at install, no password afterwards |
 | Agent asks to stay awake (long builds) | — | CLI and MCP tool |
 | Heat | Warns even with the lid open; when it gets too hot, rests and **resumes automatically once cool** | Force-releases on overheating while the lid is closed |
-| Distribution | Ad-hoc signed (notarization planned), personal Homebrew tap | Notarized, official Homebrew cask |
+| Distribution | Developer ID signed and notarized (from 0.12.6), personal Homebrew tap | Notarized, official Homebrew cask |
 
 **Choose Adrafinil** if you're on macOS 26.4+ and want hooks to track turns precisely, or want agents to request
 wake time themselves.
@@ -531,7 +540,8 @@ tables are self-explanatory) and the [CHANGELOG](CHANGELOG.md).
 - [x] Pixel-art private, patrol mode, Korean/English/Simplified Chinese UI
 - [x] Detect working vs. idle agents
 - [x] Homebrew cask (personal tap)
-- [ ] Apple notarization and the official Homebrew cask
+- [x] Apple notarization (0.12.6)
+- [ ] Official Homebrew cask
 - [ ] Privileged helper to remove the admin prompt in lid-closed mode
 - [ ] Unlockable skins: Joseon night watchman, scholar
 

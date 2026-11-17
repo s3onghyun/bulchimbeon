@@ -84,7 +84,7 @@ brew install --cask s3onghyun/tap/bulchimbeon
 defaults read /Applications/Bulchimbeon.app/Contents/Info CFBundleShortVersionString
 ```
 
-- **Expect:** `🍺  bulchimbeon was successfully installed!`, the caveat about "Open Anyway", and then `X.Y.Z`.
+- **Expect:** `🍺  bulchimbeon was successfully installed!` and then `X.Y.Z`.
   Homebrew checks the SHA-256 pinned in the cask itself.
 - **On failure:** `It seems there is already an App at '/Applications/Bulchimbeon.app'` means a zip install exists;
   ask the person before replacing it (`brew install --cask --force s3onghyun/tap/bulchimbeon`). Any other error:
@@ -126,6 +126,8 @@ codesign -dv /tmp/bulchimbeon-install/out/Bulchimbeon.app
 - **Expect:** the `--verify` line prints nothing and exits 0; `codesign -dv` (it prints to stderr) shows
   `Identifier=io.github.s3onghyun.bulchimbeon`.
 - **On failure:** stop and report the output. Do not install.
+- **Optional, 0.12.6 and later:** `spctl -a -vv /tmp/bulchimbeon-install/out/Bulchimbeon.app` (read-only, it only
+  asks Gatekeeper) should print `accepted` and `source=Notarized Developer ID`. Anything else: stop and report it.
 
 If an older copy is installed, quit it first with `osascript -e 'quit app "Bulchimbeon"'`. Then copy it in:
 
@@ -158,23 +160,22 @@ pgrep -x Bulchimbeon
   ```
 
   A process ID now means it is running: skip to M6's last part (ask the person to check the menu).
-  Still no process ID: macOS has most likely blocked the first launch, because the app is ad-hoc signed and not yet
-  notarized by Apple. Go to M6. (Whether macOS asks depends on how the file arrived and whether this Mac approved the
-  build before: Homebrew marks the download, so macOS usually asks; a `curl` download is not marked, so it may open
-  straight away. Either way, leave the attribute alone.)
+  Still no process ID: macOS is most likely waiting for the person on the first launch. Go to M6. (Whether macOS
+  asks depends on how the file arrived and whether this Mac opened the app before: Homebrew marks the download, so
+  macOS usually asks; a `curl` download is not marked, so it may open straight away. Either way, leave the attribute
+  alone.)
 - **A process ID right away:** it was already running, and `--args` does not reach a running app. Go to M6's last part.
 
 ### M6. Hand-off to the person
 
-If the launch was blocked, stop and give the person these steps, then wait until they say they are done:
+If the app did not start, stop and hand the first launch to the person, then wait until they say they are done.
+From 0.12.6 the app is signed with a Developer ID and notarized by Apple, so macOS only asks whether to open an app
+downloaded from the internet: the person clicks **Open**. If macOS then asks whether Bulchimbeon may send
+notifications, the person decides.
 
-1. In the dialog that says Bulchimbeon can't be opened, click **Done**.
-2. Open **System Settings → Privacy & Security** and scroll down to **Security**.
-3. Next to *"Bulchimbeon" was blocked*, click **Open Anyway**, then confirm with your password or Touch ID.
-   (Since macOS 15, right-click → Open no longer does this.)
-
-Screenshot of that setting:
-<https://github.com/s3onghyun/bulchimbeon/blob/main/docs/media/gatekeeper-open-anyway.png>
+Only for 0.12.5 and earlier, which are not notarized: macOS says the app can't be opened; the person clicks **Done**,
+then **System Settings → Privacy & Security → Security**, and **Open Anyway** next to *"Bulchimbeon" was blocked*
+([screenshot](https://github.com/s3onghyun/bulchimbeon/blob/main/docs/media/gatekeeper-open-anyway.png)).
 
 When they confirm, check:
 
@@ -183,16 +184,18 @@ pgrep -x Bulchimbeon
 ```
 
 - **Expect:** a process ID.
-- **On failure:** ask the person whether they saw **Open Anyway** (it appears only after a blocked launch, for about
-  an hour). Do not try to bypass it yourself.
+- **On failure:** ask the person what macOS showed. For 0.12.6 and later a "can't be opened" or "malware" message is
+  not expected: stop and report it with the macOS version and the M4b `spctl` output if you have it. For 0.12.5 and
+  earlier, ask whether they saw **Open Anyway** (it appears only after a blocked launch, for about an hour). Never try
+  to bypass Gatekeeper yourself.
 
 In every case, finish with the person: ask them to click the soldier in the menu bar and check that
 **🤖 Agent watch (auto shift)** is ticked. It is on by default; if they turned it off, they tick it. The
 first line of the menu then reads **Bulchimbeon — Waiting for agents** (or **On duty** if an agent is busy).
 That, with a process ID from `pgrep`, means the install worked.
 
-Tell the person: notifications from Bulchimbeon show up as **"Script Editor"**. That is expected until the app is
-notarized.
+Tell the person: from 0.12.6, notifications come from Bulchimbeon itself. (0.12.5 and earlier show them as
+**"Script Editor"**, because those versions are not notarized.)
 
 ### M7. Show the person how to see it on duty
 
@@ -234,8 +237,8 @@ display awake, and the custom-agent list. Its exact wording is for people and ma
 
 ### M8. Report
 
-Tell the person: the installed version, how it was installed (Homebrew or zip), whether they had to click
-Open Anyway, that the menu shows **Agent watch** ticked, and the check from M7 to run later.
+Tell the person: the installed version, how it was installed (Homebrew or zip), whether macOS asked anything on
+the first launch, that the menu shows **Agent watch** ticked, and the check from M7 to run later.
 
 ## Linux
 
