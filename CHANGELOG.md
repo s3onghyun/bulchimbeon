@@ -5,6 +5,13 @@
 
 ## 다음 버전
 
+- 릴리스: 공증을 두 단계로 나눴다. 태그를 올리면(1단계) 빌드·Developer ID 서명·공증 제출까지만 하고, 제출한 바로 그 zip 과 제출 id,
+  리눅스 패키지를 artifact 로 90일 보관하며 아무것도 게시하지 않는다. Apple 이 Accepted 한 뒤 `gh workflow run release.yml --ref main
+  -f run_id=<1단계 run id>`(2단계)가 같은 앱에 staple·확인하고 출처 증명과 GitHub Release 를 만든다. 아직 처리 중이면 아무것도
+  바꾸지 않고 실패해 나중에 다시 돌릴 수 있다. 새 계정의 공증이 몇 시간 걸려 0.12.6 실행이 매번 새로 빌드·제출하며 결과를 버리던
+  문제를 막는다. 이미 있는 태그는 `-f tag=vX.Y.Z` 로 1단계를 다시 한다. 서명 비밀값이 없으면 ad-hoc 으로 내지 않고 실패한다
+  ([docs/release.md](docs/release.md))
+
 ## 0.12.6 — 2026-11-18
 
 - 배포: 첫 공증 릴리스. macOS 앱을 Developer ID 로 서명하고 Apple 공증을 받아 티켓을 staple 했다 (GitHub zip 과 Homebrew

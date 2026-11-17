@@ -169,14 +169,15 @@ repository's MIT license. Maintainers may ask for a smaller PR, reproduction, te
 ### Releases (maintainer only)
 
 ```bash
-git tag vX.Y.Z && git push origin vX.Y.Z   # CI builds universal, signs, attests, and publishes the Release
+git tag vX.Y.Z && git push origin vX.Y.Z   # phase 1: CI builds universal, signs, submits for notarization, publishes nothing
+gh workflow run release.yml --ref main -f run_id=<phase-1 run id>   # phase 2, once Apple accepted: staple, attest, Release
 ./scripts/bump-cask.sh X.Y.Z               # verifies checksum and provenance, then updates the Homebrew tap
 ./scripts/bump-aur.sh X.Y.Z                # same checks, then updates packaging/aur for the AUR (packaging/aur/README.md)
 # Fedora COPR, once set up: copr-cli buildscm ... --commit vX.Y.Z (packaging/rpm/README.md)
 ```
 
-Developer ID signing and Apple notarization switch on only when the signing secrets exist; without them the release is
-ad-hoc signed as before. Secret names, the post-enrolment steps and a dry run: [docs/release.md](docs/release.md).
+Every release is Developer ID signed and notarized; without the signing secrets phase 1 fails instead of shipping an
+ad-hoc build. The two phases, secret names, the post-enrolment steps and a dry run: [docs/release.md](docs/release.md).
 
 The release workflow does not touch the Homebrew tap or the AUR. After tagging, both steps are required:
 
@@ -350,14 +351,15 @@ AI 도구를 보조로 써도 됩니다. PR 하나는 한 가지 문제에 집�
 ### 릴리스 (메인테이너 전용)
 
 ```bash
-git tag vX.Y.Z && git push origin vX.Y.Z   # CI 가 universal 빌드·서명·출처 증명·Release
+git tag vX.Y.Z && git push origin vX.Y.Z   # 1단계: CI 가 universal 빌드·서명·공증 제출, 게시는 하지 않음
+gh workflow run release.yml --ref main -f run_id=<1단계 run id>   # 2단계, Apple 이 Accepted 한 뒤: staple·출처 증명·Release
 ./scripts/bump-cask.sh X.Y.Z               # 체크섬·출처 증명 검증 후 Homebrew tap 갱신
 ./scripts/bump-aur.sh X.Y.Z                # 같은 검증 후 AUR 용 packaging/aur 갱신 (packaging/aur/README.md)
 # Fedora COPR (설정한 뒤): copr-cli buildscm ... --commit vX.Y.Z (packaging/rpm/README.md)
 ```
 
-Developer ID 서명과 Apple 공증은 서명 비밀값이 있을 때만 켜지고, 없으면 지금처럼 ad-hoc 서명으로 나갑니다. 비밀값 이름,
-가입 후 할 일, 수동 점검 실행은 [docs/release.md](docs/release.md) 에 있습니다.
+모든 릴리스는 Developer ID 서명·Apple 공증을 거칩니다. 서명 비밀값이 없으면 ad-hoc 으로 내지 않고 1단계가 실패합니다.
+두 단계, 비밀값 이름, 가입 후 할 일, 수동 점검 실행은 [docs/release.md](docs/release.md) 에 있습니다.
 
 릴리스 워크플로는 Homebrew tap 과 AUR 을 건드리지 않습니다. 태그를 올린 뒤 두 단계는 꼭 해야 합니다:
 
