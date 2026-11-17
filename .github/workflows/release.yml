@@ -6,6 +6,11 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      NOTARY_WAIT_MINUTES:
+        description: 'Apple 공증 결과를 기다릴 최대 시간 (분, 10-300). 첫 제출이 느리면 늘린다'
+        type: number
+        default: 90
 
 permissions:
   contents: read
@@ -13,7 +18,9 @@ permissions:
 jobs:
   release:
     runs-on: macos-15
-    timeout-minutes: 60    # 공증 대기 포함
+    # 공증 대기 포함: 기본(태그 푸시·기본값 90분)은 시험·빌드 ~25분 + 공증 단계 105분.
+    # 수동 실행에서 대기 시간을 바꾸면 식으로 더할 수 없어 공증 단계 최대치(300+15)보다 큰 345분
+    timeout-minutes: ${{ (!inputs.NOTARY_WAIT_MINUTES || inputs.NOTARY_WAIT_MINUTES == 90) && 130 || 345 }}
     permissions:
       contents: write      # Release 생성
       id-token: write      # attestation 서명 (Sigstore OIDC)
@@ -32,10 +39,26 @@ jobs:
       - name: Notarization skipped
         if: env.HAS_SIGNING != 'true'
         run: echo "Notarization skipped - no APPLE_DEVELOPER_ID_P12 secret, releasing the ad-hoc signed app (docs/release.md)"
+      # 입력값은 run 에 끼워 넣지 않고 환경 변수로만 받아 숫자인지 확인한다. 공증 단계 제한 = 대기 + 15분 (서명·staple 여유)
+      - name: Notarization wait budget
+        id: notary-budget
+        if: env.HAS_SIGNING == 'true'
+        env:
+          WAIT_INPUT: ${{ inputs.NOTARY_WAIT_MINUTES }}
+        run: |
+          minutes="${WAIT_INPUT:-90}"
+          if ! [[ "$minutes" =~ ^[1-9][0-9]*$ ]] || ((minutes < 10 || minutes > 300)); then
+            echo "NOTARY_WAIT_MINUTES must be a whole number from 10 to 300" >&2
+            exit 1
+          fi
+          echo "minutes=$minutes" >> "$GITHUB_OUTPUT"
+          echo "step-timeout=$((minutes + 15))" >> "$GITHUB_OUTPUT"
+          echo "Notarization wait: up to $minutes min (step timeout $((minutes + 15)) min)"
       - name: Sign with Developer ID and notarize
         if: env.HAS_SIGNING == 'true'
-        timeout-minutes: 40
+        timeout-minutes: ${{ fromJSON(steps.notary-budget.outputs.step-timeout || '105') }}
         env:
+          NOTARY_WAIT_MINUTES: ${{ steps.notary-budget.outputs.minutes }}
           APPLE_DEVELOPER_ID_P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
           APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}

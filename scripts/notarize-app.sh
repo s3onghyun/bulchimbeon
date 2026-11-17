@@ -9,6 +9,8 @@
 #   공증 인증은 둘 중 하나 (API 키 쪽이 하나라도 있으면 API 키):
 #     APPLE_API_KEY_ID + APPLE_API_ISSUER_ID + APPLE_API_KEY_P8 (.p8 의 base64)
 #     APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD
+#   NOTARY_WAIT_MINUTES              공증 결과를 기다리는 최대 시간 (분, 기본 90). 넘으면 제출 id 를 남기고 실패
+#   NOTARY_POLL_SECONDS              상태를 묻는 간격 (초, 기본 30. 시험용으로만 바꾼다)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -34,6 +36,12 @@ if ((${#missing[@]})); then
   exit 1
 fi
 [[ "$APPLE_TEAM_ID" =~ ^[A-Z0-9]{10}$ ]] || { echo "APPLE_TEAM_ID 는 영대문자·숫자 10자여야 합니다" >&2; exit 1; }
+NOTARY_WAIT_MINUTES="${NOTARY_WAIT_MINUTES:-90}"
+NOTARY_POLL_SECONDS="${NOTARY_POLL_SECONDS:-30}"
+[[ "$NOTARY_WAIT_MINUTES" =~ ^[1-9][0-9]{0,3}$ ]] \
+  || { echo "NOTARY_WAIT_MINUTES 는 1 이상의 정수(분)여야 합니다 (must be a positive number of minutes)" >&2; exit 1; }
+[[ "$NOTARY_POLL_SECONDS" =~ ^[1-9][0-9]{0,2}$ ]] \
+  || { echo "NOTARY_POLL_SECONDS 는 1~999 초여야 합니다" >&2; exit 1; }
 [[ "$(uname -s)" == Darwin ]] || { echo "macOS 에서만 돕니다" >&2; exit 1; }
 [[ -d "$APP" ]] || { echo "$APP 이 없습니다. 먼저 ./scripts/build-app.sh" >&2; exit 1; }
 echo "공증 인증 방식: $AUTH"
@@ -74,7 +82,7 @@ codesign --verify --deep --strict --verbose=2 "$APP"
 SIGNED_TEAM="$(codesign -dv "$APP" 2>&1 | sed -n 's/^TeamIdentifier=//p')"
 [[ "$SIGNED_TEAM" == "$APPLE_TEAM_ID" ]] || { echo "서명된 앱의 TeamIdentifier 가 APPLE_TEAM_ID 와 다릅니다" >&2; exit 1; }
 
-# 3. 공증 제출 → 결과 대기
+# 3. 공증 제출 → 결과 대기 (최대 NOTARY_WAIT_MINUTES 분)
 if [[ "$AUTH" == api-key ]]; then
   printf '%s' "$APPLE_API_KEY_P8" | base64 --decode > "$WORK/AuthKey.p8"
   NOTARY_AUTH=(--key "$WORK/AuthKey.p8" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID")
@@ -82,13 +90,69 @@ else
   NOTARY_AUTH=(--apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD")
 fi
 ditto -c -k --keepParent "$APP" "$WORK/submit.zip"
-xcrun notarytool submit "$WORK/submit.zip" "${NOTARY_AUTH[@]}" --wait --timeout 30m \
-  --output-format json > "$WORK/submit.json" || true
-STATUS="$(plutil -extract status raw -o - "$WORK/submit.json" 2>/dev/null || echo unknown)"
+
+# notarytool 의 오류 출력에는 비밀값이 없지만, 혹시 섞여도 가린 뒤 끝부분만 보인다
+redact() {
+  local s="$1" v
+  for v in APPLE_DEVELOPER_ID_P12 APPLE_DEVELOPER_ID_P12_PASSWORD APPLE_API_KEY_ID APPLE_API_ISSUER_ID APPLE_API_KEY_P8 \
+    APPLE_ID APPLE_APP_SPECIFIC_PASSWORD; do
+    [[ -n "${!v:-}" ]] && s="${s//"${!v}"/<redacted>}"
+  done
+  printf '%s\n' "$s"
+}
+show_tail() { redact "$(tail -n 20 "$1" 2>/dev/null || true)" >&2; }
+is_uuid() { [[ "$1" =~ ^[0-9A-Fa-f]{8}-([0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}$ ]]; }
+elapsed() { printf '%d분 %02d초' $(((SECONDS - START) / 60)) $(((SECONDS - START) % 60)); }
+
+# --wait 없이 제출해 id 부터 받는다. --wait --timeout 은 시간이 넘으면 id 없는 오류 JSON 만 남겨 (2026-11-17 첫 CI 실행),
+# 처리가 느린 새 계정의 첫 제출들을 견디지 못했다. id 는 바로 출력해 실패해도 맥에서 조회할 수 있게 한다
+xcrun notarytool submit "$WORK/submit.zip" "${NOTARY_AUTH[@]}" --output-format json \
+  > "$WORK/submit.json" 2> "$WORK/submit.err" || true
 SUBMISSION="$(plutil -extract id raw -o - "$WORK/submit.json" 2>/dev/null || true)"
-echo "공증 결과: $STATUS ${SUBMISSION:+(submission $SUBMISSION)}"
+if ! is_uuid "$SUBMISSION"; then
+  echo "공증 제출 실패: 제출 id 를 받지 못했습니다 (notarization submit failed, no submission id). notarytool 출력 끝부분:" >&2
+  show_tail "$WORK/submit.json"
+  show_tail "$WORK/submit.err"
+  exit 1
+fi
+echo "공증 제출: $SUBMISSION"
+
+# 결과가 나올 때까지 NOTARY_POLL_SECONDS 마다 상태를 묻는다. 상태가 바뀔 때와 5분마다 한 줄씩 남긴다
+START=$SECONDS
+DEADLINE=$((START + NOTARY_WAIT_MINUTES * 60))
+STATUS="" LAST_BEAT=$START FAILURES=0
+while :; do
+  if xcrun notarytool info "$SUBMISSION" "${NOTARY_AUTH[@]}" --output-format json \
+    > "$WORK/info.json" 2> "$WORK/info.err"; then
+    FAILURES=0
+    NOW="$(plutil -extract status raw -o - "$WORK/info.json" 2>/dev/null || echo unknown)"
+  else
+    FAILURES=$((FAILURES + 1))
+    echo "공증 상태 조회 실패 (notarytool info failed, $FAILURES/5) - submission $SUBMISSION" >&2
+    if ((FAILURES >= 5)); then
+      show_tail "$WORK/info.err"
+      echo "공증 상태를 5번 연속 조회하지 못했습니다 (giving up) - submission $SUBMISSION; check with: xcrun notarytool info $SUBMISSION" >&2
+      exit 1
+    fi
+    NOW="${STATUS:-unknown}"
+  fi
+  case "$NOW" in Accepted | Invalid | Rejected) STATUS="$NOW"; break ;; esac
+  if [[ "$NOW" != "$STATUS" ]] || ((SECONDS - LAST_BEAT >= 300)); then
+    echo "공증 대기 중 (waiting): $(elapsed) 경과, 상태 $NOW - submission $SUBMISSION"
+    LAST_BEAT=$SECONDS
+  fi
+  STATUS="$NOW"
+  REMAINING=$((DEADLINE - SECONDS))
+  if ((REMAINING <= 0)); then
+    echo "공증이 아직 진행 중입니다 (still in progress) - submission $SUBMISSION; re-run the job later or check with: xcrun notarytool info $SUBMISSION" >&2
+    exit 1
+  fi
+  sleep $((REMAINING < NOTARY_POLL_SECONDS ? REMAINING : NOTARY_POLL_SECONDS))
+done
+echo "공증 결과: $STATUS (submission $SUBMISSION, $(elapsed))"
 if [[ "$STATUS" != Accepted ]]; then
-  [[ -n "$SUBMISSION" ]] && xcrun notarytool log "$SUBMISSION" "${NOTARY_AUTH[@]}" || true
+  # notarytool log 에는 검증한 UUID 만 넘긴다
+  xcrun notarytool log "$SUBMISSION" "${NOTARY_AUTH[@]}" || true
   exit 1
 fi
 
