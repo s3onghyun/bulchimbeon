@@ -214,6 +214,8 @@ final class UpdateController: ObservableObject {
         } catch {
             return fail(.replace)
         }
+        try? fm.removeItem(at: staging)
+        try? fm.removeItem(at: work)
         DutyController.shared.relaunch()
     }
 
