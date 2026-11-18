@@ -328,6 +328,23 @@ public enum UpdateInstaller {
         return nil
     }
 
+    /// 압축을 풀기 전 zip 목록 검사. `names` 는 `zipinfo -1`, `long` 은 `zipinfo -s-h-t` 의 출력 (같은 순서로 한 줄에 한 항목).
+    /// 모든 항목이 `Bulchimbeon.app/` 아래 (ditto 의 AppleDouble `._Bulchimbeon.app`, `__MACOSX/` 도 허용) 의 일반 파일이나
+    /// 폴더여야 한다. 절대 경로, `..`, 빈 경로 조각, 심볼릭 링크·장치 등 다른 종류의 항목이 하나라도 있으면 `.unzip`.
+    public static func zipListingProblem(names: String, long: String) -> Failure? {
+        let names = names.split(separator: "\n"), modes = long.split(separator: "\n").map { $0.prefix(1) }
+        guard !names.isEmpty, names.count == modes.count else { return .unzip }
+        for (name, mode) in zip(names, modes) {
+            guard mode == "-" || mode == "d", !name.hasPrefix("/") else { return .unzip }
+            var parts = name.split(separator: "/", omittingEmptySubsequences: false)
+            if mode == "d", parts.last == "" { parts.removeLast() }
+            guard let top = parts.first, ["Bulchimbeon.app", "._Bulchimbeon.app", "__MACOSX"].contains(top),
+                  !parts.contains(where: { $0.isEmpty || $0 == "." || $0 == ".." || $0.contains("\\") })
+            else { return .unzip }
+        }
+        return nil
+    }
+
     /// 코드 서명에서 읽은 것 (Security 프레임워크)
     public struct Signature: Equatable, Sendable {
         public var valid: Bool
