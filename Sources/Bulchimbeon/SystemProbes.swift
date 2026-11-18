@@ -37,12 +37,16 @@ enum SystemProbes {
     /// `pmset -a disablesleep 1` + 당직 감시병(LidCommands.enable). 관리자 암호 프롬프트가 뜬다.
     /// 취소와 승인 장치의 실패를 가려 돌려준다 (LidApproval).
     ///
-    /// 보안: 명령에 들어가는 가변 값은 이 앱의 PID(정수)와 셸 인용한 정지 플래그 경로뿐이다.
+    /// 보안: 명령에 들어가는 가변 값은 이 앱의 PID(정수), 셸 인용한 정지 플래그 경로, 셸 인용한 이 앱의 시작 시각뿐이다.
     /// 감시병은 앱이 강제 종료되거나 근무 종료 플래그가 생기면 5초 안에 원복한다. 정지 플래그는 안전한 방향(`disablesleep 0`)으로만 쓸 수 있다.
     static func enableLidSleep() -> LidApproval.Outcome {
         guard let stopSignal = lidStopSignalURL() else { return .failed(.stopSignal) }
         try? FileManager.default.removeItem(at: stopSignal) // PID 재사용 전의 낡은 정지 신호
-        let outcome = runAdmin(LidCommands.enable(pid: getpid(), stopSignal: stopSignal.path), disablesSleep: true)
+        // 감시병이 PID 재사용에 속지 않도록 시작 시각도 넘긴다. 읽지 못하거나 허용 글자 밖이면 관리자 명령을 보내지 않는다.
+        guard let output = run(ProcessStartTime.psPath, ProcessStartTime.psArguments(getpid()), environment: ProcessStartTime.psEnvironment),
+              let started = ProcessStartTime(psOutput: output)
+        else { return .failed(.launch) }
+        let outcome = runAdmin(LidCommands.enable(pid: getpid(), started: started, stopSignal: stopSignal.path), disablesSleep: true)
         guard case .failed = outcome else { return outcome }
         // 결과만 끊기고 명령은 끝까지 돌았으면(덮개 잠자기 꺼짐 + 감시병 있음) 승인으로 보고 이 앱이 원복을 맡는다
         return LidApproval.reconcile(outcome, sleepDisabled: lidSleepDisabledState(), watchdogAlive: lidWatchdogAlive())
@@ -80,7 +84,7 @@ enum SystemProbes {
 
     /// 이 앱의 당직 감시병(root)이 살아 있는지
     static func lidWatchdogAlive() -> Bool {
-        run("/usr/bin/pgrep", ["-f", LidCommands.watchdogPattern(pid: getpid())]) != nil
+        run("/usr/bin/pgrep", LidCommands.watchdogProbeArguments(pid: getpid())) != nil
     }
 
     /// 앱 소유·world-writable 이 아닌 Application Support 디렉터리만 플래그 위치로 허용한다.
@@ -126,7 +130,7 @@ enum SystemProbes {
     /// 재실행 직후: 옛 실행(다른 PID)의 감시병이 아직 살아 있으면, 그 감시병이 원복할 때까지 (최장 약 7초) 기다린다.
     /// 원복이 확인되면 true. 감시병이 없거나(재부팅 등) 시간 안에 원복되지 않으면 false.
     static func waitForPreviousLidWatchdog() -> Bool {
-        guard run("/usr/bin/pgrep", ["-f", LidCommands.anyWatchdogPattern]) != nil else { return false }
+        guard run("/usr/bin/pgrep", LidCommands.anyWatchdogProbeArguments) != nil else { return false }
         for _ in 0..<29 { // 5초 감시 주기 + `pmset -g` 확인 여유
             if lidSleepDisabledState() == false { return true }
             Thread.sleep(forTimeInterval: 0.25)
@@ -147,12 +151,13 @@ enum SystemProbes {
 
     /// 실행 후 stdout 반환. 종료 코드가 0이 아니면 nil.
     @discardableResult
-    static func run(_ path: String, _ arguments: [String]) -> String? {
+    static func run(_ path: String, _ arguments: [String],
+                    environment: [String: String] = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LANG": "C"]) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = arguments
         // 앱 환경(DYLD_*, 사용자 PATH 등)을 넘기지 않는다. LANG=C 로 출력 형식도 고정.
-        process.environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LANG": "C"]
+        process.environment = environment
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice

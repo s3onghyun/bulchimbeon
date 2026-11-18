@@ -533,8 +533,8 @@ import Testing
     @Test func adminCommandTextsDoNotMatchWatchdogPattern() throws {
         let regex = try Regex(LidCommands.watchdogPattern(pid: 4321))
         #expect(LidCommands.disable(pid: 4321).contains(regex) == false)
-        #expect(LidCommands.enable(pid: 4321, stopSignal: "/tmp/lid-stop-4321").contains(regex) == false)
-        let script = LidApproval.script(command: LidCommands.enable(pid: 4321, stopSignal: "/tmp/lid-stop-4321"), prompt: "불침번")
+        #expect(LidCommands.enable(pid: 4321, started: Self.sampleStart, stopSignal: "/tmp/lid-stop-4321").contains(regex) == false)
+        let script = LidApproval.script(command: LidCommands.enable(pid: 4321, started: Self.sampleStart, stopSignal: "/tmp/lid-stop-4321"), prompt: "불침번")
         #expect(script.contains(regex) == false, "osascript 인자 전체도 패턴에 걸리면 안 된다")
     }
 
@@ -542,22 +542,119 @@ import Testing
     @Test func anyWatchdogPatternFindsOnlyWatchdogs() throws {
         let regex = try Regex(LidCommands.anyWatchdogPattern)
         #expect("/bin/sh -c while :; do … bulchimbeon-watchdog-4321 /tmp/lid-stop-4321".contains(regex))
-        #expect(LidCommands.enable(pid: 4321, stopSignal: "/tmp/lid-stop-4321").contains(regex) == false)
+        #expect(LidCommands.enable(pid: 4321, started: Self.sampleStart, stopSignal: "/tmp/lid-stop-4321").contains(regex) == false)
         #expect(LidCommands.disable(pid: 4321).contains(regex) == false)
     }
 
     /// 감시병 명령은 root 로 돈다. 신호 처리·`sleep` 대기·교체 방식이 바뀌지 않게 원문의 핵심을 고정한다.
     @Test func watchdogCommandRestoresOnTerminationSignals() {
-        let command = LidCommands.enable(pid: 4321, stopSignal: "/tmp/lid-stop-4321")
+        let command = LidCommands.enable(pid: 4321, started: Self.sampleStart, stopSignal: "/tmp/lid-stop-4321")
         #expect(command.contains(#"trap "/usr/bin/pmset -a disablesleep 0; exit 0" TERM HUP INT; while :; do"#))
         #expect(command.contains("/bin/sleep 5 & wait $!; done"))
         #expect(command.contains("/usr/bin/pkill -KILL -f 'bulchimbeon-watchdo[g]-4321' || true;"),
                 "교체는 신호 처리를 거치지 않는 SIGKILL 이어야 방금 켠 disablesleep 1 이 되돌려지지 않는다")
         #expect(command.hasPrefix("/usr/bin/pmset -a disablesleep 1 && { "))
+        #expect(command.contains(#" || [ "$(echo $(LC_ALL=C TZ=UTC0 /bin/ps -o lstart= -p 4321 2>/dev/null))" != "$2" ]; then"#),
+                "앱은 PID 와 시작 시각으로 알아본다")
+        #expect(command.contains(" 'bulchimbeon-watchdo''g-4321' '/tmp/lid-stop-4321' 'Wed Nov 18 10:29:00 2026' </dev/null"),
+                "시작 시각은 정지 플래그처럼 셸 인용한 세 번째 값이다")
     }
 
-    private static let watchdogTools = ["/bin/sh", "/bin/sleep", "/bin/kill", "/usr/bin/perl", "/usr/bin/pkill", "/usr/bin/pgrep", "/usr/bin/stat"]
+    /// 감시병 셸에 셸 인용해 들어가는 값이라 `ps -o lstart=` 다운 글자만 받는다. 공백은 감시병의 `echo $(…)` 처럼 한 칸으로 모은다.
+    @Test func startTimeAcceptsOnlyPlainPsOutput() {
+        #expect(ProcessStartTime(psOutput: "Sun Nov  8 09:05:01 2026\n")?.value == "Sun Nov 8 09:05:01 2026")
+        #expect(ProcessStartTime(psOutput: "  Wed Nov 18 10:29:00 2026  ")?.value == "Wed Nov 18 10:29:00 2026")
+        for bad in ["", " \n", "Wed Nov 18 10:29:00 2026'; id; '", "$(id)", "Wed;Nov", "Wed\u{00C4}", "Wed-Nov", String(repeating: "a", count: 65)] {
+            #expect(ProcessStartTime(psOutput: bad) == nil, "거절해야 함: \(bad)")
+        }
+        #expect(ProcessStartTime.psArguments(4321) == ["-o", "lstart=", "-p", "4321"])
+        #expect(ProcessStartTime.psEnvironment["TZ"] == "UTC0" && ProcessStartTime.psEnvironment["LC_ALL"] == "C",
+                "앱과 감시병이 같은 시간대·로케일로 읽어야 시간대가 바뀌어도 같은 글자가 나온다")
+    }
+
+    static let sampleStart = ProcessStartTime(psOutput: "Wed Nov 18 10:29:00 2026")!
+
+    /// 감시병 셸과 같은 환경(`LC_ALL=C TZ=UTC0`)으로 stand-in 앱의 시작 시각을 읽는다.
+    static func startTime(_ pid: Int32) async throws -> ProcessStartTime {
+        let env = ProcessStartTime.psEnvironment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+        let output = try await Child.run("/usr/bin/env", ["-i"] + env + [ProcessStartTime.psPath] + ProcessStartTime.psArguments(pid)).output
+        return try #require(ProcessStartTime(psOutput: output))
+    }
+
+    private static let watchdogTools = ["/bin/sh", "/bin/sleep", "/bin/kill", "/bin/ps", "/usr/bin/env", "/usr/bin/perl", "/usr/bin/pkill", "/usr/bin/pgrep", "/usr/bin/stat"]
         .allSatisfy { FileManager.default.isExecutableFile(atPath: $0) }
+
+    /// 감시병 생존 확인은 root 소유 프로세스만 본다. 같은 사용자가 인자에 표식을 넣은 프로세스는 감시병이 아니다.
+    /// root 가 아닌 사용자로 돌아야 의미가 있다 (리눅스·macOS 모두 root 없이 돈다).
+    @Test(.enabled(if: watchdogTools && getuid() != 0)) func aliveProbeIgnoresSameUserImpostor() async throws {
+        let pid = getpid()
+        let impostor = try Child("/usr/bin/perl", ["-e", "sleep 30", "bulchimbeon-watchdog-\(pid)"])
+        defer { impostor.forceKill() }
+        try await Task.sleep(for: .milliseconds(200))
+
+        let unscoped = try await Child.run("/usr/bin/pgrep", ["-f", LidCommands.watchdogPattern(pid: pid)]).output
+            .split(separator: "\n").compactMap { Int32($0) }
+        #expect(unscoped.contains(impostor.pid), "전제: 소유자를 보지 않는 pgrep -f 는 가짜에 속는다")
+
+        let alive = try await Child.run("/usr/bin/pgrep", LidCommands.watchdogProbeArguments(pid: pid))
+        #expect(alive.status != 0 && alive.output.isEmpty, "root 감시병이 없으면 생존 확인은 PID 를 돌려주지 않아야 한다")
+        let any = try await Child.run("/usr/bin/pgrep", LidCommands.anyWatchdogProbeArguments).output
+            .split(separator: "\n").compactMap { Int32($0) }
+        #expect(!any.contains(impostor.pid), "옛 감시병 찾기도 같은 사용자의 가짜를 세면 안 된다")
+    }
+
+    /// 앱이 SIGKILL 로 끝난 뒤 다른 프로세스가 같은 PID 를 받은 상황: PID 는 살아 있지만 시작 시각이 다르다.
+    /// 감시병은 다음 점검(5초 안)에 원복해야 한다. 리눅스에서도 돈다.
+    @Test(.enabled(if: watchdogTools)) func watchdogRestoresWhenAppStartTimeDiffers() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let (fakePmset, log) = try Self.fakePmset(in: dir)
+
+        let squatter = try Child("/bin/sleep", ["60"])
+        defer { squatter.forceKill() }
+        let other = try #require(ProcessStartTime(psOutput: "Thu Jan 1 00:00:00 1970"))
+
+        let shell = try Self.adminShell(LidCommands.enable(pid: squatter.pid, started: other,
+                                                           stopSignal: dir.appendingPathComponent("lid-stop").path, pmset: fakePmset.path))
+        try await shell.wait()
+        #expect(shell.status == 0)
+
+        var restored = false
+        for _ in 0..<24 { // 6초
+            try await Task.sleep(for: .milliseconds(250))
+            if (try? String(contentsOf: log, encoding: .utf8))?.contains("disablesleep 0") == true { restored = true; break }
+        }
+        #expect(restored, "같은 PID 라도 시작 시각이 다르면 감시병이 disablesleep 0 을 실행해야 한다")
+        #expect(squatter.isRunning, "PID 를 쥔 프로세스가 살아 있는 동안에도 원복해야 한다")
+    }
+
+    /// 시작 시각이 맞으면 앱이 살아 있는 동안 원복하지 않고 (5초 점검을 한 번 넘겨 확인), 앱이 죽으면 원복한다. 리눅스에서도 돈다.
+    @Test(.enabled(if: watchdogTools)) func watchdogKeepsLidSleepOffWhileTheSameAppRuns() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let (fakePmset, log) = try Self.fakePmset(in: dir)
+
+        let app = try Child("/bin/sleep", ["60"])
+        defer { app.forceKill() }
+
+        let shell = try Self.adminShell(LidCommands.enable(pid: app.pid, started: try await Self.startTime(app.pid),
+                                                           stopSignal: dir.appendingPathComponent("lid-stop").path, pmset: fakePmset.path))
+        try await shell.wait()
+        #expect(shell.status == 0)
+        try await Task.sleep(for: .milliseconds(6500))
+        #expect(try String(contentsOf: log, encoding: .utf8) == "-a disablesleep 1\n", "같은 앱이 살아 있으면 원복하지 않는다")
+
+        app.forceKill()
+        try await app.wait()
+        var restored = false
+        for _ in 0..<16 {
+            try await Task.sleep(for: .milliseconds(500))
+            if (try? String(contentsOf: log, encoding: .utf8))?.contains("disablesleep 0") == true { restored = true; break }
+        }
+        #expect(restored, "앱이 죽으면 감시병이 원복해야 한다")
+    }
 
     /// 실측 (2026-10-28, 0.10.0~0.10.1): 덮개 승인이 매번 "거부"로 기록됐다. 암호를 넣은 뒤 관리자 명령의 pkill 이
     /// 그 명령을 인자로 든 osascript 를 죽였기 때문이다. osascript 대역(인자에 AppleScript 원문)과
@@ -575,7 +672,7 @@ import Testing
         let app = try Child("/bin/sleep", ["60"])
         defer { app.forceKill() }
 
-        let command = LidCommands.enable(pid: app.pid, stopSignal: dir.appendingPathComponent("lid-stop").path,
+        let command = LidCommands.enable(pid: app.pid, started: try await Self.startTime(app.pid), stopSignal: dir.appendingPathComponent("lid-stop").path,
                                          pmset: fakePmset.path)
         let script = LidApproval.script(command: command, prompt: "test")
         // `osascript -e <script>` 처럼 인자에 원문을 든 채 기다리는 대역 (perl 은 자식 없이 자기 인자를 그대로 둔다).
@@ -635,7 +732,7 @@ import Testing
         let app = try Child("/bin/sleep", ["60"])
         defer { app.forceKill() }
 
-        let shell = try Self.adminShell(LidCommands.enable(pid: app.pid, stopSignal: dir.appendingPathComponent("lid-stop").path,
+        let shell = try Self.adminShell(LidCommands.enable(pid: app.pid, started: try await Self.startTime(app.pid), stopSignal: dir.appendingPathComponent("lid-stop").path,
                                                            pmset: fakePmset.path))
         try await shell.wait()
         #expect(shell.status == 0)
@@ -669,7 +766,7 @@ import Testing
         let app = try Child("/bin/sleep", ["60"])
         defer { app.forceKill() }
 
-        let command = LidCommands.enable(pid: app.pid, stopSignal: dir.appendingPathComponent("lid-stop").path, pmset: fakePmset.path)
+        let command = LidCommands.enable(pid: app.pid, started: try await Self.startTime(app.pid), stopSignal: dir.appendingPathComponent("lid-stop").path, pmset: fakePmset.path)
         for _ in 0..<2 {
             let shell = try Self.adminShell(command)
             try await shell.wait()
@@ -705,7 +802,7 @@ import Testing
         defer { app.forceKill() }
 
         let started = Date()
-        let shell = try Child("/bin/sh", ["-c", LidCommands.enable(pid: app.pid, stopSignal: stopSignal.path, pmset: fakePmset.path)])
+        let shell = try Child("/bin/sh", ["-c", LidCommands.enable(pid: app.pid, started: try await Self.startTime(app.pid), stopSignal: stopSignal.path, pmset: fakePmset.path)])
         try await shell.wait()
         #expect(shell.status == 0)
         // 실측 버그: 명령이 감시병을 기다리느라 끝나지 않아 osascript 가 영원히 대기했다
@@ -746,7 +843,7 @@ import Testing
         let app = try Child("/bin/sleep", ["60"])
         defer { app.forceKill() }
 
-        let shell = try Child("/bin/sh", ["-c", LidCommands.enable(pid: app.pid, stopSignal: stopSignal.path, pmset: fakePmset.path)])
+        let shell = try Child("/bin/sh", ["-c", LidCommands.enable(pid: app.pid, started: try await Self.startTime(app.pid), stopSignal: stopSignal.path, pmset: fakePmset.path)])
         try await shell.wait()
         try await Task.sleep(for: .seconds(1))
         #expect(FileManager.default.createFile(atPath: stopSignal.path, contents: nil))
@@ -773,7 +870,7 @@ import Testing
         let app = try Child("/bin/sleep", ["60"])
         defer { app.forceKill() }
 
-        let shell = try Child("/bin/sh", ["-c", LidCommands.enable(pid: app.pid, stopSignal: stopSignal.path, pmset: fakePmset.path)])
+        let shell = try Child("/bin/sh", ["-c", LidCommands.enable(pid: app.pid, started: try await Self.startTime(app.pid), stopSignal: stopSignal.path, pmset: fakePmset.path)])
         try await shell.wait()
         #expect(shell.status == 0)
         try await Task.sleep(for: .seconds(1))
@@ -802,7 +899,7 @@ import Testing
         let app = try Child("/bin/sleep", ["60"])
         defer { app.forceKill() }
 
-        let command = LidCommands.enable(pid: app.pid, stopSignal: stopSignal.path, pmset: fakePmset.path)
+        let command = LidCommands.enable(pid: app.pid, started: try await Self.startTime(app.pid), stopSignal: stopSignal.path, pmset: fakePmset.path)
         for _ in 0..<2 {
             let shell = try Child("/bin/sh", ["-c", command])
             try await shell.wait()

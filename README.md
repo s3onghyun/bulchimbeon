@@ -478,7 +478,7 @@ The app runs `pmset` with admin rights and reads other processes' metadata, so i
 
 - No network access except the once-a-day [update check](#updates), which sends only the app version and can be turned off; no third-party dependencies
 - Updates install only after you click: Homebrew installs go through `brew` in a visible Terminal, zip installs are replaced only after the checksum and code-signature checks pass
-- No shell-injection surface: absolute paths, minimal environment, and only an app PID and a safely quoted app-owned stop-flag path enter the admin command
+- No shell-injection surface: absolute paths, minimal environment, and only an app PID, a safely quoted app-owned stop-flag path and the app's quoted start time enter the admin command
 - The root lid watchdog has no deadline to extend; the app owns all watch timing. A user-owned, non-world-writable empty stop flag can only make it run `pmset -a disablesleep 0`; it never reads the flag, follows it elsewhere, or writes it
 - Never stores or prints other processes' arguments or environment; never reads AI transcripts
 - Hardened runtime, SHA-256 checksums and build provenance for releases, CI actions pinned by commit SHA
