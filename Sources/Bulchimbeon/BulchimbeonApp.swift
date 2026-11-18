@@ -279,7 +279,6 @@ struct DutyMenu: View {
             ForEach(Feedback.choices()) { choice in
                 Button(choice.title()) { sendFeedback(choice) }
             }
-            if let hint = Feedback.emailHint() { Text(hint) }
         }
         Button(L10n.t("불침번 퇴근 (종료)", "Quit Bulchimbeon", "退出 Bulchimbeon")) { NSApp.terminate(nil) }
             .keyboardShortcut("q")

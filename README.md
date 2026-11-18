@@ -504,7 +504,7 @@ BULCHIMBEON_DEBUG=1 dist/Bulchimbeon.app/Contents/MacOS/Bulchimbeon
 Want to help? Start with [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Send feedback from the menu: **💬 Send feedback…** opens a prefilled GitHub issue (app version, macOS version, detected
-agents only) in your browser. The app itself sends nothing.
+agents only) in your browser, or email s3onghyun.hong@gmail.com. The app itself sends nothing.
 
 ### Release (maintainer)
 

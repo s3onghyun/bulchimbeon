@@ -65,7 +65,6 @@ import Testing
     @Test func emptyEmailHidesMailChoice() {
         #expect(Feedback.choices(email: "") == [.githubIssue])
         #expect(Feedback.mailURL(Self.env(), email: "") == nil)
-        #expect(Feedback.emailHint(email: "", .en) == "An email option comes in a later version.")
         // 올바르지 않은 주소도 숨긴다 (주소에 쿼리를 끼워 넣을 수 없다)
         #expect(Feedback.choices(email: "a@b.com?cc=x@y.com") == [.githubIssue])
         #expect(Feedback.choices(email: "not an email") == [.githubIssue])
@@ -74,14 +73,19 @@ import Testing
     @Test func emailShowsMailChoice() throws {
         let email = "feedback@example.com"
         #expect(Feedback.choices(email: email) == [.githubIssue, .email])
-        #expect(Feedback.emailHint(email: email, .en) == nil)
         let url = try #require(Feedback.mailURL(Self.env(), email: email, .en))
         #expect(url.absoluteString.hasPrefix("mailto:feedback@example.com?subject=%5BFeedback%5D%20&body=%23%23%23%20What%20happened%3F"))
         let items = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
         #expect(items.first { $0.name == "body" }?.value == Feedback.body(Self.env(), .en))
     }
 
-    @Test func shippedContactIsEmptyOrValid() {
-        #expect(FeedbackContact.email.isEmpty || Feedback.isValidEmail(FeedbackContact.email))
+    @Test func shippedContactOffersMail() throws {
+        #expect(FeedbackContact.email == "s3onghyun.hong@gmail.com")
+        #expect(Feedback.choices() == [.githubIssue, .email])
+        let url = try #require(Feedback.mailURL(Self.env(), .en))
+        #expect(url.absoluteString.hasPrefix("mailto:s3onghyun.hong@gmail.com?subject="))
+        let items = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+        #expect(items.first { $0.name == "subject" }?.value == Feedback.title(.en))
+        #expect(items.first { $0.name == "body" }?.value == Feedback.body(Self.env(), .en))
     }
 }

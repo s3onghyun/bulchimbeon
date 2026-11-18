@@ -498,7 +498,7 @@ systemd 257 이상에서는 logind `block` 잠금이 이를 막지만, 내가 �
 버그 신고(🚨 근무 태도 불량 신고), 에이전트 추가 요청, 번역 수정, 대사·스프라이트 아이디어 모두 환영합니다.
 처음이라면 [`good first issue`](https://github.com/s3onghyun/bulchimbeon/labels/good%20first%20issue) 부터 → [CONTRIBUTING.md](CONTRIBUTING.md)
 
-메뉴에서 의견을 보낼 수 있습니다: **💬 의견 보내기…** 가 앱 버전·macOS 버전·감지된 에이전트만 미리 채운 GitHub 이슈를 브라우저로 엽니다. 앱은 아무것도 보내지 않습니다.
+메뉴에서 의견을 보낼 수 있습니다: **💬 의견 보내기…** 가 앱 버전·macOS 버전·감지된 에이전트만 미리 채운 GitHub 이슈를 브라우저로 엽니다. s3onghyun.hong@gmail.com 으로 메일을 보내도 됩니다. 앱은 아무것도 보내지 않습니다.
 
 ## 주의
 

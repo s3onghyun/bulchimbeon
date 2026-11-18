@@ -198,7 +198,7 @@ brew update && brew upgrade --cask bulchimbeon
 
 欢迎提交 Bug（"🚨 小兵站岗态度不端"）、新代理识别请求、台词与像素画创意，以及**对本翻译的改进**：[CONTRIBUTING.md](CONTRIBUTING.md)
 
-可以从菜单发送反馈：**💬 发送反馈…** 会在浏览器中打开一个只预填了应用版本、macOS 版本和检测到的代理的 GitHub Issue。应用本身不会发送任何内容。
+可以从菜单发送反馈：**💬 发送反馈…** 会在浏览器中打开一个只预填了应用版本、macOS 版本和检测到的代理的 GitHub Issue，也可以发邮件到 s3onghyun.hong@gmail.com。应用本身不会发送任何内容。
 
 ## 许可证
 

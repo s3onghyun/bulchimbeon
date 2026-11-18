@@ -1,9 +1,8 @@
 import Foundation
 
-/// 의견 보내기의 메일 대체 경로 주소. 이 한 줄만 바꾸면 메뉴에 "메일로 보내기" 가 생긴다.
-/// 비어 있으면 메일 항목을 숨기고 다음 버전에 생긴다는 안내 한 줄만 보인다.
+/// 의견 보내기의 메일 대체 경로 주소 (공개 주소). 비어 있거나 올바르지 않으면 메일 항목을 숨긴다.
 public enum FeedbackContact {
-    public static let email = ""
+    public static let email = "s3onghyun.hong@gmail.com"
 }
 
 /// 의견에 붙는 환경 정보. 앱 버전·OS 버전·카탈로그 에이전트 이름만 담는다
@@ -55,12 +54,6 @@ public enum Feedback {
     /// 메뉴에 보일 선택지. 메일 주소가 없거나 올바르지 않으면 GitHub 만.
     public static func choices(email: String = FeedbackContact.email) -> [FeedbackChoice] {
         isValidEmail(email) ? [.githubIssue, .email] : [.githubIssue]
-    }
-
-    /// 메일 항목이 숨겨졌을 때 보일 한 줄. 메일 주소가 있으면 nil.
-    public static func emailHint(email: String = FeedbackContact.email, _ lang: L10n.Language = L10n.language) -> String? {
-        isValidEmail(email) ? nil
-            : L10n.t("메일로 보내기는 다음 버전에 생겨요.", "An email option comes in a later version.", "邮件方式将在后续版本中提供。", lang)
     }
 
     public static func privacyLine(_ lang: L10n.Language = L10n.language) -> String {
