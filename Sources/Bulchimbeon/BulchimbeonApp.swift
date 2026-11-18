@@ -292,7 +292,6 @@ struct DutyMenu: View {
             appVersion: info?["CFBundleShortVersionString"] as? String,
             build: info?["CFBundleVersion"] as? String,
             os: ProcessInfo.processInfo.operatingSystemVersion,
-            macModel: SystemProbes.macModel(),
             agents: duty.agents.filter { $0.value > 0 }.map(\.key))
         let url: URL? = switch choice {
         case .githubIssue: Feedback.issueURL(env)

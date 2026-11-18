@@ -6,16 +6,15 @@ import Testing
 @Suite struct FeedbackTests {
     private static let os = OperatingSystemVersion(majorVersion: 26, minorVersion: 1, patchVersion: 0)
 
-    private static func env(model: String? = "Mac15,3", agents: [AgentKind] = AgentCatalog.builtIn.prefix(2).map { $0 }
+    private static func env(agents: [AgentKind] = AgentCatalog.builtIn.prefix(2).map { $0 }
                             + AgentCatalog.customKinds(["secret-proj"])) -> FeedbackEnvironment {
-        FeedbackEnvironment(appVersion: "0.12.7", build: "42", os: os, macModel: model, agents: agents)
+        FeedbackEnvironment(appVersion: "0.12.7", build: "42", os: os, agents: agents)
     }
 
     @Test func bodyHasOnlyVersionAndOSFacts() {
         let body = Feedback.body(Self.env(), .en)
         #expect(body.contains("- Bulchimbeon 0.12.7 (build 42)"))
         #expect(body.contains("- macOS 26.1.0"))
-        #expect(body.contains("- Mac Mac15,3"))
         #expect(body.contains("- Agents: Claude Code, Codex, custom"))
         #expect(body.contains("### What happened?"))
         // 사용자 지정 에이전트 이름(사용자가 정한 문자열)·경로·사용자·호스트 정보는 없다
@@ -28,13 +27,10 @@ import Testing
     }
 
     @Test func untrustedValuesAreDroppedNotTrimmed() {
-        let e = FeedbackEnvironment(appVersion: "1.0 /Users/me", build: "a&b=c", os: Self.os,
-                                    macModel: "MacBookPro18,3\n/Users/me", agents: [])
+        let e = FeedbackEnvironment(appVersion: "1.0 /Users/me", build: "a&b=c", os: Self.os, agents: [])
         #expect(e.appVersion == "dev")
         #expect(e.build == "?")
-        #expect(e.macModel == nil)
         let body = Feedback.body(e, .en)
-        #expect(!body.contains("- Mac "))
         #expect(body.contains("- Agents: none detected"))
         #expect(!body.contains("/Users"))
     }
@@ -49,7 +45,7 @@ import Testing
             let url = Feedback.issueURL(Self.env(agents: AgentCatalog.builtIn), lang)
             let s = url.absoluteString
             #expect(s.hasPrefix("https://github.com/s3onghyun/bulchimbeon/issues/new?title="))
-            #expect(Feedback.body(Self.env(agents: AgentCatalog.builtIn), lang).utf8.count < Feedback.maxBodyBytes)
+            #expect(Feedback.body(Self.env(agents: AgentCatalog.builtIn), lang).utf8.count < 2000)
             #expect(s.utf8.count < 8000)
             // 쿼리에는 영숫자·`-._~`·`%XX` 와 구분자만
             let query = try #require(s.split(separator: "?", maxSplits: 1).last)

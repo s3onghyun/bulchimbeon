@@ -6,23 +6,21 @@ public enum FeedbackContact {
     public static let email = ""
 }
 
-/// 의견에 붙는 환경 정보. 앱 버전·OS 버전·맥 기종·카탈로그 에이전트 이름만 담는다
+/// 의견에 붙는 환경 정보. 앱 버전·OS 버전·카탈로그 에이전트 이름만 담는다
 /// (경로·사용자 이름·호스트 이름·작업 내용은 담지 않는다). 값은 만들 때 허용 문자로 거른다.
 public struct FeedbackEnvironment: Equatable, Sendable {
     public let appVersion: String
     public let build: String
     public let osVersion: String
-    public let macModel: String?
     public let agents: [String]
 
     /// 에이전트 이름은 최대 이 개수까지 (본문 길이 제한)
     public static let maxAgents = 8
 
-    public init(appVersion: String?, build: String?, os: OperatingSystemVersion, macModel: String?, agents: [AgentKind]) {
+    public init(appVersion: String?, build: String?, os: OperatingSystemVersion, agents: [AgentKind]) {
         self.appVersion = Self.clean(appVersion, allowed: "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-+") ?? "dev"
         self.build = Self.clean(build, allowed: "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-+") ?? "?"
         self.osVersion = "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)"
-        self.macModel = Self.clean(macModel, allowed: "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ,")
         // 사용자 지정 에이전트 이름은 사용자가 정한 문자열이라 이름 대신 "custom" 으로만 적는다
         let names = agents.map { $0.id.hasPrefix("custom:") ? "custom" : $0.displayName }
         self.agents = Array(Set(names)).sorted().prefix(Self.maxAgents).map { $0 }
@@ -53,8 +51,6 @@ public enum FeedbackChoice: String, CaseIterable, Identifiable, Sendable {
 /// 브라우저나 메일 앱을 열 뿐이고, 보내는 것은 사용자가 거기서 직접 한다.
 public enum Feedback {
     public static let newIssue = ReleaseURLs.repository + "/issues/new"
-    /// 본문 상한 (GitHub 주소 길이 제한 안쪽)
-    public static let maxBodyBytes = 2000
 
     /// 메뉴에 보일 선택지. 메일 주소가 없거나 올바르지 않으면 GitHub 만.
     public static func choices(email: String = FeedbackContact.email) -> [FeedbackChoice] {
@@ -78,7 +74,7 @@ public enum Feedback {
     }
 
     public static func body(_ env: FeedbackEnvironment, _ lang: L10n.Language = L10n.language) -> String {
-        var lines = [
+        [
             L10n.t("### 무슨 일이 있었나요?", "### What happened?", "### 发生了什么？", lang),
             "",
             "",
@@ -88,10 +84,8 @@ public enum Feedback {
             "### Environment",
             "- Bulchimbeon \(env.appVersion) (build \(env.build))",
             "- macOS \(env.osVersion)",
-        ]
-        if let model = env.macModel { lines.append("- Mac \(model)") }
-        lines.append("- Agents: " + (env.agents.isEmpty ? "none detected" : env.agents.joined(separator: ", ")))
-        return lines.joined(separator: "\n")
+            "- Agents: " + (env.agents.isEmpty ? "none detected" : env.agents.joined(separator: ", ")),
+        ].joined(separator: "\n")
     }
 
     public static func issueURL(_ env: FeedbackEnvironment, _ lang: L10n.Language = L10n.language) -> URL {
