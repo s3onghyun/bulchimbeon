@@ -274,7 +274,30 @@ struct DutyMenu: View {
         Button(L10n.t("불침번 v\(Self.version) · GitHub", "Bulchimbeon v\(Self.version) · GitHub", "Bulchimbeon v\(Self.version) · GitHub")) {
             NSWorkspace.shared.open(Self.repoURL)
         }
+        Menu(L10n.t("💬 의견 보내기…", "💬 Send feedback…", "💬 发送反馈…")) {
+            Text(Feedback.privacyLine())
+            ForEach(Feedback.choices()) { choice in
+                Button(choice.title()) { sendFeedback(choice) }
+            }
+            if let hint = Feedback.emailHint() { Text(hint) }
+        }
         Button(L10n.t("불침번 퇴근 (종료)", "Quit Bulchimbeon", "退出 Bulchimbeon")) { NSApp.terminate(nil) }
             .keyboardShortcut("q")
+    }
+
+    /// 브라우저나 메일 앱을 미리 채운 내용으로 열 뿐, 앱은 아무것도 보내지 않는다
+    private func sendFeedback(_ choice: FeedbackChoice) {
+        let info = Bundle.main.infoDictionary
+        let env = FeedbackEnvironment(
+            appVersion: info?["CFBundleShortVersionString"] as? String,
+            build: info?["CFBundleVersion"] as? String,
+            os: ProcessInfo.processInfo.operatingSystemVersion,
+            macModel: SystemProbes.macModel(),
+            agents: duty.agents.filter { $0.value > 0 }.map(\.key))
+        let url: URL? = switch choice {
+        case .githubIssue: Feedback.issueURL(env)
+        case .email: Feedback.mailURL(env)
+        }
+        if let url { NSWorkspace.shared.open(url) }
     }
 }

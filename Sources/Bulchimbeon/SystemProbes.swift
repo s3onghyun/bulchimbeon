@@ -6,6 +6,15 @@ import IOKit.ps
 import IOKit.pwr_mgt
 
 enum SystemProbes {
+    /// 맥 기종 식별자 (예: `Mac15,3`). 의견 보내기 본문에만 쓴다.
+    static func macModel() -> String? {
+        var size = 0
+        guard sysctlbyname("hw.model", nil, &size, nil, 0) == 0, size > 1, size <= 64 else { return nil }
+        var buffer = [CChar](repeating: 0, count: size)
+        guard sysctlbyname("hw.model", &buffer, &size, nil, 0) == 0 else { return nil }
+        return String(cString: buffer)
+    }
+
     /// 내장 배터리 상태. 데스크톱 맥이면 nil.
     static func battery() -> BatteryStatus? {
         guard let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
