@@ -260,6 +260,59 @@ import Testing
         #expect(UpdateInstaller.locationProblem(bundlePath: "/Users/me/src/bulchimbeon/.build/debug", writable: true) == .notAnApp)
     }
 
+    @Test func zipListingAllowsOnlyTheAppBundle() {
+        func problem(_ entries: [(mode: String, name: String)]) -> UpdateInstaller.Failure? {
+            UpdateInstaller.zipListingProblem(names: entries.map { $0.name + "\n" }.joined(),
+                                              long: entries.map { "\($0.mode)  2.0 unx  1 b- defN 26-Nov-18 10:00 \($0.name)\n" }.joined())
+        }
+        let good = [("drwxr-xr-x", "Bulchimbeon.app/"), ("-rw-r--r--", "Bulchimbeon.app/Contents/Info.plist"),
+                    ("-rw-r--r--", "._Bulchimbeon.app"), ("-rw-r--r--", "Bulchimbeon.app/Contents/a b.txt")]
+        #expect(problem(good) == nil)
+        for bad in [("-rw-r--r--", "../escape.txt"), ("-rw-r--r--", "/etc/escape"), ("-rw-r--r--", "Bulchimbeon.app/../x"),
+                    ("-rw-r--r--", "Bulchimbeon.app//x"), ("-rw-r--r--", "Other.app/x"), ("-rw-r--r--", "Bulchimbeon.app\\..\\x"),
+                    ("lrwxrwxrwx", "Bulchimbeon.app/link"), ("-rw-r--r--", "Bulchimbeon.app/Contents/")] {
+            #expect(problem(good + [bad]) == .unzip, "\(bad)")
+        }
+        #expect(problem([]) == .unzip)
+        // 목록 두 개의 줄 수가 다르면 거절
+        #expect(UpdateInstaller.zipListingProblem(names: "Bulchimbeon.app/\n", long: "") == .unzip)
+    }
+
+    /// 실제 zip (python3 로 만든 것) 을 `zipinfo` 로 읽어 검사한다: `..` 항목과 바깥을 가리키는 심볼릭 링크 + 그 링크를
+    /// 거쳐 쓰는 항목이 있으면 `.unzip`. 앱은 이 검사를 통과한 zip 만 푼다.
+    @Test(.enabled(if: ["/usr/bin/python3", "/usr/bin/zipinfo"].allSatisfy(FileManager.default.isExecutableFile)))
+    func realZipWithEscapingEntriesIsRejected() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("bulchimbeon-zip-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let script = """
+        import stat, sys, zipfile
+        def add(z, name, data, mode):
+            info = zipfile.ZipInfo(name); info.create_system = 3; info.external_attr = mode << 16; z.writestr(info, data)
+        for path, evil in ((sys.argv[1], False), (sys.argv[2], True)):
+            with zipfile.ZipFile(path, "w") as z:
+                add(z, "Bulchimbeon.app/", b"", stat.S_IFDIR | 0o755)
+                add(z, "Bulchimbeon.app/Contents/Info.plist", b"<plist/>", stat.S_IFREG | 0o644)
+                if evil:
+                    add(z, "../escape.txt", b"x", stat.S_IFREG | 0o644)
+                    add(z, "Bulchimbeon.app/link", sys.argv[3].encode(), stat.S_IFLNK | 0o777)
+                    add(z, "Bulchimbeon.app/link/escape.txt", b"x", stat.S_IFREG | 0o644)
+        """
+        let good = dir.appendingPathComponent("good.zip"), evil = dir.appendingPathComponent("evil.zip")
+        let make = try Child("/usr/bin/python3", ["-I", "-c", script, good.path, evil.path, dir.deletingLastPathComponent().path])
+        try await make.wait()
+        #expect(make.status == 0)
+        func listing(_ zip: URL, _ flag: String) async throws -> String {
+            let out = dir.appendingPathComponent("\(zip.lastPathComponent)\(flag).txt")
+            let child = try Child("/usr/bin/zipinfo", [flag, zip.path], output: out)
+            try await child.wait()
+            #expect(child.status == 0)
+            return try String(contentsOf: out, encoding: .utf8)
+        }
+        #expect(UpdateInstaller.zipListingProblem(names: try await listing(good, "-1"), long: try await listing(good, "-s-h-t")) == nil)
+        #expect(UpdateInstaller.zipListingProblem(names: try await listing(evil, "-1"), long: try await listing(evil, "-s-h-t")) == .unzip)
+    }
+
     private func signature(id: String? = "io.github.s3onghyun.bulchimbeon", team: String? = nil,
                            hardened: Bool = true, valid: Bool = true) -> UpdateInstaller.Signature {
         UpdateInstaller.Signature(valid: valid, identifier: id, teamIdentifier: team, hardenedRuntime: hardened)

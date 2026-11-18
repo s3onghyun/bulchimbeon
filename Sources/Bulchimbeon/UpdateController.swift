@@ -175,15 +175,24 @@ final class UpdateController: ObservableObject {
         guard UpdateInstaller.checksumMatches(expected: expected, actual: Array(SHA256.hash(data: zip))) else {
             return fail(.checksumMismatch)
         }
-        let zipURL = work.appendingPathComponent(zipName)
-        let unpacked = work.appendingPathComponent("unpacked", isDirectory: true)
+        // 앱 옆이 아니라 새로 만든 개인 임시 폴더 (mkdtemp, 0700) 에서 목록을 검사하고 풀고 검증한다
+        var template = Array((NSTemporaryDirectory() as NSString).appendingPathComponent("bulchimbeon-update.XXXXXX").utf8CString)
+        guard let made = mkdtemp(&template) else { return fail(.unzip) }
+        let staging = URL(fileURLWithPath: String(cString: made), isDirectory: true)
+        defer { try? fm.removeItem(at: staging) }
+        let zipURL = staging.appendingPathComponent(zipName)
+        let unpacked = staging.appendingPathComponent("unpacked", isDirectory: true)
         do {
             try zip.write(to: zipURL)
             try fm.createDirectory(at: unpacked, withIntermediateDirectories: false)
         } catch {
             return fail(.unzip)
         }
-        guard await UpdateFiles.unzip(zipURL, into: unpacked) else { return fail(.unzip) }
+        guard let names = await UpdateFiles.run("/usr/bin/zipinfo", ["-1", zipURL.path]),
+              let long = await UpdateFiles.run("/usr/bin/zipinfo", ["-s-h-t", zipURL.path]),
+              UpdateInstaller.zipListingProblem(names: names, long: long) == nil,
+              await UpdateFiles.run("/usr/bin/ditto", ["-x", "-k", zipURL.path, unpacked.path]) != nil
+        else { return fail(.unzip) }
         let entries = ((try? fm.contentsOfDirectory(atPath: unpacked.path)) ?? []).filter { !$0.hasPrefix(".") && $0 != "__MACOSX" }
         let newApp = unpacked.appendingPathComponent("Bulchimbeon.app", isDirectory: true)
         guard entries == ["Bulchimbeon.app"] else { return fail(.unzip) }
@@ -198,11 +207,15 @@ final class UpdateController: ObservableObject {
 
         phase = .installing
         do {
-            // 새 번들의 속성만 쓴다 (예전 번들의 확장 속성을 옮겨 붙이지 않음)
-            _ = try fm.replaceItemAt(appURL, withItemAt: newApp, backupItemName: nil, options: [.usingNewMetadataOnly])
+            // 검증을 마친 번들만 앱과 같은 볼륨으로 옮긴 뒤, 새 번들의 속성만 쓴다 (예전 번들의 확장 속성을 옮겨 붙이지 않음)
+            let verified = work.appendingPathComponent("Bulchimbeon.app", isDirectory: true)
+            try fm.moveItem(at: newApp, to: verified)
+            _ = try fm.replaceItemAt(appURL, withItemAt: verified, backupItemName: nil, options: [.usingNewMetadataOnly])
         } catch {
             return fail(.replace)
         }
+        try? fm.removeItem(at: staging)
+        try? fm.removeItem(at: work)
         DutyController.shared.relaunch()
     }
 
@@ -264,18 +277,19 @@ enum UpdateFiles {
         return data
     }
 
-    /// `/usr/bin/ditto -x -k` (절대 경로, 최소 환경, 셸 없음)
-    static func unzip(_ zip: URL, into dir: URL) async -> Bool {
-        await Task.detached { () -> Bool in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
-            process.arguments = ["-x", "-k", zip.path, dir.path]
+    /// 도구 하나 (`zipinfo`, `ditto`; 절대 경로, 최소 환경, 셸 없음). 0 으로 끝나면 표준 출력, 아니면 nil
+    static func run(_ tool: String, _ arguments: [String]) async -> String? {
+        await Task.detached { () -> String? in
+            let process = Process(), pipe = Pipe()
+            process.executableURL = URL(fileURLWithPath: tool)
+            process.arguments = arguments
             process.environment = ["PATH": "/usr/bin:/bin", "LANG": "C"]
-            process.standardOutput = FileHandle.nullDevice
+            process.standardOutput = pipe
             process.standardError = FileHandle.nullDevice
-            do { try process.run() } catch { return false }
+            do { try process.run() } catch { return nil }
+            let out = pipe.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
-            return process.terminationStatus == 0
+            return process.terminationStatus == 0 ? String(decoding: out, as: UTF8.self) : nil
         }.value
     }
 
