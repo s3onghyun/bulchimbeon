@@ -200,7 +200,7 @@ public enum HeatPolicy {
     }
 }
 
-/// 덮개 모드 관리자 명령. 가변 값은 정수 PID와 셸 인용한 사용자 플래그 경로뿐이다.
+/// 덮개 모드 관리자 명령. 가변 값은 정수 PID, 셸 인용한 사용자 플래그 경로, 셸 인용한 앱 시작 시각뿐이다.
 ///
 /// 켤 때 "당직 감시병"을 함께 띄운다: 앱(PID)이 사라지거나 정지 플래그가 생기면 5초 안에 `disablesleep 0` 으로 되돌리는
 /// root 백그라운드 셸. 스크립트는 파일이 아닌 인라인 문자열 — 사용자 권한으로 수정 가능한 파일을
@@ -232,12 +232,16 @@ public enum LidCommands {
     /// (실측 2026-11-13: 신호 처리가 없어 원복 없이 죽었다). 5초 쉬는 `sleep` 을 백그라운드로 돌리고 `wait` 해야
     /// 쉬는 중에도 신호를 바로 처리한다. trap 문구는 셸 전체를 감싼 작은따옴표 안이라 큰따옴표로 묶는다.
     /// 감시병의 표식은 `$0`(실행 중 인자)에만 있고 명령 원문에는 없다 (`markerWord`).
-    public static func enable(pid: Int32, stopSignal: String, pmset: String = "/usr/bin/pmset") -> String {
+    /// 앱은 PID 만이 아니라 PID + 시작 시각(`$2`)으로 알아본다. 앱이 SIGKILL 로 끝난 뒤 5초 안에 다른 프로세스가 같은 PID 를
+    /// 받아도 시작 시각이 달라 원복한다 (`kill -0` 은 root 에게 어느 사용자의 PID 든 살아 있다고 답한다).
+    public static func enable(pid: Int32, started: ProcessStartTime, stopSignal: String, pmset: String = "/usr/bin/pmset") -> String {
         let watch = "trap \"\(pmset) -a disablesleep 0; exit 0\" TERM HUP INT; "
-            + "while :; do if /usr/bin/stat -f %z \"$1\" >/dev/null 2>&1 || ! /bin/kill -0 \(pid) 2>/dev/null; then \(pmset) -a disablesleep 0; exit 0; fi; /bin/sleep 5 & wait $!; done"
+            + "while :; do if /usr/bin/stat -f %z \"$1\" >/dev/null 2>&1 || ! /bin/kill -0 \(pid) 2>/dev/null"
+            + " || [ \"$(echo $(\(ProcessStartTime.psCommand(pid)) 2>/dev/null))\" != \"$2\" ]"
+            + "; then \(pmset) -a disablesleep 0; exit 0; fi; /bin/sleep 5 & wait $!; done"
         let detach = "pipe(my $r, my $w); my $p = fork(); die unless defined $p; "
             + "if ($p) { close $w; <$r>; exit 0 } close $r; POSIX::setsid(); close $w; exec @ARGV"
-        return "\(pmset) -a disablesleep 1 && { /usr/bin/pkill -KILL -f '\(markerPattern(pid))' || true; /usr/bin/perl -MPOSIX -e '\(detach)' /bin/sh -c '\(watch)' \(markerWord(pid)) \(shellQuote(stopSignal)) </dev/null >/dev/null 2>&1; }"
+        return "\(pmset) -a disablesleep 1 && { /usr/bin/pkill -KILL -f '\(markerPattern(pid))' || true; /usr/bin/perl -MPOSIX -e '\(detach)' /bin/sh -c '\(watch)' \(markerWord(pid)) \(shellQuote(stopSignal)) \(shellQuote(started.value)) </dev/null >/dev/null 2>&1; }"
     }
 
     public static func disable(pid: Int32, pmset: String = "/usr/bin/pmset") -> String {
@@ -250,9 +254,42 @@ public enum LidCommands {
     /// 어느 앱 PID 의 감시병이든 찾는 `pgrep -f` 패턴. 재실행 직후 옛 실행의 감시병이 아직 원복하는 중인지 볼 때 쓴다.
     public static let anyWatchdogPattern = "bulchimbeon-watchdo[g]-"
 
+    /// 이 앱의 감시병이 살아 있는지 묻는 `/usr/bin/pgrep` 인자. 진짜 감시병은 늘 root(euid 0)로 돈다.
+    /// `-u 0` 이 없으면 같은 사용자의 아무 프로세스나 인자에 표식을 넣어 "살아 있음"으로 속일 수 있다.
+    public static func watchdogProbeArguments(pid: Int32) -> [String] { ["-u", "0", "-f", watchdogPattern(pid: pid)] }
+
+    /// 어느 앱 PID 의 감시병이든 찾는 `/usr/bin/pgrep` 인자 (root 소유만)
+    public static let anyWatchdogProbeArguments = ["-u", "0", "-f", anyWatchdogPattern]
+
     private static func shellQuote(_ string: String) -> String {
         "'" + string.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
+}
+
+/// 감시병이 앱을 알아보는 시작 시각 (`/bin/ps -o lstart=`). root 명령에 셸 인용해 들어가므로 영숫자·공백·`:` 만 받는다.
+///
+/// 시간대·로케일이 바뀌어도(여행 중 자동 시간대 등) 같은 글자가 나오도록 앱과 감시병 모두 `LC_ALL=C TZ=UTC0` 으로 읽고,
+/// 공백은 한 칸으로 모은다 (감시병 쪽은 따옴표 없는 `echo $(…)` 로 같은 정규화를 한다).
+public struct ProcessStartTime: Equatable, Sendable {
+    public let value: String
+
+    /// `ps -o lstart=` 출력. 비었거나 허용 글자 밖이면 nil (덮개 근무를 켜지 않는다).
+    public init?(psOutput: String) {
+        let words = psOutput.split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "\n" || $0 == "\r" })
+        let value = words.joined(separator: " ")
+        guard !value.isEmpty, value.utf8.count <= 64,
+              value.unicodeScalars.allSatisfy({ ($0.isASCII && ($0.properties.isAlphabetic || ("0"..."9").contains($0))) || $0 == " " || $0 == ":" })
+        else { return nil }
+        self.value = value
+    }
+
+    /// 앱이 자기 시작 시각을 읽을 때: 실행 파일, 인자, 환경
+    public static let psPath = "/bin/ps"
+    public static func psArguments(_ pid: Int32) -> [String] { ["-o", "lstart=", "-p", "\(pid)"] }
+    public static let psEnvironment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LANG": "C", "LC_ALL": "C", "TZ": "UTC0"]
+
+    /// 감시병 셸에서 같은 값을 읽는 명령 (가변 값은 정수 PID 뿐)
+    static func psCommand(_ pid: Int32) -> String { "LC_ALL=C TZ=UTC0 \(psPath) -o lstart= -p \(pid)" }
 }
 
 /// 프로세스별 CPU 사용률을 최근 `window` 초 평균으로 계산한다.
