@@ -63,6 +63,13 @@
 - 같은 사용자 권한으로 이름이 `claude` 인 프로세스를 띄우면 근무를 유지시킬 수 있다 (잠자기 방지 외 영향 없음).
 - Docker 컨테이너·원격(SSH) 서버에서 도는 에이전트는 이 맥의 프로세스가 아니므로 감지하지 않는다.
 
+## 지원 버전 (Supported versions)
+
+보안 수정은 최신 릴리스에만 들어간다. 앱의 업데이트 메뉴나 `brew upgrade` 로 최신 버전을 쓴다.
+Security fixes go into the latest release only; please update before reporting.
+
 ## 취약점 제보
 
 공개 이슈 대신 저장소의 **Security → Report a vulnerability** (GitHub private vulnerability reporting)로 제보해 주세요.
+Please report vulnerabilities privately through **Security → Report a vulnerability**
+(<https://github.com/s3onghyun/bulchimbeon/security/advisories/new>), not in a public issue.
