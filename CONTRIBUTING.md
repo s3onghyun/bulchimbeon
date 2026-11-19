@@ -178,6 +178,7 @@ gh workflow run release.yml --ref main -f run_id=<phase-1 run id>   # phase 2, o
 
 Every release is Developer ID signed and notarized; without the signing secrets phase 1 fails instead of shipping an
 ad-hoc build. The two phases, secret names, the post-enrolment steps and a dry run: [docs/release.md](docs/release.md).
+Why the release and CI are set up this way: [docs/MAINTAINERS.md](docs/MAINTAINERS.md).
 
 The release workflow does not touch the Homebrew tap or the AUR. After tagging, both steps are required:
 
@@ -193,7 +194,7 @@ The release workflow does not touch the Homebrew tap or the AUR. After tagging, 
 ### Be kind
 
 Be respectful and patient with everyone, whatever language they write in. Harassment isn't tolerated. The maintainer
-may remove comments or block accounts that make the project unwelcoming.
+may remove comments or block accounts that make the project unwelcoming. See the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ---
 
@@ -360,6 +361,7 @@ gh workflow run release.yml --ref main -f run_id=<1단계 run id>   # 2단계, A
 
 모든 릴리스는 Developer ID 서명·Apple 공증을 거칩니다. 서명 비밀값이 없으면 ad-hoc 으로 내지 않고 1단계가 실패합니다.
 두 단계, 비밀값 이름, 가입 후 할 일, 수동 점검 실행은 [docs/release.md](docs/release.md) 에 있습니다.
+릴리스와 CI 를 왜 이렇게 두는지는 [docs/MAINTAINERS.md](docs/MAINTAINERS.md) 에 있습니다.
 
 릴리스 워크플로는 Homebrew tap 과 AUR 을 건드리지 않습니다. 태그를 올린 뒤 두 단계는 꼭 해야 합니다:
 
@@ -375,4 +377,4 @@ gh workflow run release.yml --ref main -f run_id=<1단계 run id>   # 2단계, A
 ### 서로 존중해주세요
 
 어떤 언어로 쓰든 모두를 존중하고 너그럽게 대해주세요. 괴롭힘은 허용하지 않습니다. 프로젝트 분위기를 해치는 댓글은
-메인테이너가 지우거나 계정을 차단할 수 있습니다.
+메인테이너가 지우거나 계정을 차단할 수 있습니다. [행동 강령](CODE_OF_CONDUCT.md)을 따릅니다.
