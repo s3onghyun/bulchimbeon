@@ -19,9 +19,34 @@ body:
     validations:
       required: true
   - type: textarea
+    id: steps
+    attributes:
+      label: "Steps to reproduce / 재현 방법"
+      placeholder: |
+        1. Start Claude Code in a terminal / 터미널에서 Claude Code 실행
+        2. Close the lid / 덮개 닫기
+        3. …
+    validations:
+      required: true
+  - type: textarea
     id: expected
     attributes:
-      label: "Expected behavior / 기대한 동작"
+      label: "Expected vs actual behavior / 기대한 동작과 실제 동작"
+      placeholder: "Expected: … / Actual: … — 기대: … / 실제: …"
+    validations:
+      required: true
+  - type: dropdown
+    id: agents
+    attributes:
+      label: "Which agent(s)? / 어떤 에이전트였나요?"
+      multiple: true
+      options:
+        - "Claude Code"
+        - "Codex"
+        - "Gemini CLI"
+        - "Copilot CLI"
+        - "OpenCode"
+        - "Other / 기타 (write it above / 위에 적어주세요)"
     validations:
       required: true
   - type: dropdown
@@ -45,6 +70,7 @@ body:
     id: macos
     attributes:
       label: "macOS version & chip / macOS 버전·칩"
+      description: "e.g. 15.x / 26.x / 27.x, and Apple Silicon or Intel / 예) 15.x / 26.x / 27.x, Apple Silicon 또는 Intel"
       placeholder: "macOS 26.1, Apple Silicon"
     validations:
       required: true
