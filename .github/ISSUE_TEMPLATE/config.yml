@@ -1,7 +1,7 @@
-blank_issues_enabled: true
+blank_issues_enabled: false
 contact_links:
   - name: "💬 Questions & ideas / 提问与建议 / 질문·아이디어"
-    url: https://github.com/s3onghyun/bulchimbeon/discussions
+    url: https://github.com/s3onghyun/bulchimbeon/discussions/categories/q-a
     about: "Ask questions or share ideas in Discussions / 在 Discussions 中提问或分享想法 / Discussions 에서 질문하고 아이디어를 나눠주세요"
   - name: "🔒 Report a security vulnerability / 보안 취약점 비공개 제보"
     url: https://github.com/s3onghyun/bulchimbeon/security/advisories/new

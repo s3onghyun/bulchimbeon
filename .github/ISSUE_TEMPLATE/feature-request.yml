@@ -9,6 +9,17 @@ body:
         Thanks! 🫡 Please check [open issues](https://github.com/s3onghyun/bulchimbeon/issues) first. Ideas must work with no network calls and no third-party dependencies.
         谢谢！请先看看[现有 issue](https://github.com/s3onghyun/bulchimbeon/issues)里有没有类似的。建议需要在不联网、不引入第三方依赖的前提下实现。
         감사합니다! 비슷한 이슈가 있는지 먼저 확인해주세요. 네트워크 통신·서드파티 의존성 없이 가능한 아이디어여야 합니다.
+  - type: textarea
+    id: workflow
+    attributes:
+      label: "Which agent workflow does this serve? / 어떤 에이전트 작업 흐름에 도움이 되나요? / 服务于哪种代理工作流程？"
+      description: |
+        Bulchimbeon's scope is keeping the Mac awake while AI agents work. Tell us which agent and situation this helps.
+        불침번의 범위는 AI 에이전트가 일하는 동안 맥을 깨워 두는 것입니다. 어떤 에이전트·상황에 도움이 되는지 적어주세요.
+        不眠番的范围是在 AI 代理工作时让 Mac 保持唤醒。请说明它对哪个代理、哪种场景有帮助。
+      placeholder: "e.g. Long Codex runs with the lid closed on battery / 예) 배터리로 덮개 닫고 Codex 를 오래 돌릴 때"
+    validations:
+      required: true
   - type: dropdown
     id: kind
     attributes:
