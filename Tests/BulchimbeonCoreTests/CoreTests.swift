@@ -55,21 +55,27 @@ import Testing
         let binLink = AgentCatalog.match(proc("/opt/homebrew/Cellar/node/24.1.0/bin/node", ["node", "/opt/homebrew/bin/copilot"]))
         #expect(binLink?.kind.id == "copilot-cli")
         #expect(binLink?.reason == .script)
-        // 패키지 경로
+        // 패키지 경로 (0.0.39x 부터 bin 은 npm-loader.js)
         let package = AgentCatalog.match(proc("/opt/homebrew/bin/node",
-            ["node", "/opt/homebrew/lib/node_modules/@github/copilot/index.js"]))
+            ["node", "/opt/homebrew/lib/node_modules/@github/copilot/npm-loader.js"]))
         #expect(package?.kind.id == "copilot-cli")
         #expect(package?.reason == .script)
+        // 로더가 띄우는 네이티브 바이너리: argv[0] 이 전체 경로
+        let native = "/opt/homebrew/lib/node_modules/@github/copilot/node_modules/@github/copilot-darwin-arm64/copilot"
+        let child = AgentCatalog.match(proc(native, [native]))
+        #expect(child?.kind.id == "copilot-cli")
+        #expect(child?.reason == .executableName)
     }
 
-    @Test func openCodeBinaryAndPackage() {
+    @Test func openCodeBinaryAndNpmInstall() {
         let binary = AgentCatalog.match(proc("/Users/me/.opencode/bin/opencode", ["opencode"]))
         #expect(binary?.kind.id == "opencode")
         #expect(binary?.reason == .executableName)
-        let package = AgentCatalog.match(proc("/opt/homebrew/bin/node",
-            ["node", "/opt/homebrew/lib/node_modules/opencode-ai/bin/opencode.js"]))
-        #expect(package?.kind.id == "opencode")
-        #expect(package?.reason == .script)
+        // npm 전역 설치: postinstall 이 네이티브 바이너리를 bin/opencode.exe 로 하드링크한다.
+        // node 프로세스가 없고 실행 파일 이름도 다르므로 argv[0] 으로만 판별
+        let npm = AgentCatalog.match(proc("/opt/homebrew/lib/node_modules/opencode-ai/bin/opencode.exe", ["opencode"]))
+        #expect(npm?.kind.id == "opencode")
+        #expect(npm?.reason == .argv0)
     }
 
     @Test func copilotAndOpenCodeLookalikesAreNotAgents() {
