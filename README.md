@@ -548,9 +548,17 @@ tables are self-explanatory) and the [CHANGELOG](CHANGELOG.md).
 ## Contributing
 
 Bug reports ("🚨 soldier misbehaving"), agent requests, translation fixes, and ideas for lines or sprites are
-all welcome. Issues and PRs in English, Korean, Japanese or Chinese are fine. Look for
-[`good first issue`](https://github.com/s3onghyun/bulchimbeon/labels/good%20first%20issue) to get started, and read
-[CONTRIBUTING.md](CONTRIBUTING.md).
+all welcome. Issues and PRs in English, Korean, Japanese or Chinese are fine.
+
+- **Start here:** [open `good first issue`s](https://github.com/s3onghyun/bulchimbeon/issues?q=is%3Aopen+label%3A%22good+first+issue%22). Each lists the files to touch, the commands, when it is done and
+  its size. Comment "I'll take this" on one with no assignee and a maintainer assigns it to you.
+- **Test:** `make test` (macOS) for the Swift app, `gofmt -l . && go vet ./... && go test ./...` (any OS) for the
+  Linux daemon and the shared engine fixtures. Docs and README translations need no build, and several issues can
+  be done without a Mac.
+- **CI on your PR:** after a maintainer approves the run, `test` (macOS: `swift test`, app build, signature check)
+  and `go (linux)` run with a read-only token and no secrets.
+
+Details: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Caution
 

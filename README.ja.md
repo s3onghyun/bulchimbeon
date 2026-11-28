@@ -198,7 +198,13 @@ macOS 13 以降、ユニバーサル（Apple Silicon・Intel）。
 
 ## コントリビュート
 
-バグ報告、エージェント追加のリクエスト、セリフやスプライトのアイデア、そして**この翻訳の改善**も歓迎します: [CONTRIBUTING.md](CONTRIBUTING.md)
+バグ報告、エージェント追加のリクエスト、セリフやスプライトのアイデア、そして**この翻訳の改善**も歓迎します。
+
+- **はじめに:** [オープンな `good first issue`](https://github.com/s3onghyun/bulchimbeon/issues?q=is%3Aopen+label%3A%22good+first+issue%22)。各 issue に触るファイル・コマンド・完了条件・規模が書いてあります。担当者のいない issue に「やります」とコメントすると、メンテナーが担当者に割り当てます。
+- **テスト:** Swift アプリは `make test`（macOS）、Linux デーモンと共有エンジンのフィクスチャは `gofmt -l . && go vet ./... && go test ./...`（どの OS でも）。ドキュメントや README の翻訳はビルド不要で、Mac なしでできる issue もあります。
+- **PR の CI:** メンテナーが実行を承認すると、`test`（macOS: `swift test`、アプリのビルド、署名検証）と `go (linux)` が読み取り専用トークン・シークレットなしで動きます。
+
+詳しくは [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## ライセンス
 

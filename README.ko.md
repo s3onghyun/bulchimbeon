@@ -496,7 +496,15 @@ systemd 257 이상에서는 logind `block` 잠금이 이를 막지만, 내가 �
 ## 기여
 
 버그 신고(🚨 근무 태도 불량 신고), 에이전트 추가 요청, 번역 수정, 대사·스프라이트 아이디어 모두 환영합니다.
-처음이라면 [`good first issue`](https://github.com/s3onghyun/bulchimbeon/labels/good%20first%20issue) 부터 → [CONTRIBUTING.md](CONTRIBUTING.md)
+
+- **시작:** [열린 `good first issue`](https://github.com/s3onghyun/bulchimbeon/issues?q=is%3Aopen+label%3A%22good+first+issue%22). 이슈마다 고칠 파일, 명령, 완료 조건, 크기가 적혀 있다. 담당자가 없는 이슈에
+  "제가 할게요" 댓글을 남기면 메인테이너가 담당자로 지정한다.
+- **테스트:** Swift 앱은 `make test` (macOS), 리눅스 데몬과 공유 엔진 픽스처는 `gofmt -l . && go vet ./... && go test ./...`
+  (어느 OS 든). 문서·README 번역은 빌드가 필요 없고, Mac 없이 할 수 있는 이슈도 여럿 있다.
+- **PR 의 CI:** 메인테이너가 실행을 승인하면 `test` (macOS: `swift test`, 앱 빌드, 서명 검증) 와 `go (linux)` 가 읽기 전용
+  토큰, 시크릿 없이 돈다.
+
+자세히: [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## 주의
 
