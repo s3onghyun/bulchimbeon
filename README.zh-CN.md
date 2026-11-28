@@ -196,7 +196,13 @@ brew update && brew upgrade --cask bulchimbeon
 
 ## 参与贡献
 
-欢迎提交 Bug（"🚨 小兵站岗态度不端"）、新代理识别请求、台词与像素画创意，以及**对本翻译的改进**：[CONTRIBUTING.md](CONTRIBUTING.md)
+欢迎提交 Bug（"🚨 小兵站岗态度不端"）、新代理识别请求、台词与像素画创意，以及**对本翻译的改进**。
+
+- **从这里开始：**[开放的 `good first issue`](https://github.com/s3onghyun/bulchimbeon/issues?q=is%3Aopen+label%3A%22good+first+issue%22)。每个 issue 都写明了要改的文件、命令、完成标准和工作量。在没有指派人的 issue 下留言认领，维护者会把它指派给你。
+- **测试：**Swift 应用用 `make test`（macOS）；Linux 守护进程和共享引擎测试数据用 `gofmt -l . && go vet ./... && go test ./...`（任何系统）。文档和 README 翻译无需构建，也有不少 issue 不需要 Mac。
+- **PR 的 CI：**维护者批准运行后，`test`（macOS：`swift test`、构建应用、验证签名）和 `go (linux)` 会以只读令牌、无密钥的方式运行。
+
+详见 [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## 许可证
 
