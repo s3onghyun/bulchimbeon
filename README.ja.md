@@ -200,6 +200,8 @@ macOS 13 以降、ユニバーサル（Apple Silicon・Intel）。
 
 バグ報告、エージェント追加のリクエスト、セリフやスプライトのアイデア、そして**この翻訳の改善**も歓迎します: [CONTRIBUTING.md](CONTRIBUTING.md)
 
+メニューからフィードバックを送れます: **💬 Send feedback…** が、アプリのバージョン・macOS のバージョン・検出したエージェントだけを記入した GitHub Issue をブラウザで開きます。s3onghyun.hong@gmail.com へのメールでも送れます。アプリ自体は何も送信しません。
+
 ## ライセンス
 
 MIT
